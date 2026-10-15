@@ -8,7 +8,7 @@ async function load(page: Page, scenario = 'clear') {
 
 test('UX01 UX02 clear editing and real reload; no external traffic', async ({page}) => {
   const external: string[] = []; page.on('request', req => {if (!req.url().startsWith('http://127.0.0.1:4173/')) external.push(req.url());});
-  await load(page); await expect(page.getByRole('group')).toHaveCount(0);
+  await load(page); await expect(page.locator('fieldset')).toHaveCount(0);
   await page.getByLabel('Instrucciones de la actividad 2', {exact: true}).fill('Primero, distribuyan las semillas de ejemplo. Después, organicen los recipientes.');
   await expect(page.getByText('Guardado en este navegador', {exact: true})).toBeVisible(); await page.reload();
   await expect(page.getByLabel('Instrucciones de la actividad 2', {exact: true})).toHaveValue('Primero, distribuyan las semillas de ejemplo. Después, organicen los recipientes.');
@@ -21,7 +21,7 @@ test('UX03 UX13 duplicate keyboard activation and reload during loading', async 
   await expect(page.getByLabel('Instrucciones de la actividad 2', {exact: true})).toBeVisible();
 });
 test('UX04 UX05 UX06 question survives reload and new version after skip', async ({page}) => {
-  await load(page, 'multiple'); const question = page.getByRole('group'); await expect(question).toHaveCount(1); await page.reload(); await expect(question).toHaveCount(1);
+  await load(page, 'multiple'); const question = page.locator('fieldset'); await expect(question).toHaveCount(1); await expect(question).toHaveAccessibleName('En “Organizar los materiales”, ¿la actividad es para Grupo A o Grupo B?'); await page.reload(); await expect(question).toHaveCount(1);
   await page.getByRole('button', {name: 'Dejar pendiente', exact: true}).click(); await expect(question).toHaveCount(0); await expect(page.getByText(/Grupo pendiente/)).toBeVisible();
   await expect(page.getByText('Resultado de ejemplo listo para editar', {exact: true})).toBeVisible();
   await page.getByText('Escenarios de prueba', {exact: true}).click(); await page.getByLabel('Ejemplo o fallo simulado').selectOption('multiple'); await page.getByRole('button', {name: 'Simular otra versión', exact: true}).click();
