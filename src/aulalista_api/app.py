@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 
 from aulalista_api.config import load_settings
 from aulalista_api.database import Readiness, make_engine
+from aulalista_api.material_routes import install_material_routes
 
 
 def create_app() -> FastAPI:
@@ -42,4 +43,5 @@ def create_app() -> FastAPI:
             status_code=200 if ready else 503,
         )
 
+    install_material_routes(app, engine)
     return app

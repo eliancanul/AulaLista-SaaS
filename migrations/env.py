@@ -2,6 +2,7 @@
 
 from alembic import context
 
+from aulalista_api import materials  # noqa: F401 -- register persisted models
 from aulalista_api.config import load_settings
 from aulalista_api.database import Base, make_engine
 

@@ -6,14 +6,17 @@ El proyecto está en desarrollo. Los incrementos de código y documentación se 
 
 ## Estado del primer corte
 
-T0 está integrado mediante [PR #1](https://github.com/eliancanul/AulaLista-SaaS/pull/1),
-base `11c8d4d3e41295dbf5d49023f36b78f4eff1d1e0`. T1 añade PostgreSQL,
-SQLAlchemy/psycopg, migración Alembic, Principal/PersonalScope y readiness de DB.
-El candidato local pasó 64 tests contra PostgreSQL 17.11, lint, formato,
-compatibilidad y build. Revisión independiente y CI del SHA final siguen siendo
-puertas de integración; sus resultados se registran en el PR.
+T0 y T1 están integrados; [PR #2](https://github.com/eliancanul/AulaLista-SaaS/pull/2)
+deja main en `a8dc576f041ca7cf6fd755a54a5027280c4e4f75`, con
+[CI postmerge correcta](https://github.com/eliancanul/AulaLista-SaaS/actions/runs/38688115249).
+T2 añade fuentes sintéticas opacas de 1 a 65 536 bytes, versiones inmutables,
+recibos recuperables, propiedad personal y concurrencia transaccional. Su candidato
+local pasó pruebas HTTP y PostgreSQL real; revisión independiente y CI exacta
+siguen siendo puertas de integración registradas en el ticket/PR.
 
-No hay autenticación de usuarios, almacenamiento de materiales, UI o piloto
+El servidor normal devuelve 401 en todas las operaciones privadas: todavía no hay
+identidad real. Sólo los tests inyectan actores y usan un rol DB runtime distinto
+del dueño de migraciones. No hay UI, documentos reales, parsing, IA, cobro ni piloto
 habilitado. Docentes individuales, suscripción con precio pendiente e inicio
 limpio siguen como alcance de producto. No se contrata ningún servicio.
 
@@ -37,8 +40,8 @@ editable. La evidencia local no sustituye checks remotos del SHA final.
 ## Orden de construcción
 
 1. [T0](docs/tickets/T0-bootstrap-api.md): arranque mínimo de FastAPI, health y CI propia.
-2. [T1](docs/tickets/T1-postgresql-ambito.md): PostgreSQL, migraciones y ámbito personal con restricciones verificadas; candidato de este incremento.
-3. [T2](docs/tickets/T2-fuentes-versionadas.md): fuente sintética versionada, recuperación, aislamiento, transacciones y reintentos.
+2. [T1](docs/tickets/T1-postgresql-ambito.md): PostgreSQL, migraciones y ámbito personal; integrado en PR #2.
+3. [T2](docs/tickets/T2-fuentes-versionadas.md): fuente sintética versionada, recuperación, aislamiento, transacciones y reintentos; candidato de este incremento.
 
 T0 por sí solo no prueba persistencia. T1 no almacena materiales. T2 completa el primer corte técnico, pero no habilita un piloto con documentos reales. Las pruebas de persistencia requieren PostgreSQL desechable, sin sustitución por SQLite.
 

@@ -1,6 +1,6 @@
 # T2: conservar una fuente sintética y sus versiones
 
-Estado: pendiente. Dependencia: T1. Spec: [0001](../specs/0001-fundacion.md), que define autoridad, datos, idempotencia y límites.
+Estado: candidato local verificado, pendiente de revisión independiente y CI exacta. Dependencia: T1 integrado. Spec: [0001](../specs/0001-fundacion.md), que define autoridad, datos, idempotencia y límites.
 
 ## Resultado
 
@@ -38,3 +38,107 @@ Listados globales, búsqueda, parsing, PDF, OCR, interpretación, aceptación cu
 ## Recuperación y salida
 
 Recrear DB de test y volver a ejecutar el recorrido con fixtures sintéticas. Este ensayo no acredita restauración de producción. T2 cierra el primer corte técnico sólo si pasan sus garantías completas; identidad y archivos reales quedan bloqueados por sus puertas posteriores.
+
+## Contrato fijado antes de implementar (2026-10-15 UTC)
+
+Base T1: main `a8dc576f041ca7cf6fd755a54a5027280c4e4f75`,
+[PR #2](https://github.com/eliancanul/AulaLista-SaaS/pull/2),
+[CI postmerge success](https://github.com/eliancanul/AulaLista-SaaS/actions/runs/38688115249).
+Autor: agente `implementar_fuentes_versionadas`, directorio exclusivo
+`aulalista-saas-sources`; integrador y revisión independiente separados.
+
+- `POST /scopes/{scope_id}/sources`: cuerpo binario `application/octet-stream`,
+  `Idempotency-Key` UUID; crea fuente/V1. Devuelve 201 y recibo JSON.
+- `POST /scopes/{scope_id}/sources/{source_id}/versions?expected_version=N`:
+  mismo cuerpo/clave, N entero positivo; 201 con recibo JSON.
+- `GET /scopes/{scope_id}/sources/{source_id}/versions/{number}`: bytes exactos,
+  200 octet-stream y headers `X-Source-Id`, `X-Version`, `X-Content-SHA256`,
+  `X-Content-Size`, `X-Actor-Id`, `X-Created-At`, `X-Operation-Id`.
+- `GET /scopes/{scope_id}/operations/{operation_id}`: 200 con el recibo original.
+  El recibo contiene IDs de fuente/versión/ámbito/operación/actor, número, hash,
+  tamaño y momento UTC. Repetir un POST confirmado conserva 201 y el mismo recibo,
+  incluso cuando la fuente ya avanzó. No devuelve el contenido dentro del recibo.
+- 401 sin actor autenticado; 404 idéntico para ámbito/fuente/versión/operación
+  ajenos o ausentes; 409 `conflict` para reutilizar clave con solicitud distinta o
+  revisión obsoleta; 413 exceso; 422 entrada inválida/vacía; 415 tipo incorrecto;
+  503 `unavailable` ante fallo de persistencia. Upload interrumpido: 422 sin efectos.
+  Errores sin input ni detalles DB.
+  Ningún header, query ni configuración genera identidad: sólo overrides de test.
+- Huella SHA-256 del prefijo ASCII `aulalista-source-request-v1` seguido de un
+  byte NUL, seguido del JSON UTF-8
+  compacto de `[kind, target, expected_version]`, un byte NUL y bytes completos.
+  `kind` es `create` o `append`; target es null al crear o UUID canónico al añadir;
+  expected_version es 0 al crear. El ámbito delimita la clave única en DB.
+- Lectura HTTP incremental: máximo acumulado 65 536 bytes; Content-Length mayor
+  se rechaza antes de leer. Transferencia sin longitud también corta al primer
+  chunk que rebase el presupuesto, sin copiar/acumularlo. El tamaño de un chunk
+  entregado por ASGI depende del servidor; la app no pide ni almacena un cuerpo
+  completo ilimitado. Límite repetido en caso de uso y CHECK PostgreSQL.
+- SourceVersion conserva el recibo. La transacción revalida propietario, serializa
+  la misma clave por advisory lock transaccional (hash de ámbito/clave), comprueba
+  replay antes de comparar revisión y aplica UPDATE condicional de revisión.
+  Fuente, versión y recibo confirman juntos. No hay tabla/framework de trabajos.
+- Inmutabilidad por triggers UPDATE/DELETE/TRUNCATE sobre versiones y permisos
+  mínimos del rol runtime sin privilegios de owner/bypass; la app no usa el rol
+  de migración. SQL directo verifica ambas defensas. No se promete RLS en T2.
+
+Archivos previstos: módulo de materiales y rutas, migración 0002, registro de
+modelos/revisión, instalación de rutas, tests materiales y actualización mínima
+de CI/documentación/expectativas de esquema T1. Sin dependencias nuevas.
+
+
+## Comprobaciones del autor
+
+- 114 pruebas pasaron: 43 API/config, 21 PostgreSQL heredadas y 50 de materiales;
+  más un verificador obligatorio de logs reales de PostgreSQL.
+- Python 3.12.14, uv 0.12.23 y PostgreSQL 17.11 real, cluster desechable exclusivo.
+  Se usa el mismo lock de T1, sin dependencias nuevas. Instalación no editable.
+- Los tests crean los dos actores directamente y arrancan cada app de materiales
+  con `aulalista_runtime`, sin superuser/owner/membership/BYPASSRLS. El servidor
+  real Uvicorn sin overrides conserva 401. Se comprueba también autorización
+  llamando al caso de uso sin rutas.
+- Carreras de dos conexiones (PIDs distintos): append con claves distintas,
+  replay simultáneo y create simultáneo con misma clave/cuerpos iguales o distintos.
+  Una tercera lectura confirma exactamente una nueva versión/fuente.
+- Fallo diferido de PostgreSQL en COMMIT revierte fuente, avance y versión/recibo;
+  retirar el fallo y repetir la clave confirma una sola vez. Pérdida real simulada
+  del transporte de respuesta posterior al commit conserva un recibo recuperable.
+- Límite probado con extremos, streaming sin longitud, longitud engañosa,
+  interrupción y corte antes de pedir más chunks. Hash de bytes no UTF-8 verificado.
+- El arranque documentado desactiva access logs de Uvicorn para no registrar
+  URLs arbitrarias. El smoke arranca ese proceso, envía marcadores sintéticos en
+  query/header/body y revisa sus logs. Configurar logging externo requiere su
+  propia revisión; no se promete ocultar datos de un proxy fuera de esta app.
+- Evidencia exacta local y manifiesto se entregan separados del código. Revisión
+  independiente, revisión H1 y CI del candidato final quedan pendientes; los
+  resultados locales no los sustituyen.
+
+## Decisiones coordinadas
+
+`revisar_contrato_fuentes` revisó el contrato antes de congelar el candidato y pidió
+hacer explícitos sanitización de validación, runtime distinto del owner y precedencia
+clave/autoridad. Se incorporan los tres: autorización de scope primero, clave y
+huella después, existencia del destino y CAS al final. Un destino distinto con
+clave propia existente da 409 aunque ese destino no exista; un scope ajeno da 404
+antes de consultar cualquier recibo. Esto no concede autoridad sobre el destino.
+
+Hallazgo temprano H1: el revisor independiente reprodujo que `created_at.isoformat()`
+variaba con timezone de sesión DB, alterando el recibo de un replay. Se normaliza
+siempre a UTC y se añade regresión que cambia el rol a Asia/Tokyo entre apps;
+verifica POST repetido, GET recibo y header de versión idénticos. Pendiente de
+reexamen independiente sobre el manifiesto final, sin declarar cerrado por autor.
+
+
+Se acordó con el revisor fijar READ COMMITTED explícitamente en el engine. La
+regresión con default del rol SERIALIZABLE produjo 503 en el perdedor tanto para
+claves distintas como iguales, incumpliendo 409/replay. Con aislamiento explícito,
+la misma prueba debe observar la versión confirmada y cumplir el contrato sin un
+motor genérico de retries. Se reejecutan también todos los tests T1 del engine.
+
+
+Se amplía sólo el provisionado desechable para T2.11: se confirmó que PostgreSQL
+por omisión volcaba BYTEA sintético en DETAIL de CHECK fallidos. El inicializador
+deshabilita detalle de filas, sentencias y parámetros en logs; el runtime no gana
+permisos. La prueba produce un error real con marcador conocido y el workflow
+inspecciona el log del contenedor sin publicarlo. Servidores/proxies externos
+necesitan controles equivalentes; no se afirma seguridad de configuración ajena.
