@@ -1,6 +1,6 @@
 # ADR 0001: base nueva con ámbito personal
 
-Fecha: 2026-10-15 UTC. Estado: decisiones de producto y stack confirmadas; detalles de implementación propuestos para validación en T0–T2.
+Fecha: 2026-10-15 UTC. Estado: decisiones de producto y stack confirmadas; fundación T0–T2 integrada. Evidencia y CI postmerge correcta en [T2](../tickets/T2-fuentes-versionadas.md).
 
 ## Contexto
 
@@ -11,17 +11,17 @@ El nuevo repositorio privado empieza vacío. El cliente inicial es un docente in
 - Backend FastAPI y base PostgreSQL.
 - Un ámbito personal por propietario. No modelar escuelas, invitaciones institucionales o transferencias de propiedad en la fundación.
 - Código y datos de prueba nuevos; sin importador de legado.
-- Mantener separados guardar, interpretar, editar, aceptar y autorizar usos posteriores de una fuente.
+- Conservar original, resultados automáticos y ediciones con historia y procedencia. Son responsabilidades internas, no etapas de aprobación docente. El recorrido guarda automáticamente un resultado útil y editable; guardar o interpretar no publica contenido ni autoriza usos o destinos nuevos. [ADR 0002](0002-ux-interpretacion-automatica.md) fija la dirección UX y la evaluación pendiente.
 - Una suscripción futura concede derechos de servicio; pagar no transfiere propiedad del material.
 
 ## Decisiones técnicas del primer corte
 
-1. Backend modular pequeño y síncrono; una Session por operación y transacciones breves. SQLAlchemy, psycopg y Alembic son las candidatas para T1; versiones y compatibilidad se verifican y fijan en lock al implementar.
+1. Backend modular pequeño y síncrono; una Session por operación y transacciones breves. SQLAlchemy, psycopg y Alembic se adoptaron en T1; sus versiones están fijadas en el lock y su compatibilidad se verifica en las pruebas T1/T2.
 2. `Principal` es identidad interna estable, no un login. `PersonalScope` tiene propietario obligatorio, único y referenciado por clave foránea.
 3. El servidor normal no expone atajos de identidad. Hasta integrar un proveedor real, los materiales sólo son ejercitables por pruebas que inyectan actores; runtime responde 401.
 4. Fuentes sintéticas opacas de 1 a 65 536 bytes pueden conservarse en PostgreSQL durante T2. Una transacción confirma bytes, metadatos y recibo. Esta elección evita coordinación prematura con objetos; no selecciona el almacenamiento de documentos reales.
-5. Cada versión confirmada es inmutable y recuperable. Escrituras validan propiedad, versión esperada e idempotencia dentro del caso de uso.
-6. PostgreSQL real acredita integridad, transacciones y concurrencia. T0 puede ser un bootstrap sin DB; la fundación persistente permanece abierta hasta T1 y T2.
+5. Cada versión confirmada es inmutable y recuperable. Aquí «confirmada» significa persistida mediante commit, no aceptada por el docente. Escrituras validan propiedad, versión esperada e idempotencia dentro del caso de uso.
+6. PostgreSQL real acredita integridad, transacciones y concurrencia. T0 por sí solo es un bootstrap sin DB; T1 y T2 completan la fundación persistente, sin habilitar documentos reales.
 
 ## Consecuencias
 
@@ -32,6 +32,8 @@ El backend tendrá que incorporar identidad, aislamiento reforzado, almacenamien
 ## Opciones pospuestas
 
 React/TypeScript/Vite para UI; proveedor OIDC; objetos privados; parser aislado; cola; proveedor/modelo de IA; cobro y hosting. Las recomendaciones previas son insumos para sus decisiones, no compras ni integraciones aprobadas automáticamente.
+
+El método de interpretación también permanece abierto: extracción + modelo, PDF visual e híbrido se compararán antes de elegir. No hay cascada elegida. [ADR 0002](0002-ux-interpretacion-automatica.md) distingue el peso de ahorro de tokens confirmado de los pesos, fórmula y umbrales pendientes.
 
 ## Cuándo reconsiderar
 
