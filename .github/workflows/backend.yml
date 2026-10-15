@@ -1,0 +1,41 @@
+name: backend-bootstrap
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.23"
+          python-version: "3.12.14"
+          enable-cache: false
+      - name: Record tested revision
+        run: git rev-parse HEAD
+      - name: Install locked package
+        run: uv sync --locked --no-editable
+      - name: Lint and format
+        run: |
+          uv run --locked --no-editable ruff check .
+          uv run --locked --no-editable ruff format --check .
+      - name: Test installed package
+        run: uv run --locked --no-editable pytest
+      - name: Check dependencies and package build
+        run: |
+          uv pip check
+          uv build --no-sources
