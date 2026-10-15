@@ -1,11 +1,11 @@
 # Especificación 0001: fuente personal recuperable
 
-Estado: contrato de T0–T2. T0/T1 integrados, último main
-`a8dc576f041ca7cf6fd755a54a5027280c4e4f75` mediante
-[PR #2](https://github.com/eliancanul/AulaLista-SaaS/pull/2), con
-[CI postmerge success](https://github.com/eliancanul/AulaLista-SaaS/actions/runs/38688115249).
-T2 tiene candidato local; revisión independiente y CI remota del SHA final siguen
-pendientes. Fuentes de alcance: README y ADR 0001.
+Estado: contrato de T0–T2, integrados. Último main
+`b4dd71e2bca607f6b6cce04d77bec92db2fc7dba` mediante
+[PR #3](https://github.com/eliancanul/AulaLista-SaaS/pull/3).
+El cierre de [T2](../tickets/T2-fuentes-versionadas.md) registra revisión
+independiente/H1 y CI premerge/postmerge correctas para los candidatos registrados.
+Fuentes de alcance: README y ADR 0001.
 
 ## Resultado
 
@@ -24,6 +24,8 @@ Un principal tiene como máximo un ámbito personal; cada ámbito tiene exactame
 ### Fuente e historia
 
 `Source` identifica el material y su ámbito. `SourceVersion` identifica la fuente y ámbito coherentes, número de versión, bytes, tamaño y SHA-256 calculados por servidor, actor, momento y operación creadora. El contenido es opaco y sintético; no se analiza ni ejecuta. La procedencia sintética no acredita licencia de documentos futuros ni consentimiento para entrenar.
+
+En este corte, «confirmada» significa persistida mediante commit; no supone aceptación docente ni añade una aprobación al recorrido futuro de [spec 0002](0002-flujo-automatico-material.md). T2 conserva fuentes/versiones internas y no selecciona cómo se interpretarán.
 
 La revisión actual puede avanzar; una versión confirmada conserva sus bytes y metadatos. La DB rechaza referencias cruzadas entre ámbitos y números duplicados. La protección frente a update/delete se prueba con el rol runtime previsto, sin privilegios de dueño o bypass. No se ofrece borrado en este corte.
 

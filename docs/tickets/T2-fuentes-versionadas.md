@@ -1,10 +1,12 @@
 # T2: conservar una fuente sintética y sus versiones
 
-Estado: candidato local verificado, pendiente de revisión independiente y CI exacta. Dependencia: T1 integrado. Spec: [0001](../specs/0001-fundacion.md), que define autoridad, datos, idempotencia y límites.
+Estado: integrado mediante PR #3, con revisión independiente/H1 y CI premerge/postmerge correctas. El recibo de integración al final registra el candidato. Dependencia: T1 integrado. Spec: [0001](../specs/0001-fundacion.md), que define autoridad, datos, idempotencia y límites.
 
 ## Resultado
 
 HTTP guarda V1 del ámbito A, una nueva app/Session recupera sus bytes exactos, V2 no modifica V1 y B no puede acceder. El servidor sin overrides continúa devolviendo 401 a toda operación de materiales.
+
+En T2, «versión confirmada» significa persistida mediante commit, no aceptada por el docente. Conservar fuentes y versiones es una garantía interna: no añade UI, interpretación ni aprobación docente y no elige la estrategia de [spec 0002](../specs/0002-flujo-automatico-material.md).
 
 ## Alcance mínimo completo
 
@@ -87,7 +89,7 @@ modelos/revisión, instalación de rutas, tests materiales y actualización mín
 de CI/documentación/expectativas de esquema T1. Sin dependencias nuevas.
 
 
-## Comprobaciones del autor
+## Comprobaciones del autor (antes de integración)
 
 - 114 pruebas pasaron: 43 API/config, 21 PostgreSQL heredadas y 50 de materiales;
   más un verificador obligatorio de logs reales de PostgreSQL.
@@ -109,9 +111,9 @@ de CI/documentación/expectativas de esquema T1. Sin dependencias nuevas.
   URLs arbitrarias. El smoke arranca ese proceso, envía marcadores sintéticos en
   query/header/body y revisa sus logs. Configurar logging externo requiere su
   propia revisión; no se promete ocultar datos de un proxy fuera de esta app.
-- Evidencia exacta local y manifiesto se entregan separados del código. Revisión
-  independiente, revisión H1 y CI del candidato final quedan pendientes; los
-  resultados locales no los sustituyen.
+- Evidencia exacta local y manifiesto se entregaron separados del código. En ese
+  corte, revisión independiente, H1 y CI del candidato final quedaban pendientes;
+  los resultados locales no los sustituyeron. El cierre posterior figura al final.
 
 ## Decisiones coordinadas
 
@@ -125,8 +127,9 @@ antes de consultar cualquier recibo. Esto no concede autoridad sobre el destino.
 Hallazgo temprano H1: el revisor independiente reprodujo que `created_at.isoformat()`
 variaba con timezone de sesión DB, alterando el recibo de un replay. Se normaliza
 siempre a UTC y se añade regresión que cambia el rol a Asia/Tokyo entre apps;
-verifica POST repetido, GET recibo y header de versión idénticos. Pendiente de
-reexamen independiente sobre el manifiesto final, sin declarar cerrado por autor.
+verifica POST repetido, GET recibo y header de versión idénticos. En ese corte quedó
+pendiente el reexamen independiente del manifiesto final; el autor no lo cerró
+por sí mismo. El recibo posterior de integración consta al final.
 
 
 Se acordó con el revisor fijar READ COMMITTED explícitamente en el engine. La
@@ -142,3 +145,9 @@ deshabilita detalle de filas, sentencias y parámetros en logs; el runtime no ga
 permisos. La prueba produce un error real con marcador conocido y el workflow
 inspecciona el log del contenedor sin publicarlo. Servidores/proxies externos
 necesitan controles equivalentes; no se afirma seguridad de configuración ajena.
+
+## Recibo de integración (2026-10-15 UTC)
+
+El integrador confirmó T2 integrado mediante [PR #3](https://github.com/eliancanul/AulaLista-SaaS/pull/3), con revisión independiente/H1 y CI premerge satisfechas. Main: `b4dd71e2bca607f6b6cce04d77bec92db2fc7dba`; árbol `f69f92f36e265872ff7d23c952a4ea620fa8ce42`, igual al candidato `f2672d16c6de9c681514e639e7b2c2febe8b0138`. [CI premerge](https://github.com/eliancanul/AulaLista-SaaS/actions/runs/38690972072): success, 114 pruebas. [CI postmerge](https://github.com/eliancanul/AulaLista-SaaS/actions/runs/38691499410): success sobre ese main, 114 pruebas y logs de PostgreSQL verificados, según el recibo posterior del integrador.
+
+Este recibo cierra los pendientes de integración de T2 anteriores, sin atribuir ejecución de esas pruebas a la conciliación documental. H2, interpretación, documentos reales y piloto siguen pendientes.

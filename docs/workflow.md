@@ -9,6 +9,8 @@
 5. **CI exacta.** Ejecutar checks del candidato final y revalidar su base. Cierre: head y base identificados, checks requeridos realmente ejecutados, resultados disponibles y sin cambios posteriores sin verificar.
 6. **Integración.** Verificar autorización vigente y gates anteriores; sólo entonces integrar cuando esté autorizado. Si no hay autorización de merge, entregar un candidato revisado y pendiente de integración. Publicar un PR no equivale a aprobar su merge o despliegue.
 
+Los objetivos numéricos de actividad no justifican commits vacíos, fragmentar un cambio coherente ni omitir especificación, revisión o CI. La unidad de entrega es un ticket completo con evidencia, no una cuota de commits.
+
 La CI puede correr durante el desarrollo; el gate de aceptación es el del candidato final después de la revisión. Un nuevo commit invalida la evidencia anterior para las partes que cambia. Si cambia la base, revisar el diff y ejecutar las pruebas de integración pertinentes contra la nueva base antes de integrar.
 
 ## Coordinación directa
@@ -32,6 +34,12 @@ Revisar el diff completo antes de subirlo. Confirmar repositorio y alcance autor
 Los workflows empiezan con permisos mínimos. Dar de alta credenciales, cambiar protección de rama, contratar servicios, publicar una app o introducir transmisiones a terceros no queda autorizado por añadir CI. Si se necesita un cambio de ese tipo, describirlo y obtener la autorización aplicable.
 
 En un repositorio vacío puede no existir aún una base para PR. El responsable coordina el bootstrap y su autorización; no inventa un PR ni asegura que una revisión remota ya ocurrió. Registrar cualquier excepción técnica antes de modificar la rama por defecto.
+
+## Recuperación ante errores de herramienta
+
+Un estado de herramienta «cancelado» no identifica por sí solo quién canceló ni prueba que la operación no tuvo efectos. No atribuirlo al usuario sin evidencia. Conservar el recibo/error y reconciliar el estado observable antes de reintentar: en GitHub, comprobar rama, head y PR para distinguir operación aplicada, ausente o incierta y evitar duplicados.
+
+Verificar la autorización explícita vigente para la operación y destino. Si sigue cubriendo la misma acción y el estado reconciliado permite repetirla, hacer un reintento acotado de esa operación y volver a verificar sus efectos, conservando los recibos. Esto no amplía permisos ni permite sortear una denegación, cambiar el alcance o repetir indefinidamente. Si hubo cancelación humana explícita, detenerse; si falta una aprobación requerida, solicitarla antes de actuar. Si los efectos siguen inciertos, informar ese límite sin afirmar éxito, ausencia de cambios o prometer cero fallos.
 
 ## Consultas de producto
 

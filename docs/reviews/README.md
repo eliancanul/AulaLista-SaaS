@@ -28,12 +28,12 @@ Seleccionar únicamente los roles pertinentes al cambio; no convocar todos para 
 ## Hitos
 
 - **H0, alcance inicial antes de T1:** negocio/marketing, arquitectura/deuda y seguridad comprueban público, promesa limitada, propiedad e inicio limpio. Salida: ADR, no objetivos y tickets coherentes. UX/UI aportan límites de alcance sin diseñar pantallas todavía.
-- **H1, antes de aceptar T2:** arquitectura/deuda, seguridad y QA intentan romper aislamiento, historia y reintento. Salida: hallazgos resueltos o corte bloqueado, con evidencia del candidato.
-- **H2, antes de implementar el primer flujo docente:** UX, UI/accesibilidad y pedagogía revisan el recorrido mínimo y sus estados de fallo; negocio/marketing limita la promesa a lo demostrable. Salida: contrato del flujo y prueba planificada con docentes, sin confundir simulación con investigación.
+- **H1, antes de aceptar T2:** arquitectura/deuda, seguridad y QA intentan romper aislamiento, historia y reintento. Salida: hallazgos resueltos o corte bloqueado, con evidencia del candidato. Estado: satisfecho en la integración de PR #3, según el [recibo de T2](../tickets/T2-fuentes-versionadas.md), con CI postmerge correcta.
+- **H2, primer recorrido visible (pendiente):** revisar contrato y recorrido antes de programar [T3](../tickets/T3-prototipo-flujo-automatico.md). Después, UX/UI y accesibilidad verifican en el prototipo sintético carga, primera utilidad, guardado, edición, máximo una solicitud breve indispensable por planeación y recuperación según [spec 0002](../specs/0002-flujo-automatico-material.md), antes de añadir infraestructura ajena al recorrido. Pedagogía contribuye a la rúbrica de [T4](../tickets/T4-preparar-evaluacion.md), cuya preparación offline puede avanzar en paralelo, sin imponer aceptación por bloque. Salida: hallazgos observados, correcciones y prueba planificada con docentes; negocio/marketing limita la promesa a lo demostrado. Escribir la spec o revisarla entre agentes no acredita H2 UX observado ni investigación con docentes.
 - **H3, antes de documentos reales/piloto:** seguridad/privacidad y QA/operación revisan identidad, permisos, almacenamiento, parser, destinos y recuperación. Salida: cada gate tiene prueba y responsable; mientras falte uno, el piloto permanece cerrado.
 - **H4, antes de precio/cobro o ampliar el piloto:** negocio, marketing, UX, pedagogía y operación revisan evidencia docente, disposición a pagar, costes, cancelación y soporte. Salida: decisión del propietario y pendientes comerciales; no fijar precios como hechos sin datos.
 
-Los hitos son puertas de decisión, no autorización de contratos, gastos, comunicaciones a docentes o despliegue.
+Los hitos son trabajo interno del equipo, no pantallas ni confirmaciones que deba atravesar el docente. Son puertas de decisión, no autorización de contratos, gastos, comunicaciones a docentes o despliegue.
 
 ## Registro mínimo de una consulta realizada
 
