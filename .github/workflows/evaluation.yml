@@ -25,6 +25,8 @@ jobs:
           version: "0.12.23"
           python-version: "3.12.14"
           enable-cache: false
+      - name: Install pinned Python before offline execution
+        run: uv python install 3.12.14
       - name: Record tested head and base
         env:
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
