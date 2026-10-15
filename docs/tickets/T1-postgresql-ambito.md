@@ -1,6 +1,6 @@
 # T1: persistir identidad interna y ámbito personal en PostgreSQL
 
-Estado: candidato local verificado; revisión independiente y CI remota pendientes. Dependencia: T0 integrado en `11c8d4d3e41295dbf5d49023f36b78f4eff1d1e0`. Spec: [0001](../specs/0001-fundacion.md). ADR: [0001](../adr/0001-fundacion-personal.md).
+Estado: integrado mediante [PR #2](https://github.com/eliancanul/AulaLista-SaaS/pull/2), main `a8dc576f041ca7cf6fd755a54a5027280c4e4f75`, con [CI postmerge success](https://github.com/eliancanul/AulaLista-SaaS/actions/runs/38688115249). Dependencia: T0 integrado en `11c8d4d3e41295dbf5d49023f36b78f4eff1d1e0`. Spec: [0001](../specs/0001-fundacion.md). ADR: [0001](../adr/0001-fundacion-personal.md).
 
 ## Resultado
 
@@ -42,3 +42,11 @@ Recrear exclusivamente la DB de prueba desde migraciones; comprobar que se recup
 - T1.1–T1.6 cubiertos localmente. T1.7 pendiente de revisión independiente, head final y checks remotos; no se atribuye CI remota a este candidato.
 - PostgreSQL local se ejecutó desde paquetes oficiales Debian extraídos, sin Docker disponible. El workflow verifica la imagen oficial en CI; Compose local aún no se ha ejecutado en este entorno.
 - Recuperación mínima: downgrade/upgrade probado únicamente en DB desechable marcada. Sin backups de producción, RLS, auth, fuentes, datos reales ni despliegue.
+
+
+## Cierre de T1
+
+El integrador confirmó revisión independiente y CI premerge/postmerge correctas
+con 64 tests. El bloque de evidencia local anterior se conserva como historia;
+sus pendientes remotos quedaron cerrados en PR #2. La ampliación T2 conserva
+las 64 pruebas y sólo actualiza las expectativas del esquema/rutas añadidos.

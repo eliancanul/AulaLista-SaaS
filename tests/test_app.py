@@ -28,10 +28,14 @@ def test_unavailable_endpoints_are_not_advertised(client, path):
     assert client.get(path).status_code == 404
 
 
-def test_only_health_routes_are_available_by_default(client):
+def test_health_and_fail_closed_material_routes_are_registered(client):
     assert [(route.path, route.methods) for route in client.app.routes] == [
         ("/health/live", {"GET"}),
         ("/health/ready", {"GET"}),
+        ("/scopes/{scope_id}/sources", {"POST"}),
+        ("/scopes/{scope_id}/sources/{source_id}/versions", {"POST"}),
+        ("/scopes/{scope_id}/sources/{source_id}/versions/{number}", {"GET"}),
+        ("/scopes/{scope_id}/operations/{operation_id}", {"GET"}),
     ]
 
 
@@ -41,7 +45,11 @@ def test_docs_can_be_enabled_explicitly(monkeypatch):
         assert client.get("/docs").status_code == 200
         schema = client.get("/openapi.json")
         assert schema.status_code == 200
-        assert set(schema.json()["paths"]) == {"/health/live", "/health/ready"}
+        assert set(schema.json()["paths"]) == {
+            route.path
+            for route in client.app.routes
+            if route.path.startswith(("/health/", "/scopes/"))
+        }
         assert client.get("/redoc").status_code == 404
 
 

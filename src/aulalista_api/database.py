@@ -11,7 +11,7 @@ from sqlalchemy.pool import NullPool
 
 from aulalista_api.config import Settings
 
-SCHEMA_REVISION = "0001_personal_scope"
+SCHEMA_REVISION = "0002_source_versions"
 
 
 class Base(DeclarativeBase):
@@ -41,6 +41,7 @@ def make_engine(settings: Settings) -> Engine:
     return create_engine(
         settings.database_url,
         poolclass=NullPool,
+        isolation_level="READ COMMITTED",
         hide_parameters=True,
         connect_args={
             "connect_timeout": settings.db_timeout_seconds,

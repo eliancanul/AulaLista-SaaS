@@ -1,6 +1,11 @@
 # Especificación 0001: fuente personal recuperable
 
-Estado: contrato de T0–T2. T0 integrado mediante [PR #1](https://github.com/eliancanul/AulaLista-SaaS/pull/1), main `11c8d4d3e41295dbf5d49023f36b78f4eff1d1e0`, con [CI postmerge success](https://github.com/eliancanul/AulaLista-SaaS/actions/runs/38686682062). T1 tiene candidato local verificado, pendiente de revisión independiente y CI remota del SHA final. T2 y el resultado integral de fuente recuperable siguen pendientes. Fuentes de alcance: README y ADR 0001.
+Estado: contrato de T0–T2. T0/T1 integrados, último main
+`a8dc576f041ca7cf6fd755a54a5027280c4e4f75` mediante
+[PR #2](https://github.com/eliancanul/AulaLista-SaaS/pull/2), con
+[CI postmerge success](https://github.com/eliancanul/AulaLista-SaaS/actions/runs/38688115249).
+T2 tiene candidato local; revisión independiente y CI remota del SHA final siguen
+pendientes. Fuentes de alcance: README y ADR 0001.
 
 ## Resultado
 
