@@ -1,6 +1,6 @@
 # T1: persistir identidad interna y ámbito personal en PostgreSQL
 
-Estado: pendiente. Dependencia: T0; puede incluir su bootstrap si se acuerda un único candidato. Spec: [0001](../specs/0001-fundacion.md). ADR: [0001](../adr/0001-fundacion-personal.md).
+Estado: candidato local verificado; revisión independiente y CI remota pendientes. Dependencia: T0 integrado en `11c8d4d3e41295dbf5d49023f36b78f4eff1d1e0`. Spec: [0001](../specs/0001-fundacion.md). ADR: [0001](../adr/0001-fundacion-personal.md).
 
 ## Resultado
 
@@ -31,3 +31,14 @@ Materiales, login/OIDC, UI, instituciones, RLS, parsing, IA, colas, cobro y desp
 ## Recuperación y salida
 
 Recrear exclusivamente la DB de prueba desde migraciones; comprobar que se recupera el esquema esperado. No llamar a esto backup/restore de producción. Entregar migración, pruebas reales, README y evidencia exacta según workflow. La siguiente entrega es T2.
+
+
+## Evidencia del candidato local (2026-10-15 UTC)
+
+- Base: main `11c8d4d3e41295dbf5d49023f36b78f4eff1d1e0`; los 11 hashes de código T0 coinciden con la copia de origen.
+- PostgreSQL 17.11 real, Python 3.12.14, uv 0.12.23; SQLAlchemy 2.1.4, psycopg 3.3.6 y Alembic 1.20.0 instalados desde lock.
+- 64 tests pasan: 43 API/config y 21 PostgreSQL/seguridad de pruebas; lint, formato, compatibilidad y wheel/sdist pasan. Cero tests omitidos.
+- Comandos y modelo de recursos: [desarrollo](../development.md). Migración `0001_personal_scope`; UUID en ambos conceptos y FK obligatoria/única.
+- T1.1–T1.6 cubiertos localmente. T1.7 pendiente de revisión independiente, head final y checks remotos; no se atribuye CI remota a este candidato.
+- PostgreSQL local se ejecutó desde paquetes oficiales Debian extraídos, sin Docker disponible. El workflow verifica la imagen oficial en CI; Compose local aún no se ha ejecutado en este entorno.
+- Recuperación mínima: downgrade/upgrade probado únicamente en DB desechable marcada. Sin backups de producción, RLS, auth, fuentes, datos reales ni despliegue.

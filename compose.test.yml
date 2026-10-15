@@ -1,0 +1,19 @@
+# Sólo pruebas locales. Trust, volumen efímero y puerto limitado a loopback.
+services:
+  postgres:
+    image: postgres:17.11@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
+    environment:
+      POSTGRES_USER: aulalista_test
+      POSTGRES_DB: aulalista_test
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "127.0.0.1:55432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    volumes:
+      - ./tests/postgres-init.sql:/docker-entrypoint-initdb.d/00-disposable.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aulalista_test -d aulalista_test"]
+      interval: 2s
+      timeout: 2s
+      retries: 15

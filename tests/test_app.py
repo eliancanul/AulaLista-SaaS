@@ -23,14 +23,15 @@ def test_liveness_does_not_accept_writes(client):
     assert response.status_code == 405
 
 
-@pytest.mark.parametrize("path", ["/docs", "/redoc", "/openapi.json", "/health/ready"])
+@pytest.mark.parametrize("path", ["/docs", "/redoc", "/openapi.json"])
 def test_unavailable_endpoints_are_not_advertised(client, path):
     assert client.get(path).status_code == 404
 
 
-def test_only_liveness_route_is_available_by_default(client):
+def test_only_health_routes_are_available_by_default(client):
     assert [(route.path, route.methods) for route in client.app.routes] == [
-        ("/health/live", {"GET"})
+        ("/health/live", {"GET"}),
+        ("/health/ready", {"GET"}),
     ]
 
 
@@ -40,5 +41,17 @@ def test_docs_can_be_enabled_explicitly(monkeypatch):
         assert client.get("/docs").status_code == 200
         schema = client.get("/openapi.json")
         assert schema.status_code == 200
-        assert set(schema.json()["paths"]) == {"/health/live"}
+        assert set(schema.json()["paths"]) == {"/health/live", "/health/ready"}
         assert client.get("/redoc").status_code == 404
+
+
+@pytest.mark.parametrize("path", ["/principals", "/scopes", "/sources", "/login"])
+def test_no_identity_or_private_api_is_exposed(client, path):
+    headers = {"X-User-ID": "synthetic-principal", "X-Tenant-ID": "synthetic-scope"}
+    assert client.get(path, headers=headers).status_code == 404
+    assert (
+        client.post(
+            path, headers=headers, json={"principal_id": "synthetic-principal"}
+        ).status_code
+        == 404
+    )
