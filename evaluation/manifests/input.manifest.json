@@ -1,0 +1,188 @@
+{
+  "files": [
+    {
+      "bytes": 5727,
+      "path": "README.md",
+      "role": "contract_or_protocol",
+      "sha256": "c667a0df43d480a79d3a2ddb93c03ac685aa2fcf4a94eff1a3a926b2e089d0b2"
+    },
+    {
+      "bytes": 3193,
+      "path": "contract.json",
+      "role": "contract_or_protocol",
+      "sha256": "d3cd6dec2c367f6150b09c96e1d83be7ad6947028ef5ac545c23ee2481c4dc86"
+    },
+    {
+      "bytes": 1682,
+      "path": "data/development/dev01.reference.json",
+      "role": "synthetic_ai_reference",
+      "sha256": "b2420cad7a6cef56dbcb36c7f10716602af018a382fc7145e9e9d64881c9949b"
+    },
+    {
+      "bytes": 2184,
+      "path": "data/development/dev01.source.json",
+      "role": "synthetic_source",
+      "sha256": "dff52978e47d37f7b730eef464668de2a36ed5fbfd761836ae0a2d53699c59f7"
+    },
+    {
+      "bytes": 3115,
+      "path": "data/development/dev02.reference.json",
+      "role": "synthetic_ai_reference",
+      "sha256": "ee4787307a185a572a541bb8b5c4698d4fe6f11c2bf3311fd752306239b6812a"
+    },
+    {
+      "bytes": 1887,
+      "path": "data/development/dev02.source.json",
+      "role": "synthetic_source",
+      "sha256": "6af445ceaa5ff5ea84f62e848669476dd48c8beab7cad893a11a4e628fe452c8"
+    },
+    {
+      "bytes": 1729,
+      "path": "data/development/dev03.reference.json",
+      "role": "synthetic_ai_reference",
+      "sha256": "889856aec12a607727c0219853918d1084641de52bc2127615d2f4f33e4047c0"
+    },
+    {
+      "bytes": 1424,
+      "path": "data/development/dev03.source.json",
+      "role": "synthetic_source",
+      "sha256": "63894df27292bcc70a68a857a459e64ed6fd294368bd0b65bb8e3b80e3910e4e"
+    },
+    {
+      "bytes": 1532,
+      "path": "data/development/dev04.reference.json",
+      "role": "synthetic_ai_reference",
+      "sha256": "8f4443c35c5869c9f8c91b5558b75921ec26d9f96f6e1e546865893ac4b376bf"
+    },
+    {
+      "bytes": 1274,
+      "path": "data/development/dev04.source.json",
+      "role": "synthetic_source",
+      "sha256": "7cc19b564fd83462908a78bcfca67f7efc3de91efae725c12f1fe50f71f38edd"
+    },
+    {
+      "bytes": 2291,
+      "path": "data/validation/val01.reference.json",
+      "role": "synthetic_ai_reference",
+      "sha256": "e233b81a17ce94940576dea380d93beab60bd90f571340ee7704692d00eb372f"
+    },
+    {
+      "bytes": 1686,
+      "path": "data/validation/val01.source.json",
+      "role": "synthetic_source",
+      "sha256": "211960470b61ea2b7c1c35be03d816463d01e72c5290cc2e8b992ba302688a6d"
+    },
+    {
+      "bytes": 1912,
+      "path": "data/validation/val02.reference.json",
+      "role": "synthetic_ai_reference",
+      "sha256": "9ed21baaa13befc0edc26e1d2bd892c7550449ba58536f1c0c12306e422e0b81"
+    },
+    {
+      "bytes": 1479,
+      "path": "data/validation/val02.source.json",
+      "role": "synthetic_source",
+      "sha256": "ef7976aaf4dd35423cc345f57cae991f8b46338ee1226dc174cb8301e9623601"
+    },
+    {
+      "bytes": 2556,
+      "path": "prompts/interpret.txt",
+      "role": "contract_or_protocol",
+      "sha256": "933aa8f92c0db1b2f930e49ce981572b1b9ee096fa10ecc11c04445442bde36b"
+    },
+    {
+      "bytes": 675,
+      "path": "prompts/repair.txt",
+      "role": "contract_or_protocol",
+      "sha256": "a89ba117da934bd18cb50db675591c5be963f53ed1eca2048b71d078b6328c98"
+    },
+    {
+      "bytes": 3024,
+      "path": "protocol/codex-jsonl-adapter.md",
+      "role": "contract_or_protocol",
+      "sha256": "fe7b10c449fac773588fe2dfffe9340d5674fd87a93301dde506a2caeb44b3d7"
+    },
+    {
+      "bytes": 969,
+      "path": "protocol/holdout.md",
+      "role": "contract_or_protocol",
+      "sha256": "adef1f740f20124f7ff6c837286ead7c9f3613823bd5ef427ed1dbdf2904a640"
+    },
+    {
+      "bytes": 817,
+      "path": "results/attempt.template.json",
+      "role": "contract_or_protocol",
+      "sha256": "5686ac5b19015ed53afd4e399c7345e6ffd840571f2b2780901c1ca85ed13737"
+    },
+    {
+      "bytes": 1199,
+      "path": "results/run.template.json",
+      "role": "contract_or_protocol",
+      "sha256": "4909139cc249982ceed36b7f951af155a4c4989cb4424530b1bd6446b5823ede"
+    },
+    {
+      "bytes": 26019,
+      "path": "scripts/benchmark.py",
+      "role": "code",
+      "sha256": "2f906bf3bfa1871479f87eb88f443917650fdb244a65d6dd6a5a8ed9f9890a94"
+    },
+    {
+      "bytes": 10981,
+      "path": "scripts/codex_jsonl.py",
+      "role": "code",
+      "sha256": "606a35e2de3d9e4075eebf7243cc9798dca80ac949ca2ce74e52294d748f3a36"
+    },
+    {
+      "bytes": 3187,
+      "path": "scripts/freeze.py",
+      "role": "code",
+      "sha256": "667d2fd2419458307bf7a279e8453f01f76285a72c843c77c81441c47e984797"
+    },
+    {
+      "bytes": 555,
+      "path": "tests/fixtures/codex_stream.sanitized.jsonl",
+      "role": "sanitized_event_structure_synthetic_ids_and_content",
+      "sha256": "555e6973cb98cc40989abddd1550f77e0b9093f4dbab1267015df7b452c81819"
+    },
+    {
+      "bytes": 162,
+      "path": "tests/fixtures/codex_turn_completed.observed.json",
+      "role": "sanitized_usage_counters_only",
+      "sha256": "d31d625f0dbb0fa3dfde8eab4a370a6e57451ad57dbf96f2ce6d85a4666d7697"
+    },
+    {
+      "bytes": 10349,
+      "path": "tests/test_benchmark.py",
+      "role": "code",
+      "sha256": "b5c8ef4e2f84f58d29506418417980f8091b6b8d0282f8ab055adb09b330089e"
+    },
+    {
+      "bytes": 12502,
+      "path": "tests/test_codex_jsonl.py",
+      "role": "code",
+      "sha256": "e42294b5f3c68b6c1f15c87ca644de4f89c5b13ec38510a8d3ef9240e0bdcfca"
+    },
+    {
+      "bytes": 10258,
+      "path": "tests/test_receipt_boundaries.py",
+      "role": "code",
+      "sha256": "a6fbd295408669c3511e9c9da671612c369921c3170ee6a6ad43938eeaf38340"
+    },
+    {
+      "bytes": 3212,
+      "path": "manifests/input.spec.json",
+      "role": "manifest_specification",
+      "sha256": "4f7430cda422fd6e7af54023edbc9094f2ccbdd20d62ccebaefb44702d36d097"
+    }
+  ],
+  "metadata": {
+    "dependencies_covered": "explicit package files only; interpreter/OS/providers not certified",
+    "exposure": "development and validation author-exposed; holdout absent",
+    "matcher_version": "discrete-value-and-required-evidence-v1",
+    "python_observed": "3.12.14",
+    "reference_kind": "synthetic",
+    "scope": "Generic offline synthetic instrument; no real corpus or model outputs",
+    "split": "synthetic"
+  },
+  "schema": "curricular-freeze.v1"
+}

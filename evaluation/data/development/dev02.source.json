@@ -1,0 +1,86 @@
+{
+  "schema": "aulalista-synthetic-source.v1",
+  "id": "dev02",
+  "planning_id": "synthetic-dev02",
+  "version": 1,
+  "synthetic": true,
+  "split": "development",
+  "family": "continued-table",
+  "strata": [
+    "table",
+    "continued_table",
+    "extraction_order"
+  ],
+  "origin": "Entirely invented by AI for offline smoke testing; no real school, person or curriculum.",
+  "page_semantics": "Synthetic logical pages; no PDF bytes or extraction engine tested.",
+  "units": [
+    "U1"
+  ],
+  "subjects": {
+    "A1": "U1",
+    "A2": "U1",
+    "A3": "U1"
+  },
+  "blocks": [
+    {
+      "id": "context",
+      "page": 1,
+      "kind": "paragraph",
+      "unit": null,
+      "text": "Todas las actividades son del Grupo Brisa.",
+      "dependencies": []
+    },
+    {
+      "id": "columns",
+      "page": 1,
+      "kind": "table_header",
+      "unit": "U1",
+      "text": "Tabla: ID | Actividad | Orden | Minutos | Materiales",
+      "dependencies": []
+    },
+    {
+      "id": "row3",
+      "page": 1,
+      "kind": "table_row",
+      "unit": "U1",
+      "text": "A3 | Mostrar dibujo | 3 | 10 | dibujo",
+      "dependencies": [
+        "context",
+        "columns"
+      ]
+    },
+    {
+      "id": "row1",
+      "page": 1,
+      "kind": "table_row",
+      "unit": "U1",
+      "text": "A1 | Mirar semillas | 1 | 15 | semillas",
+      "dependencies": [
+        "context",
+        "columns"
+      ]
+    },
+    {
+      "id": "continued",
+      "page": 2,
+      "kind": "table_header",
+      "unit": "U1",
+      "text": "Continuación de la misma tabla; las columnas no cambian.",
+      "dependencies": [
+        "columns"
+      ]
+    },
+    {
+      "id": "row2",
+      "page": 2,
+      "kind": "table_row",
+      "unit": "U1",
+      "text": "A2 | Dibujar semilla | 2 | 20 | papel, lápiz",
+      "dependencies": [
+        "context",
+        "columns",
+        "continued"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,104 @@
+{
+  "schema": "aulalista-synthetic-reference.v1",
+  "source_id": "val02",
+  "reference_kind": "synthetic_ai_authored",
+  "author_exposed": true,
+  "facts": [
+    {
+      "subject": "A1",
+      "predicate": "activity",
+      "value": "Formar secuencia",
+      "evidence_blocks": [
+        "a"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A1",
+      "predicate": "group",
+      "value": "Grupo Mar",
+      "evidence_blocks": [
+        "a"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A1",
+      "predicate": "order",
+      "value": 1,
+      "evidence_blocks": [
+        "a"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A1",
+      "predicate": "materials",
+      "value": [
+        "tarjetas",
+        "cuerda"
+      ],
+      "evidence_blocks": [
+        "a",
+        "cart"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A2",
+      "predicate": "activity",
+      "value": "Formar secuencia",
+      "evidence_blocks": [
+        "b"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A2",
+      "predicate": "group",
+      "value": null,
+      "evidence_blocks": [
+        "b",
+        "note"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A2",
+      "predicate": "order",
+      "value": 2,
+      "evidence_blocks": [
+        "b"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A2",
+      "predicate": "materials",
+      "value": [
+        "tarjetas",
+        "cuerda"
+      ],
+      "evidence_blocks": [
+        "b",
+        "cart"
+      ],
+      "critical": true
+    }
+  ],
+  "pending": [
+    {
+      "field": "A2.group",
+      "alternatives": [
+        "Grupo Viento",
+        "Grupo Valle"
+      ],
+      "evidence_blocks": [
+        "b",
+        "note"
+      ]
+    }
+  ],
+  "human_adjudicated": false,
+  "source_content_sha256": "a9a4e7b8634e51fa5bc5001e8b0f62388e25c83fea8f07f9d1b64ed817d8e229"
+}

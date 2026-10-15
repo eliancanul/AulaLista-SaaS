@@ -1,0 +1,165 @@
+{
+  "schema": "aulalista-synthetic-reference.v1",
+  "source_id": "dev02",
+  "reference_kind": "synthetic_ai_authored",
+  "author_exposed": true,
+  "facts": [
+    {
+      "subject": "A1",
+      "predicate": "activity",
+      "value": "Mirar semillas",
+      "evidence_blocks": [
+        "row1",
+        "columns"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A1",
+      "predicate": "group",
+      "value": "Grupo Brisa",
+      "evidence_blocks": [
+        "context"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A1",
+      "predicate": "order",
+      "value": 1,
+      "evidence_blocks": [
+        "row1",
+        "columns"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A1",
+      "predicate": "duration_minutes",
+      "value": 15,
+      "evidence_blocks": [
+        "row1",
+        "columns"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A1",
+      "predicate": "materials",
+      "value": [
+        "semillas"
+      ],
+      "evidence_blocks": [
+        "row1",
+        "columns"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A2",
+      "predicate": "activity",
+      "value": "Dibujar semilla",
+      "evidence_blocks": [
+        "row2",
+        "columns"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A2",
+      "predicate": "group",
+      "value": "Grupo Brisa",
+      "evidence_blocks": [
+        "context"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A2",
+      "predicate": "order",
+      "value": 2,
+      "evidence_blocks": [
+        "row2",
+        "columns"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A2",
+      "predicate": "duration_minutes",
+      "value": 20,
+      "evidence_blocks": [
+        "row2",
+        "columns"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A2",
+      "predicate": "materials",
+      "value": [
+        "papel",
+        "lápiz"
+      ],
+      "evidence_blocks": [
+        "row2",
+        "columns"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A3",
+      "predicate": "activity",
+      "value": "Mostrar dibujo",
+      "evidence_blocks": [
+        "row3",
+        "columns"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A3",
+      "predicate": "group",
+      "value": "Grupo Brisa",
+      "evidence_blocks": [
+        "context"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A3",
+      "predicate": "order",
+      "value": 3,
+      "evidence_blocks": [
+        "row3",
+        "columns"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A3",
+      "predicate": "duration_minutes",
+      "value": 10,
+      "evidence_blocks": [
+        "row3",
+        "columns"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A3",
+      "predicate": "materials",
+      "value": [
+        "dibujo"
+      ],
+      "evidence_blocks": [
+        "row3",
+        "columns"
+      ],
+      "critical": true
+    }
+  ],
+  "pending": [],
+  "human_adjudicated": false,
+  "source_content_sha256": "ac4896ce85d6baf4b7445e527bf86bd8bb6dee80681f5b5c74f3f0c523ab46ee"
+}

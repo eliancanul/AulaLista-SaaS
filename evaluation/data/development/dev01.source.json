@@ -1,0 +1,78 @@
+{
+  "schema": "aulalista-synthetic-source.v1",
+  "id": "dev01",
+  "planning_id": "synthetic-dev01",
+  "version": 1,
+  "synthetic": true,
+  "split": "development",
+  "family": "two-groups-repeated-headers",
+  "strata": [
+    "repeated_text",
+    "scope",
+    "order"
+  ],
+  "origin": "Entirely invented by AI for offline smoke testing; no real school, person or curriculum.",
+  "page_semantics": "Synthetic logical pages; no PDF bytes or extraction engine tested.",
+  "units": [
+    "U1",
+    "U2"
+  ],
+  "subjects": {
+    "A1": "U1",
+    "A2": "U2"
+  },
+  "blocks": [
+    {
+      "id": "h1",
+      "page": 1,
+      "kind": "running_header",
+      "unit": null,
+      "text": "PLANEACIÓN SINTÉTICA. El propósito es observar el entorno y conversar con respeto. Documento de trabajo inventado para una prueba controlada.",
+      "dependencies": [],
+      "dedup_safe": true
+    },
+    {
+      "id": "b1",
+      "page": 1,
+      "kind": "paragraph",
+      "unit": "U1",
+      "text": "Grupo Nube. A1: Observar hojas. Orden 1. Materiales: hojas, lupa.",
+      "dependencies": []
+    },
+    {
+      "id": "h2",
+      "page": 2,
+      "kind": "running_header",
+      "unit": null,
+      "text": "PLANEACIÓN SINTÉTICA. El propósito es observar el entorno y conversar con respeto. Documento de trabajo inventado para una prueba controlada.",
+      "dependencies": [],
+      "dedup_safe": true
+    },
+    {
+      "id": "b2",
+      "page": 2,
+      "kind": "paragraph",
+      "unit": "U2",
+      "text": "Grupo Sol. A2: Observar hojas. Orden 2. Materiales: hojas, lupa.",
+      "dependencies": []
+    },
+    {
+      "id": "h3",
+      "page": 3,
+      "kind": "running_header",
+      "unit": null,
+      "text": "PLANEACIÓN SINTÉTICA. El propósito es observar el entorno y conversar con respeto. Documento de trabajo inventado para una prueba controlada.",
+      "dependencies": [],
+      "dedup_safe": true
+    },
+    {
+      "id": "f1",
+      "page": 3,
+      "kind": "administrative",
+      "unit": null,
+      "text": "Nota administrativa: la impresora se guarda en el armario. Esta nota no cambia las actividades.",
+      "dependencies": [],
+      "omit_for_task": true
+    }
+  ]
+}

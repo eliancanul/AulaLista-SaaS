@@ -1,0 +1,83 @@
+{
+  "schema": "aulalista-synthetic-reference.v1",
+  "source_id": "dev04",
+  "reference_kind": "synthetic_ai_authored",
+  "author_exposed": true,
+  "facts": [
+    {
+      "subject": "A1",
+      "predicate": "activity",
+      "value": "Clasificar piedras",
+      "evidence_blocks": [
+        "b1"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A1",
+      "predicate": "group",
+      "value": null,
+      "evidence_blocks": [
+        "cover",
+        "b1"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A1",
+      "predicate": "order",
+      "value": 1,
+      "evidence_blocks": [
+        "b1"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A1",
+      "predicate": "materials",
+      "value": [
+        "piedras"
+      ],
+      "evidence_blocks": [
+        "b1"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A1",
+      "predicate": "duration_minutes",
+      "value": null,
+      "evidence_blocks": [
+        "b1",
+        "note"
+      ],
+      "critical": true
+    }
+  ],
+  "pending": [
+    {
+      "field": "A1.group",
+      "alternatives": [
+        "Grupo Lago",
+        "Grupo Monte"
+      ],
+      "evidence_blocks": [
+        "cover",
+        "b1"
+      ]
+    },
+    {
+      "field": "A1.duration_minutes",
+      "alternatives": [
+        10,
+        25
+      ],
+      "evidence_blocks": [
+        "b1",
+        "note"
+      ]
+    }
+  ],
+  "human_adjudicated": false,
+  "source_content_sha256": "31bb05cc6e4fef86207514723d710c9b1aad5ff6b58f620f320aa2f5c489c714"
+}

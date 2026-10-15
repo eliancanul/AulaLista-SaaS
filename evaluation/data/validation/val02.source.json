@@ -1,0 +1,63 @@
+{
+  "schema": "aulalista-synthetic-source.v1",
+  "id": "val02",
+  "planning_id": "synthetic-val02",
+  "version": 1,
+  "synthetic": true,
+  "split": "validation",
+  "family": "two-lessons-shared-cart",
+  "strata": [
+    "shared_materials",
+    "scoped_same_text",
+    "material_ambiguity"
+  ],
+  "origin": "Entirely invented by AI for offline smoke testing; no real school, person or curriculum.",
+  "page_semantics": "Synthetic logical pages; no PDF bytes or extraction engine tested.",
+  "units": [
+    "U1",
+    "U2"
+  ],
+  "subjects": {
+    "A1": "U1",
+    "A2": "U2"
+  },
+  "blocks": [
+    {
+      "id": "cart",
+      "page": 1,
+      "kind": "annex",
+      "unit": null,
+      "text": "Carro C compartido por ambas actividades. Materiales: tarjetas, cuerda.",
+      "dependencies": []
+    },
+    {
+      "id": "a",
+      "page": 1,
+      "kind": "paragraph",
+      "unit": "U1",
+      "text": "Grupo Mar. A1: Formar secuencia. Orden 1. Usar carro C.",
+      "dependencies": [
+        "cart"
+      ]
+    },
+    {
+      "id": "b",
+      "page": 2,
+      "kind": "paragraph",
+      "unit": "U2",
+      "text": "Grupo Viento. A2: Formar secuencia. Orden 2. Usar carro C.",
+      "dependencies": [
+        "cart",
+        "note"
+      ]
+    },
+    {
+      "id": "note",
+      "page": 2,
+      "kind": "paragraph",
+      "unit": "U2",
+      "text": "Nota igualmente vigente: la misma A2 es del Grupo Valle. No hay otra indicación de grupo.",
+      "dependencies": []
+    }
+  ]
+}

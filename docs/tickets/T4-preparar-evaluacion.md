@@ -2,6 +2,12 @@
 
 Estado: pendiente; preparación offline, sin benchmark ejecutado. Dependencia: tarea/salida de [spec 0002](../specs/0002-flujo-automatico-material.md); puede avanzar en paralelo a [T3](T3-prototipo-flujo-automatico.md).
 
+## Corte de implementación
+
+[T4a](T4a-harness-offline.md) incorpora únicamente el instrumento genérico offline
+y sus fixtures sintéticas/saneadas. No cierra este ticket ni acredita un benchmark
+real, un matcher semántico o consumo de proveedor verificado.
+
 ## Resultado
 
 Paquete reproducible para el corpus real privado autorizado: particiones, referencia IA revisable, rúbrica, manifiesto y formato de resultados con comprobaciones offline mínimas para comparar extracción + modelo, PDF visual e híbrido. Sigue el protocolo Astra/Luna de spec 0002; la referencia IA no es gold humano. Baseline anterior sólo si está disponible y autorizado. Los sintéticos son smoke del harness, no sustituyen la comparación real.
