@@ -17,8 +17,9 @@ verifica ese main, 114 pruebas y logs de PostgreSQL.
 
 El servidor normal devuelve 401 en todas las operaciones privadas: todavía no hay
 identidad real. Sólo los tests inyectan actores y usan un rol DB runtime distinto
-del dueño de migraciones. No hay UI, documentos reales, parsing, IA, cobro ni piloto
-habilitado. Docentes individuales, suscripción con precio pendiente e inicio
+del dueño de migraciones. No hay UI de producto conectada al servidor, documentos reales, parsing, IA, cobro ni piloto
+habilitado. El [prototipo sintético local](web/README.md) es un candidato separado;
+su revisión final y CI están pendientes, sin validación con docentes ni H2 cerrado. Docentes individuales, suscripción con precio pendiente e inicio
 limpio siguen como alcance de producto. No se contrata ningún servicio.
 
 ## Arranque y pruebas
@@ -43,7 +44,7 @@ editable. La evidencia local no sustituye checks remotos del SHA final.
 1. [T0](docs/tickets/T0-bootstrap-api.md): arranque mínimo de FastAPI, health y CI propia.
 2. [T1](docs/tickets/T1-postgresql-ambito.md): PostgreSQL, migraciones y ámbito personal; integrado en PR #2.
 3. [T2](docs/tickets/T2-fuentes-versionadas.md): fuente sintética versionada, recuperación, aislamiento, transacciones y reintentos; integrado en PR #3, CI postmerge correcta.
-4. [T3](docs/tickets/T3-prototipo-flujo-automatico.md): prototipo sintético de carga → resultado útil, automáticamente guardado y editable; pendiente de revisión del flujo H2 antes de programar.
+4. [T3](docs/tickets/T3-prototipo-flujo-automatico.md): prototipo sintético de carga → resultado útil, automáticamente guardado y editable; candidato local implementado tras revisar el contrato UX; revisión final y CI pendientes.
 5. [T4](docs/tickets/T4-preparar-evaluacion.md): preparación offline de la comparación de interpretación; pendiente, puede avanzar junto a T3.
 6. [T5](docs/tickets/T5-ensayo-interpretacion.md): ensayo autorizado y decisión basada en evidencia; pendiente de T4 y permisos aplicables.
 
@@ -53,6 +54,7 @@ El siguiente recorrido prioriza mínima fricción: resolver automáticamente pri
 
 ## Documentación
 
+- [Prototipo sintético local: ejecutar y probar](web/README.md)
 - [Instrucciones de contribución](AGENTS.md)
 - [Decisión de fundación](docs/adr/0001-fundacion-personal.md)
 - [Contrato de fundación](docs/specs/0001-fundacion.md)
