@@ -31,3 +31,8 @@ Se adaptó el borrador que asumía el repositorio antiguo: aquí no corresponde 
 ## Estado de verificación
 
 Revisión documental independiente v1 realizada por `revisar_integrar_incrementos`, con conciliación de estado incorporada en v2. Pendientes: aceptación de v2, revisión independiente de código, CI remota y pruebas T1/T2. H0 todavía no se declara completado. La existencia de este registro no acredita que un consultor humano o un panel externo haya participado.
+
+
+## Estado posterior (2026-10-15 UTC)
+
+Este registro anterior se conserva como historia. T0 quedó integrado mediante [PR #1](https://github.com/eliancanul/AulaLista-SaaS/pull/1), main `11c8d4d3e41295dbf5d49023f36b78f4eff1d1e0`, con revisión independiente y [CI postmerge success](https://github.com/eliancanul/AulaLista-SaaS/actions/runs/38686682062). T1 tiene candidato local con 64 tests correctos; su revisión independiente y CI remota del SHA final siguen pendientes. T2 no está implementado. La decisión H0 de continuar se registra por separado en la revisión del hito y no sustituye los gates técnicos.

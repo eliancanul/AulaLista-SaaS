@@ -1,14 +1,14 @@
 # Tickets de fundación
 
-Estado al congelar documentación v2: T0 implementado localmente; autor reporta 21 tests, lint, formato y build correctos. Revisión independiente de código y CI remota pendientes. T1/T2 siguen especificados y pendientes de implementación. Actualizar cada estado con evidencia del candidato exacto.
+Estado de T1 (2026-10-15 UTC): T0 integrado mediante [PR #1](https://github.com/eliancanul/AulaLista-SaaS/pull/1), base `11c8d4d3e41295dbf5d49023f36b78f4eff1d1e0`. T1 tiene candidato local con 64 tests, lint, formato y build correctos; revisión independiente y CI remota del SHA final pendientes. T2 sigue pendiente de implementación.
 
 | Ticket | Resultado | Dependencia | Estado |
 |---|---|---|---|
-| [T0](T0-bootstrap-api.md) | FastAPI reproducible y CI propia | Entorno/escritor confirmados | Implementado localmente; revisión y CI pendientes |
-| [T1](T1-postgresql-ambito.md) | PostgreSQL, migraciones y ámbito personal | T0 o bootstrap incluido en el mismo candidato | Pendiente |
+| [T0](T0-bootstrap-api.md) | FastAPI reproducible y CI propia | Entorno/escritor confirmados | Integrado, PR #1 |
+| [T1](T1-postgresql-ambito.md) | PostgreSQL, migraciones y ámbito personal | T0 integrado | Candidato local; revisión y CI pendientes |
 | [T2](T2-fuentes-versionadas.md) | Fuente sintética durable e historial aislado | T1 | Pendiente |
 
-El orden es T0 → T1 → T2. Se puede incorporar T0 dentro de T1 si sigue siendo un cambio comprensible y comprobable. Separarlo no permite declarar terminada la fundación ni sustituir PostgreSQL por SQLite. T1 es el siguiente corte inmediato, sin interponer UI, IA o cobro.
+El orden es T0 → T1 → T2. T0 y T1 son incrementos separados. Completar T1 no declara terminada la fundación ni permite sustituir PostgreSQL por SQLite. El siguiente corte es T2, sin interponer UI, IA o cobro.
 
 Los tres tramos constituyen trabajo técnico acotado. T2 no habilita acceso de docentes o archivos reales. Identidad y archivos reales se especifican después; precios pueden investigarse en paralelo sin introducir un motor de pagos.
 

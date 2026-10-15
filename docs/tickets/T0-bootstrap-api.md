@@ -1,6 +1,6 @@
 # T0: arrancar FastAPI y sus comprobaciones propias
 
-Estado: implementado localmente; autor reporta 21 tests, lint, formato y build correctos. Revisión independiente de código y CI remota pendientes. Escritor: `implementar_base_fastapi`. Dependencia: entorno y directorio del código confirmados. Spec: [0001](../specs/0001-fundacion.md).
+Estado: integrado mediante [PR #1](https://github.com/eliancanul/AulaLista-SaaS/pull/1) tras revisión independiente y CI correctas. Main `11c8d4d3e41295dbf5d49023f36b78f4eff1d1e0`; [CI postmerge success](https://github.com/eliancanul/AulaLista-SaaS/actions/runs/38686682062), con 21 tests y comprobaciones propias de T0. Escritor: `implementar_base_fastapi`. Dependencia: entorno y directorio del código confirmados. Spec: [0001](../specs/0001-fundacion.md).
 
 ## Resultado
 
@@ -15,7 +15,7 @@ Un checkout limpio instala dependencias fijadas, inicia FastAPI y verifica la vi
 - Workflow de CI con permisos mínimos y disparadores que cubran código, tests, dependencias/lock y el propio workflow.
 - README con comandos exactos de instalación, arranque y tests, ejecutados por el implementador.
 
-El [README](../../README.md) recoge los comandos reales del candidato, contrastados con `.github/workflows/backend.yml` y los archivos de implementación. Python 3.12.14 y uv 0.12.23; dependencias exactas en `pyproject.toml` y `uv.lock`. El log local muestra 21 tests y comprobaciones correctas; no se ha convertido ese log en prueba de CI remota.
+Python 3.12.14 y uv 0.12.23; dependencias exactas en `pyproject.toml` y `uv.lock`. El PR conserva los comandos y la evidencia de los 21 tests del bootstrap T0. El [README actual](../../README.md) incorpora T1 y enlaza sus comandos, que ahora requieren configuración explícita de PostgreSQL; esto no cambia el alcance histórico del bootstrap.
 
 ## Aceptación
 

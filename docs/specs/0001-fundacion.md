@@ -1,6 +1,6 @@
 # Especificación 0001: fuente personal recuperable
 
-Estado: contrato de T0–T2. Fuentes de alcance: README y ADR 0001. T0 tiene implementación y evidencia local reportada por su autor; revisión independiente de código y CI remota pendientes. T1/T2 siguen pendientes de implementación y pruebas.
+Estado: contrato de T0–T2. T0 integrado mediante [PR #1](https://github.com/eliancanul/AulaLista-SaaS/pull/1), main `11c8d4d3e41295dbf5d49023f36b78f4eff1d1e0`, con [CI postmerge success](https://github.com/eliancanul/AulaLista-SaaS/actions/runs/38686682062). T1 tiene candidato local verificado, pendiente de revisión independiente y CI remota del SHA final. T2 y el resultado integral de fuente recuperable siguen pendientes. Fuentes de alcance: README y ADR 0001.
 
 ## Resultado
 
