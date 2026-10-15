@@ -1,0 +1,5 @@
+{"type":"thread.started","thread_id":"synthetic-sanitized-thread-001"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"synthetic-item_0","type":"error","message":"Exceeded skills context budget. Synthetic warning body replacing original context details."}}
+{"type":"item.completed","item":{"id":"synthetic-item_1","type":"agent_message","text":"{\"synthetic_response\":true}"}}
+{"type":"turn.completed","usage":{"input_tokens":13738,"cached_input_tokens":12032,"cache_write_input_tokens":0,"output_tokens":121,"reasoning_output_tokens":0}}

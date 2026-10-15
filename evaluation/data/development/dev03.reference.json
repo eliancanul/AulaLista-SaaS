@@ -1,0 +1,91 @@
+{
+  "schema": "aulalista-synthetic-reference.v1",
+  "source_id": "dev03",
+  "reference_kind": "synthetic_ai_authored",
+  "author_exposed": true,
+  "facts": [
+    {
+      "subject": "A1",
+      "predicate": "activity",
+      "value": "Construir torre",
+      "evidence_blocks": [
+        "b1"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A1",
+      "predicate": "group",
+      "value": "Grupo Faro",
+      "evidence_blocks": [
+        "global"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A1",
+      "predicate": "order",
+      "value": 1,
+      "evidence_blocks": [
+        "b1"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A1",
+      "predicate": "materials",
+      "value": [
+        "bloques",
+        "regla"
+      ],
+      "evidence_blocks": [
+        "b1",
+        "kit"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A2",
+      "predicate": "activity",
+      "value": "Comparar altura",
+      "evidence_blocks": [
+        "b2"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A2",
+      "predicate": "group",
+      "value": "Grupo Faro",
+      "evidence_blocks": [
+        "global"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A2",
+      "predicate": "order",
+      "value": 2,
+      "evidence_blocks": [
+        "b2"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A2",
+      "predicate": "materials",
+      "value": [
+        "bloques",
+        "regla"
+      ],
+      "evidence_blocks": [
+        "b2",
+        "kit"
+      ],
+      "critical": true
+    }
+  ],
+  "pending": [],
+  "human_adjudicated": false,
+  "source_content_sha256": "01d7d76e5d00156c1f8ab03390e63b88b0dc4c383a1a8ed8c551b28d1c6099f6"
+}

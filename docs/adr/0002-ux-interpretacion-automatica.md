@@ -1,6 +1,6 @@
 # ADR 0002: resultado automático y editable, estrategia por evidencia
 
-Fecha: 2026-10-15 UTC. Estado: dirección de producto confirmada; estrategia de interpretación pendiente de evaluación. Implementación, benchmark y validación con docentes pendientes.
+Fecha: 2026-10-15 UTC. Estado: dirección de producto confirmada; estrategia de interpretación pendiente de evaluación. [T3](../tickets/T3-prototipo-flujo-automatico.md) integra el prototipo sintético local con revisión y CI; implementación del flujo real, benchmark y validación con docentes pendientes.
 
 ## Contexto
 

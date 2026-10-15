@@ -1,0 +1,22 @@
+{
+  "attempt_id": null,
+  "stage": "interpret",
+  "status": "not_executed",
+  "request_sha256": null,
+  "response_sha256": null,
+  "raw_receipt_path": null,
+  "raw_receipt_sha256": null,
+  "provider_request_id": null,
+  "provider": null,
+  "model": null,
+  "usage_semantics_id": null,
+  "usage_source": "unknown",
+  "usage": {"total_tokens": null, "input_tokens": null, "cached_input_tokens": null, "output_tokens": null, "reasoning_output_tokens": null, "image_tokens": null},
+  "usage_scope": {"system_context": "unknown", "tool_subcalls": "unknown", "retry_consumption": "unknown", "cached_is_subset_of_input": null, "reasoning_is_subset_of_output": null, "total_formula_verified": null},
+  "cost": null,
+  "started_at": null,
+  "ended_at": null,
+  "latency_ms": null,
+  "failure": null,
+  "repair_origin": null
+}

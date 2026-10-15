@@ -1,0 +1,274 @@
+import copy
+import importlib.util
+import json
+import tempfile
+import unittest
+from contextlib import contextmanager
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+spec = importlib.util.spec_from_file_location(
+    "benchmark", ROOT / "scripts/benchmark.py"
+)
+b = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(b)
+
+
+@contextmanager
+def bound_run(run):
+    """Author-owned synthetic receipts, never actual provider evidence."""
+    run = copy.deepcopy(run)
+    with tempfile.TemporaryDirectory(prefix="benchmark-receipts-") as td:
+        root = Path(td)
+        for index, attempt in enumerate(run["attempts"]):
+            if attempt.get("usage_source") == "provider_reported":
+                attempt.setdefault(
+                    "provider_request_id", "fixture-" + attempt["attempt_id"]
+                )
+                raw = {"schema": "aulalista-synthetic-receipt.v1", "synthetic": True}
+                raw.update(
+                    {
+                        key: attempt.get(key)
+                        for key in (
+                            "provider",
+                            "model",
+                            "usage_semantics_id",
+                            "provider_request_id",
+                            "usage",
+                            "cost",
+                        )
+                    }
+                )
+            else:
+                raw = {"schema": "synthetic-local-failure.v1", "synthetic": True}
+            body = json.dumps(raw, allow_nan=False).encode()
+            attempt["raw_receipt_path"] = f"receipt-{index}.json"
+            attempt["raw_receipt_sha256"] = b.digest(body)
+            (root / attempt["raw_receipt_path"]).write_bytes(body)
+        yield run, root
+
+
+def summarize(run):
+    with bound_run(run) as (bound, root):
+        return b.summarize_receipts(bound, root)
+
+
+def case(name):
+    split = "development" if name.startswith("dev") else "validation"
+    return (
+        b.read(ROOT / "data" / split / f"{name}.source.json"),
+        b.read(ROOT / "data" / split / f"{name}.reference.json"),
+    )
+
+
+def synthetic_prediction(source, reference):
+    blocks = {x["id"]: x for x in source["blocks"]}
+
+    def evidence(ids):
+        return [{"block_id": i, "quote": blocks[i]["text"]} for i in ids]
+
+    return {
+        "claims": [
+            {
+                "subject": f["subject"],
+                "predicate": f["predicate"],
+                "value": f["value"],
+                "evidence": evidence(f["evidence_blocks"]),
+            }
+            for f in reference["facts"]
+        ],
+        "pending": [
+            {
+                "field": p["field"],
+                "alternatives": p["alternatives"],
+                "evidence": evidence(p["evidence_blocks"]),
+            }
+            for p in reference["pending"]
+        ],
+        "clarification": None,
+    }
+
+
+class BenchmarkTest(unittest.TestCase):
+    def test_all_synthetic_references_resolve(self):
+        families, planning = {}, {}
+        for path in (ROOT / "data").glob("*/*.source.json"):
+            s = b.validate_source(b.read(path))
+            r = b.read(path.with_name(path.name.replace("source", "reference")))
+            for key, store in ((s["family"], families), (s["planning_id"], planning)):
+                self.assertIn(store.setdefault(key, s["split"]), (s["split"],))
+            p = synthetic_prediction(s, r)
+            score = b.score(s, r, p)
+            self.assertTrue(score["schema_valid"])
+            self.assertEqual(score["facts"]["correct"], score["facts"]["denominator"])
+            self.assertEqual(
+                score["ambiguity"]["detected"], score["ambiguity"]["denominator"]
+            )
+
+    def test_dedup_keeps_distinct_activities_and_aliases(self):
+        s, _ = case("dev01")
+        blocks = b.deduplicate(s["blocks"])
+        self.assertEqual(len(blocks), len(s["blocks"]) - 2)
+        self.assertEqual(len(blocks[0]["aliases"]), 3)
+        self.assertTrue({"b1", "b2"} <= {x["id"] for x in blocks})
+        s["blocks"].append(dict(s["blocks"][1], id="b3"))
+        self.assertIn("b3", {x["id"] for x in b.deduplicate(s["blocks"])})
+
+    def test_segment_keeps_cross_unit_dependency(self):
+        s, _ = case("dev03")
+        self.assertIn("kit", {x["id"] for x in b.select_blocks(s, "U1")})
+        requests = b.requests(s, "segmented", question_remaining=0)
+        self.assertEqual(len(requests), 2)
+        self.assertTrue(
+            all(x["input"]["clarification_budget_remaining"] == 0 for x in requests)
+        )
+        self.assertEqual(requests[0]["input"]["requested_subjects"], ["A1"])
+
+    def test_no_reference_or_fake_tokens_in_requests(self):
+        s, _ = case("dev01")
+        encoded = json.dumps(b.requests(s, "dedup"))
+        self.assertNotIn("reference_kind", encoded)
+        self.assertNotIn("total_tokens", encoded)
+
+    def test_holdout_and_nonsynthetic_rejected(self):
+        s, _ = case("dev01")
+        s["split"] = "holdout"
+        with self.assertRaises(ValueError):
+            b.requests(s, "full")
+        s["split"], s["synthetic"] = "development", False
+        with self.assertRaises(ValueError):
+            b.requests(s, "full")
+
+    def test_wrong_group_and_fabricated_quote_fail(self):
+        s, r = case("dev01")
+        p = synthetic_prediction(s, r)
+        p["claims"][1]["value"] = "Grupo Sol"
+        p["claims"][0]["evidence"][0]["quote"] = "inventado"
+        result = b.score(s, r, p)
+        self.assertEqual(
+            result["critical"]["correct"], result["critical"]["denominator"] - 2
+        )
+
+    def test_duplicates_extras_and_missing_not_hidden(self):
+        s, r = case("dev01")
+        p = synthetic_prediction(s, r)
+        p["claims"].append(copy.deepcopy(p["claims"][0]))
+        p["claims"].append(dict(p["claims"][0], subject="invented"))
+        p["claims"].pop(1)
+        result = b.score(s, r, p)
+        self.assertEqual(len(result["duplicate_claims"]), 1)
+        self.assertEqual(len(result["unexpected_claims"]), 1)
+        self.assertEqual(result["facts"]["denominator"], len(r["facts"]))
+
+    def test_malformed_pending_invalid(self):
+        s, r = case("dev04")
+        p = synthetic_prediction(s, r)
+        p["pending"].append({"field": [], "alternatives": []})
+        self.assertFalse(b.score(s, r, p)["schema_valid"])
+
+    def test_empty_output_is_not_success(self):
+        s, r = case("dev01")
+        result = b.score(s, r, {})
+        self.assertFalse(result["schema_valid"])
+        self.assertEqual(result["facts"]["correct"], 0)
+        self.assertEqual(result["facts"]["denominator"], len(r["facts"]))
+
+    def test_question_budget_survives_retry_new_version_new_file(self):
+        base = {"trial_id": "trial", "planning_id": "stable-plan", "question_id": "q1"}
+        events = [
+            dict(base, event="presented", version=1, file="a"),
+            dict(base, event="restored", version=2, file="b"),
+            dict(base, event="answered", version=2, file="b"),
+        ]
+        self.assertTrue(b.audit_questions(events)["valid"])
+        events.append(
+            dict(base, event="presented", question_id="q2", version=3, file="c")
+        )
+        self.assertFalse(b.audit_questions(events)["valid"])
+
+    def test_repair_rejects_reference_leak(self):
+        s, _ = case("dev03")
+        with self.assertRaises(ValueError):
+            b.repair_request(
+                s, "localized_repair", ["U1"], {}, [{"origin": "gold_reference"}], 0
+            )
+        result = b.repair_request(
+            s,
+            "localized_repair",
+            ["U1"],
+            {},
+            [{"origin": "schema", "error": "missing claims"}],
+            0,
+        )
+        self.assertIn("kit", {x["id"] for x in result["input"]["blocks"]})
+        self.assertEqual(result["input"]["clarification_budget_remaining"], 0)
+
+    def test_receipts_include_failed_attempts_and_no_double_count(self):
+        attempt = {
+            "attempt_id": "a",
+            "provider": "synthetic-provider",
+            "model": "synthetic-model",
+            "usage_semantics_id": "test",
+            "usage_source": "provider_reported",
+            "status": "success",
+            "stage": "interpret",
+            "latency_ms": 30,
+            "usage": {
+                "total_tokens": 100,
+                "input_tokens": 60,
+                "cached_input_tokens": 40,
+                "output_tokens": 40,
+                "reasoning_output_tokens": 20,
+            },
+            "cost": {"amount": 0.01, "currency": "USD"},
+        }
+        run = {
+            "attempts": [attempt, dict(attempt, attempt_id="b", status="failed")],
+            "question_events": [],
+        }
+        result = summarize(run)
+        self.assertEqual(result["total_tokens"], 200)
+        self.assertEqual(result["failed_attempt_count"], 1)
+        self.assertEqual(
+            result["usage_components_separate_not_additive"]["cached_input_tokens"][
+                "reported_sum"
+            ],
+            80,
+        )
+        self.assertIsNone(result["weighted_score"])
+        run["attempts"][1] = dict(
+            attempt,
+            attempt_id="b",
+            usage={"total_tokens": None},
+            status="failed",
+            cost=None,
+        )
+        result = summarize(run)
+        self.assertIsNone(result["total_tokens"])
+        self.assertEqual(result["known_token_subtotal"], 100)
+        self.assertIsNone(result["cost_total"])
+
+    def test_incompatible_units_not_summed(self):
+        a = {
+            "attempt_id": "a",
+            "provider": "p",
+            "model": "m1",
+            "usage_semantics_id": "s",
+            "usage_source": "provider_reported",
+            "status": "success",
+            "stage": "interpret",
+            "usage": {"total_tokens": 10},
+            "cost": None,
+        }
+        result = summarize({"attempts": [a, dict(a, attempt_id="b", model="m2")]})
+        self.assertFalse(result["native_usage_comparable"])
+        self.assertIsNone(result["total_tokens"])
+        self.assertIsNone(result["known_token_subtotal"])
+
+    def test_duplicate_attempt_is_rejected(self):
+        with self.assertRaises(ValueError):
+            summarize({"attempts": [{"attempt_id": "same"}, {"attempt_id": "same"}]})
+
+
+if __name__ == "__main__":
+    unittest.main()

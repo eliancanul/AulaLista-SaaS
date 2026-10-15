@@ -1,0 +1,61 @@
+{
+  "schema": "aulalista-synthetic-source.v1",
+  "id": "dev03",
+  "planning_id": "synthetic-dev03",
+  "version": 1,
+  "synthetic": true,
+  "split": "development",
+  "family": "shared-annex-materials",
+  "strata": [
+    "shared_materials",
+    "cross_unit_dependency"
+  ],
+  "origin": "Entirely invented by AI for offline smoke testing; no real school, person or curriculum.",
+  "page_semantics": "Synthetic logical pages; no PDF bytes or extraction engine tested.",
+  "units": [
+    "U1",
+    "U2"
+  ],
+  "subjects": {
+    "A1": "U1",
+    "A2": "U2"
+  },
+  "blocks": [
+    {
+      "id": "global",
+      "page": 1,
+      "kind": "paragraph",
+      "unit": null,
+      "text": "Grupo Faro. El orden se indica en cada actividad.",
+      "dependencies": []
+    },
+    {
+      "id": "b1",
+      "page": 1,
+      "kind": "paragraph",
+      "unit": "U1",
+      "text": "A1: Construir torre. Orden 1. Usar el kit compartido K.",
+      "dependencies": [
+        "kit"
+      ]
+    },
+    {
+      "id": "b2",
+      "page": 2,
+      "kind": "paragraph",
+      "unit": "U2",
+      "text": "A2: Comparar altura. Orden 2. Usar el mismo kit K.",
+      "dependencies": [
+        "kit"
+      ]
+    },
+    {
+      "id": "kit",
+      "page": 3,
+      "kind": "annex",
+      "unit": "U2",
+      "text": "Anexo K: kit compartido para A1 y A2. Materiales: bloques, regla. Se usa el mismo juego, no dos kits.",
+      "dependencies": []
+    }
+  ]
+}

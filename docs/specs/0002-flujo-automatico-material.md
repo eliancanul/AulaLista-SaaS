@@ -1,12 +1,12 @@
 # Especificación 0002: de carga a resultado útil y editable
 
-Estado: contrato de producto y plan de evaluación; implementación y ensayos pendientes. Dirección: [ADR 0002](../adr/0002-ux-interpretacion-automatica.md). La fundación técnica conserva [spec 0001](0001-fundacion.md).
+Estado: contrato de producto y plan de evaluación; prototipo sintético local [T3](../tickets/T3-prototipo-flujo-automatico.md) integrado y probado. Flujo real, ensayos y validación docente pendientes. Dirección: [ADR 0002](../adr/0002-ux-interpretacion-automatica.md). La fundación técnica conserva [spec 0001](0001-fundacion.md).
 
 ## Resultado y alcance
 
 Con una carga, el docente obtiene material estructurado útil, guardado automáticamente y editable; lo reabre sin perder correcciones ni aceptar etapas. Antes del ensayo se fija una tarea observable que permita reconocer utilidad, por ejemplo localizar y ajustar una actividad del material sin reconstruirla manualmente. Un indicador de progreso, texto aislado o JSON válido no acredita esa tarea.
 
-- **T3, prototipo sintético:** requiere revisión del contrato/recorrido H2 antes de programar; después prueba interacción y recuperación con fixtures. Identifica toda simulación; no demuestra interpretación real ni persistencia de backend si las simula.
+- **T3, prototipo sintético:** integrado en PR #5 tras revisión previa del contrato/recorrido y revisión independiente de interacción/recuperación con fixtures. Identifica toda simulación; el guardado local es real, sin interpretación real ni persistencia de backend. La validación docente y el cierre global de H2 siguen pendientes.
 - **T4–T5, evaluación controlada:** prepara y compara estrategias con entradas y destinos autorizados. Distingue evaluación de agentes, expertos y docentes reales.
 - **Producto con documentos reales:** requiere H3 antes de la exposición correspondiente: identidad, autorización, aislamiento, archivos privados y límites, destinos permitidos y recuperación. Esto no bloquea preparar el prototipo sintético ni el ensayo offline.
 
@@ -107,6 +107,6 @@ Preferir la solución más simple que reduzca esfuerzo y tiempo hasta utilidad d
 
 ## Entregas y límites de autorización
 
-El diseño/revisión de [T3](../tickets/T3-prototipo-flujo-automatico.md) y la preparación offline de [T4](../tickets/T4-preparar-evaluacion.md) pueden avanzar en paralelo. Programar T3 requiere primero revisar contrato y recorrido H2; esa revisión no acredita UX observado ni validación docente. [T5](../tickets/T5-ensayo-interpretacion.md) depende de T4 y las autorizaciones aplicables. Tras T3/T5 se planifica la integración del método elegido al mismo contrato UX, sin exponer etapas internas como aprobaciones.
+[T3](../tickets/T3-prototipo-flujo-automatico.md) registra la revisión previa, las comprobaciones observadas del prototipo sintético y su integración. La preparación offline de [T4](../tickets/T4-preparar-evaluacion.md) continúa; esas comprobaciones de agentes no acreditan validación docente. [T5](../tickets/T5-ensayo-interpretacion.md) depende de T4 y las autorizaciones aplicables. La integración posterior del método elegido conserva el mismo contrato UX, sin exponer etapas internas como aprobaciones.
 
-Esta especificación no ejecuta ni aprueba servicios, gasto, transmisión de documentos, contacto con docentes, despliegue o trabajo en otro entorno. Los ensayos separados conservan su propia autorización y evidencia. H2, benchmark, piloto e integración del flujo real siguen pendientes.
+Esta especificación no ejecuta ni aprueba servicios, gasto, transmisión de documentos, contacto con docentes, despliegue o trabajo en otro entorno. Los ensayos separados conservan su propia autorización y evidencia. El cierre global de H2, benchmark, piloto e integración del flujo real siguen pendientes.

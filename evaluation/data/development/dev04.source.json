@@ -1,0 +1,50 @@
+{
+  "schema": "aulalista-synthetic-source.v1",
+  "id": "dev04",
+  "planning_id": "synthetic-dev04",
+  "version": 1,
+  "synthetic": true,
+  "split": "development",
+  "family": "conflicting-scope-and-duration",
+  "strata": [
+    "material_ambiguity",
+    "multiple_unresolved_fields"
+  ],
+  "origin": "Entirely invented by AI for offline smoke testing; no real school, person or curriculum.",
+  "page_semantics": "Synthetic logical pages; no PDF bytes or extraction engine tested.",
+  "units": [
+    "U1"
+  ],
+  "subjects": {
+    "A1": "U1"
+  },
+  "blocks": [
+    {
+      "id": "cover",
+      "page": 1,
+      "kind": "paragraph",
+      "unit": null,
+      "text": "Portada: la actividad A1 corresponde al Grupo Lago.",
+      "dependencies": []
+    },
+    {
+      "id": "b1",
+      "page": 1,
+      "kind": "paragraph",
+      "unit": "U1",
+      "text": "Ficha A1: Grupo Monte. A1: Clasificar piedras. Orden 1. Materiales: piedras. Duración: 10 minutos.",
+      "dependencies": [
+        "cover",
+        "note"
+      ]
+    },
+    {
+      "id": "note",
+      "page": 2,
+      "kind": "paragraph",
+      "unit": "U1",
+      "text": "Nota para la misma A1: Duración: 25 minutos. No hay fecha ni prioridad que resuelva la contradicción.",
+      "dependencies": []
+    }
+  ]
+}

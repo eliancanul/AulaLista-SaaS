@@ -1,0 +1,121 @@
+{
+  "schema": "aulalista-synthetic-reference.v1",
+  "source_id": "val01",
+  "reference_kind": "synthetic_ai_authored",
+  "author_exposed": true,
+  "facts": [
+    {
+      "subject": "A1",
+      "predicate": "activity",
+      "value": "Escuchar sonidos",
+      "evidence_blocks": [
+        "s1"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A1",
+      "predicate": "group",
+      "value": "Grupo Pino",
+      "evidence_blocks": [
+        "global"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A1",
+      "predicate": "order",
+      "value": 1,
+      "evidence_blocks": [
+        "s1"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A1",
+      "predicate": "materials",
+      "value": [],
+      "evidence_blocks": [
+        "s1"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A2",
+      "predicate": "activity",
+      "value": "Trazar ruta",
+      "evidence_blocks": [
+        "s2"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A2",
+      "predicate": "group",
+      "value": "Grupo Pino",
+      "evidence_blocks": [
+        "global"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A2",
+      "predicate": "order",
+      "value": 2,
+      "evidence_blocks": [
+        "s2"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A2",
+      "predicate": "materials",
+      "value": [
+        "gis"
+      ],
+      "evidence_blocks": [
+        "s2"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A3",
+      "predicate": "activity",
+      "value": "Explicar recorrido",
+      "evidence_blocks": [
+        "s3"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A3",
+      "predicate": "group",
+      "value": "Grupo Pino",
+      "evidence_blocks": [
+        "global"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A3",
+      "predicate": "order",
+      "value": 3,
+      "evidence_blocks": [
+        "s3"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A3",
+      "predicate": "materials",
+      "value": [],
+      "evidence_blocks": [
+        "s3"
+      ],
+      "critical": true
+    }
+  ],
+  "pending": [],
+  "human_adjudicated": false,
+  "source_content_sha256": "57716fa0f6116dea16745e36f3dfd170e7ff8ce1e5324bcabcd723e9660dc4ce"
+}

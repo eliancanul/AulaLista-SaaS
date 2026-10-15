@@ -1,0 +1,89 @@
+{
+  "schema": "aulalista-synthetic-reference.v1",
+  "source_id": "dev01",
+  "reference_kind": "synthetic_ai_authored",
+  "author_exposed": true,
+  "facts": [
+    {
+      "subject": "A1",
+      "predicate": "activity",
+      "value": "Observar hojas",
+      "evidence_blocks": [
+        "b1"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A1",
+      "predicate": "group",
+      "value": "Grupo Nube",
+      "evidence_blocks": [
+        "b1"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A1",
+      "predicate": "order",
+      "value": 1,
+      "evidence_blocks": [
+        "b1"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A1",
+      "predicate": "materials",
+      "value": [
+        "hojas",
+        "lupa"
+      ],
+      "evidence_blocks": [
+        "b1"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A2",
+      "predicate": "activity",
+      "value": "Observar hojas",
+      "evidence_blocks": [
+        "b2"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A2",
+      "predicate": "group",
+      "value": "Grupo Sol",
+      "evidence_blocks": [
+        "b2"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A2",
+      "predicate": "order",
+      "value": 2,
+      "evidence_blocks": [
+        "b2"
+      ],
+      "critical": true
+    },
+    {
+      "subject": "A2",
+      "predicate": "materials",
+      "value": [
+        "hojas",
+        "lupa"
+      ],
+      "evidence_blocks": [
+        "b2"
+      ],
+      "critical": true
+    }
+  ],
+  "pending": [],
+  "human_adjudicated": false,
+  "source_content_sha256": "a010a0390df02f5e020a25ae2ca6f4726e6793ad49e2b15c806b4b8be6dbc15a"
+}

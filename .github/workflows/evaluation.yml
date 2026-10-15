@@ -1,0 +1,40 @@
+name: evaluation-offline
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evaluation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  synthetic-instrument:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.12.23"
+          python-version: "3.12.14"
+          enable-cache: false
+      - name: Record tested head and base
+        env:
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git rev-parse HEAD
+          printf 'PR head: %s\nPR base: %s\n' "$PR_HEAD" "$PR_BASE"
+      - name: Verify frozen synthetic inputs
+        run: uv run --no-project --offline python -B evaluation/scripts/freeze.py verify --root evaluation --input evaluation/manifests/input.manifest.json
+      - name: Test offline instrument without application dependencies
+        run: |
+          uv run --no-project --offline python -B -m unittest discover -s evaluation/tests -v
+          uv run --no-project --offline python -B -O -m unittest discover -s evaluation/tests -v

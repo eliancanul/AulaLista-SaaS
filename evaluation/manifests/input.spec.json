@@ -1,0 +1,129 @@
+{
+  "metadata": {
+    "scope": "Generic offline synthetic instrument; no real corpus or model outputs",
+    "split": "synthetic",
+    "exposure": "development and validation author-exposed; holdout absent",
+    "reference_kind": "synthetic",
+    "matcher_version": "discrete-value-and-required-evidence-v1",
+    "python_observed": "3.12.14",
+    "dependencies_covered": "explicit package files only; interpreter/OS/providers not certified"
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "role": "contract_or_protocol"
+    },
+    {
+      "path": "contract.json",
+      "role": "contract_or_protocol"
+    },
+    {
+      "path": "data/development/dev01.reference.json",
+      "role": "synthetic_ai_reference"
+    },
+    {
+      "path": "data/development/dev01.source.json",
+      "role": "synthetic_source"
+    },
+    {
+      "path": "data/development/dev02.reference.json",
+      "role": "synthetic_ai_reference"
+    },
+    {
+      "path": "data/development/dev02.source.json",
+      "role": "synthetic_source"
+    },
+    {
+      "path": "data/development/dev03.reference.json",
+      "role": "synthetic_ai_reference"
+    },
+    {
+      "path": "data/development/dev03.source.json",
+      "role": "synthetic_source"
+    },
+    {
+      "path": "data/development/dev04.reference.json",
+      "role": "synthetic_ai_reference"
+    },
+    {
+      "path": "data/development/dev04.source.json",
+      "role": "synthetic_source"
+    },
+    {
+      "path": "data/validation/val01.reference.json",
+      "role": "synthetic_ai_reference"
+    },
+    {
+      "path": "data/validation/val01.source.json",
+      "role": "synthetic_source"
+    },
+    {
+      "path": "data/validation/val02.reference.json",
+      "role": "synthetic_ai_reference"
+    },
+    {
+      "path": "data/validation/val02.source.json",
+      "role": "synthetic_source"
+    },
+    {
+      "path": "prompts/interpret.txt",
+      "role": "contract_or_protocol"
+    },
+    {
+      "path": "prompts/repair.txt",
+      "role": "contract_or_protocol"
+    },
+    {
+      "path": "protocol/codex-jsonl-adapter.md",
+      "role": "contract_or_protocol"
+    },
+    {
+      "path": "protocol/holdout.md",
+      "role": "contract_or_protocol"
+    },
+    {
+      "path": "results/attempt.template.json",
+      "role": "contract_or_protocol"
+    },
+    {
+      "path": "results/run.template.json",
+      "role": "contract_or_protocol"
+    },
+    {
+      "path": "scripts/benchmark.py",
+      "role": "code"
+    },
+    {
+      "path": "scripts/codex_jsonl.py",
+      "role": "code"
+    },
+    {
+      "path": "scripts/freeze.py",
+      "role": "code"
+    },
+    {
+      "path": "tests/fixtures/codex_stream.sanitized.jsonl",
+      "role": "sanitized_event_structure_synthetic_ids_and_content"
+    },
+    {
+      "path": "tests/fixtures/codex_turn_completed.observed.json",
+      "role": "sanitized_usage_counters_only"
+    },
+    {
+      "path": "tests/test_benchmark.py",
+      "role": "code"
+    },
+    {
+      "path": "tests/test_codex_jsonl.py",
+      "role": "code"
+    },
+    {
+      "path": "tests/test_receipt_boundaries.py",
+      "role": "code"
+    },
+    {
+      "path": "manifests/input.spec.json",
+      "role": "manifest_specification"
+    }
+  ]
+}
