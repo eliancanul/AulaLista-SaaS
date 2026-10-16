@@ -1,10 +1,16 @@
 # T4: conservar dependencias al deduplicar
 
-Issue: https://github.com/eliancanul/AulaLista-SaaS/issues/9
-Dependencia: PR #8, todavía no integrado al preparar este candidato apilado.
-Base exacta: `0598e61e70fb584cbee878dee1f2255b05c678c8`.
+Referencia técnica e historial del corte. Consulta [Issues y fuentes de verdad](README.md) para elegir trabajo y consultar su estado actual.
+
+Issue: [#9](https://github.com/eliancanul/AulaLista-SaaS/issues/9).
+Integración histórica: [PR #10](https://github.com/eliancanul/AulaLista-SaaS/pull/10), integrado el 2026-10-16 a las 01:18:36 UTC en `d611d8faf54fde3efd64a4c866d327c90679ab56`.
+El [recibo final del PR](https://github.com/eliancanul/AulaLista-SaaS/pull/10#issuecomment-6205844030) registra revisión/árbol verificados y CI postmerge del SHA integrado. No es evidencia de los candidatos posteriores.
+
+## Base de preparación histórica
+
+El candidato se preparó apilado sobre PR #8 antes de su integración. Tras integrar #8, PR #10 se dirigió a `main` con base `0c5089836550528823c3903bacdf742331b84770` y renovó su CI, según el PR.
+Base de preparación: `0598e61e70fb584cbee878dee1f2255b05c678c8`.
 Árbol base: `f07cd7fafbc3831b62fca49a3f1bb386c78bcc34`.
-Estado: candidato cloud; revisión independiente y CI remota pendientes.
 
 ## Problema y corte
 
@@ -52,7 +58,8 @@ ruff check .
 ruff format --check .
 ```
 
-Revisión independiente y CI deben citar el árbol/head final antes de integrar.
+La revisión independiente y CI del candidato integrado están en el PR enlazado;
+esta sección describe únicamente los checks locales de preparación.
 No se ejecutaron UI, PostgreSQL ni modelos; no se midieron calidad curricular o
 ahorro de tokens. No hay publicación, merge ni despliegue acreditados por estos
 checks locales. Recuperación: revertir este corte con contrato y manifiesto; las

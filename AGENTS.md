@@ -2,13 +2,13 @@
 
 ## Antes de modificar
 
-1. Lee [README](README.md) para el estado comprobado y [ADR 0001](docs/adr/0001-fundacion-personal.md) para decisiones vigentes.
-2. Escoge un ticket en [fundación](docs/tickets/README.md). Lee su especificación, dependencias y aceptación antes de escribir código.
+1. Lee [README](README.md) para las capacidades y límites comprobados y [ADR 0001](docs/adr/0001-fundacion-personal.md) para decisiones vigentes.
+2. Escoge una tarea en [GitHub Issues](https://github.com/eliancanul/AulaLista-SaaS/issues). Revisa su estado, dependencias, aceptación y specs/ADR enlazados antes de escribir código. [docs/tickets](docs/tickets/README.md) conserva referencias técnicas e historial; no es el backlog activo.
 3. Identifica autor, rama/directorio y archivos del cambio. Mantén un único escritor por archivo; coordina directamente con otros agentes cuando compartan una frontera.
 
 ## Entregar un cambio
 
-Sigue [workflow](docs/workflow.md): especificación → ticket pequeño → pruebas → revisión adversarial independiente → CI del candidato exacto → integración autorizada. Registra evidencia y pendientes en el ticket o PR. Una revisión pasada pierde vigencia cuando cambia su candidato.
+Sigue [workflow](docs/workflow.md): especificación → issue pequeño → pruebas → revisión adversarial independiente → CI del candidato exacto → integración autorizada. Mantén tareas, prioridades, dependencias y estado en Issues; contratos/decisiones en specs/ADR; evidencia del candidato en PR y CI. Una revisión pasada pierde vigencia cuando cambia su candidato.
 
 Resuelve el comportamiento completo con el menor cambio claro. Reutiliza código del repositorio y dependencias justificadas; introduce abstracciones sólo para una frontera presente. Conserva validación, seguridad, errores que evitan pérdida de datos y accesibilidad. Toda lógica no trivial tiene una prueba que falle si se rompe su garantía.
 
@@ -24,7 +24,7 @@ Resuelve el comportamiento completo con el menor cambio claro. Reutiliza código
 
 ## Comunicación
 
-Consultores, implementadores y revisores pueden hablar directamente. Toda decisión que cambie alcance, contrato, pruebas o riesgo queda en el ticket/ADR/PR y se comunica al coordinador. El implementador no sustituye al revisor independiente ni resuelve hallazgos únicamente por acuerdo verbal.
+Consultores, implementadores y revisores pueden hablar directamente. Toda decisión que cambie alcance, contrato, pruebas o riesgo queda en el issue, spec/ADR o PR correspondiente y se comunica al coordinador. El implementador no sustituye al revisor independiente ni resuelve hallazgos únicamente por acuerdo verbal.
 
 ## Fuera del primer corte
 

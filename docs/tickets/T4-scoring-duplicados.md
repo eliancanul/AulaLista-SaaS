@@ -1,8 +1,11 @@
 # T4: puntuación independiente del orden de afirmaciones duplicadas
 
-Issue: https://github.com/eliancanul/AulaLista-SaaS/issues/7
-Base: `862f1d4e3a46ceb3de4253356c0ca0dd8993d40e`.
-Estado: candidato cloud local; revisión independiente y CI remota pendientes.
+Referencia técnica e historial del corte. Consulta [Issues y fuentes de verdad](README.md) para elegir trabajo y consultar su estado actual.
+
+Issue: [#7](https://github.com/eliancanul/AulaLista-SaaS/issues/7).
+Integración histórica: [PR #8](https://github.com/eliancanul/AulaLista-SaaS/pull/8), integrado el 2026-10-16 a las 01:05:33 UTC en `0c5089836550528823c3903bacdf742331b84770`.
+El [recibo de integración](https://github.com/eliancanul/AulaLista-SaaS/pull/8#issuecomment-6205685421) registra árbol revisado y CI postmerge del SHA integrado. Los checks locales descritos abajo pertenecen a la preparación de ese corte.
+Base de preparación: `862f1d4e3a46ceb3de4253356c0ca0dd8993d40e`.
 
 ## Fallo y corte
 

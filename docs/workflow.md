@@ -1,25 +1,33 @@
 # Workflow y evidencia
 
+## Fuentes de verdad
+
+- [GitHub Issues](https://github.com/eliancanul/AulaLista-SaaS/issues): tareas, prioridades, dependencias, responsables y estado. El [plan Acenta #12](https://github.com/eliancanul/AulaLista-SaaS/issues/12) enlaza sus cortes; reutiliza el issue existente antes de abrir otro.
+- `docs/specs/` y `docs/adr/`: contratos y decisiones técnicas versionados. Actualiza el documento correspondiente cuando cambie una garantía o decisión y enlázalo desde el issue.
+- PR y CI: diff, revisión, SHA exacto, pruebas, omisiones y evidencia de integración. Al cerrar un issue, enlaza esta evidencia; una lista de criterios marcada no sustituye checks del candidato.
+
+[docs/tickets](tickets/README.md) conserva especificaciones de cortes e historial técnico para mantener enlaces y evidencia. Sus estados antiguos son contexto histórico, no una segunda lista de trabajo. Elige y actualiza el trabajo en Issues; conserva aquí los contratos que los issues referencian. Si falta un issue para un nuevo corte, delimítalo allí antes de implementar, sin duplicar los existentes.
+
 ## Secuencia obligatoria
 
 1. **Especificación.** Definir resultado, invariantes, no objetivos y errores observables. Cierre: cada criterio tiene una prueba o una comprobación humana explícita.
-2. **Ticket pequeño.** Delimitar un comportamiento completo, dependencias, archivos/consumidores afectados y recuperación. Cierre: escritor y candidato identificados; las decisiones que bloquean ese comportamiento están resueltas.
+2. **Issue pequeño.** Delimitar un comportamiento completo, dependencias, archivos/consumidores afectados y recuperación. Cierre: escritor y candidato identificados; las decisiones que bloquean ese comportamiento están resueltas.
 3. **Pruebas e implementación.** Para lógica nueva, fijar primero el comportamiento; registrar fallo relevante cuando corresponda, cambio mínimo y resultado posterior. Cierre: éxito, negativas y fallos aplicables ejecutados; las omisiones se declaran.
 4. **Revisión adversarial independiente.** Otro agente o persona inspecciona el candidato, intenta romper sus garantías y comunica casos reproducibles. Cierre: ningún hallazgo bloqueante abierto; correcciones reexaminadas. El autor no firma su propia revisión independiente.
 5. **CI exacta.** Ejecutar checks del candidato final y revalidar su base. Cierre: head y base identificados, checks requeridos realmente ejecutados, resultados disponibles y sin cambios posteriores sin verificar.
 6. **Integración.** Verificar autorización vigente y gates anteriores; sólo entonces integrar cuando esté autorizado. Si no hay autorización de merge, entregar un candidato revisado y pendiente de integración. Publicar un PR no equivale a aprobar su merge o despliegue.
 
-Los objetivos numéricos de actividad no justifican commits vacíos, fragmentar un cambio coherente ni omitir especificación, revisión o CI. La unidad de entrega es un ticket completo con evidencia, no una cuota de commits.
+Los objetivos numéricos de actividad no justifican commits vacíos, fragmentar un cambio coherente ni omitir especificación, revisión o CI. La unidad de entrega es un issue completo con evidencia, no una cuota de commits.
 
 La CI puede correr durante el desarrollo; el gate de aceptación es el del candidato final después de la revisión. Un nuevo commit invalida la evidencia anterior para las partes que cambia. Si cambia la base, revisar el diff y ejecutar las pruebas de integración pertinentes contra la nueva base antes de integrar.
 
 ## Coordinación directa
 
-Consultores y codificadores se comunican directamente, incluidos desacuerdos y consultas de frontera. Registrar en ticket/PR toda decisión que cambie contrato, alcance, riesgo o prueba; avisar al coordinador. Mantener escritor único por archivo y revisión independiente. Una charla no sustituye una decisión trazable ni un resultado de prueba.
+Consultores y codificadores se comunican directamente, incluidos desacuerdos y consultas de frontera. Registrar alcance y estado en el issue, cambios de contrato en spec/ADR y evidencia en el PR; avisar al coordinador. Mantener escritor único por archivo y revisión independiente. Una charla no sustituye una decisión trazable ni un resultado de prueba.
 
 ## Evidencia mínima de un candidato
 
-- Ticket/spec y resultado que pretende cerrar.
+- Issue y spec/ADR enlazados, con el resultado que pretende cerrar.
 - Repositorio, rama, SHA de head, SHA de base y diff revisado. Si todavía no hay commits: indicar «candidato local» y su manifiesto de hashes; no atribuirle una CI remota.
 - Manifiesto de rutas nuevas/modificadas/retiradas y motivo; sin secretos, dumps o datos privados.
 - Comandos exactos, entorno/versiones, código de salida, cantidad de tests y omisiones. Usar los comandos reales del proyecto; evitar una copia documental que diverja del workflow.

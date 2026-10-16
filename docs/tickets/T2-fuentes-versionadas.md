@@ -1,6 +1,8 @@
 # T2: conservar una fuente sintética y sus versiones
 
-Estado: integrado mediante PR #3, con revisión independiente/H1 y CI premerge/postmerge correctas. El recibo de integración al final registra el candidato. Dependencia: T1 integrado. Spec: [0001](../specs/0001-fundacion.md), que define autoridad, datos, idempotencia y límites.
+Referencia técnica e historial del corte. Consulta [Issues y fuentes de verdad](README.md) para elegir trabajo y consultar su estado actual.
+
+Integración histórica: integrado mediante PR #3, con revisión independiente/H1 y CI premerge/postmerge correctas. El recibo de integración al final registra el candidato. Dependencia: T1 integrado. Spec: [0001](../specs/0001-fundacion.md), que define autoridad, datos, idempotencia y límites.
 
 ## Resultado
 
