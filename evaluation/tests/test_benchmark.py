@@ -160,6 +160,51 @@ class BenchmarkTest(unittest.TestCase):
         self.assertEqual(len(result["unexpected_claims"]), 1)
         self.assertEqual(result["facts"]["denominator"], len(r["facts"]))
 
+    def test_duplicate_claims_score_every_occurrence_without_order_bias(self):
+        s, r = case("dev01")
+        original = synthetic_prediction(s, r)
+        claim = original["claims"][0]
+        wrong_value = dict(claim, value="Contradictory activity")
+        wrong_evidence = dict(claim, evidence=[{"block_id": "b1", "quote": "invented"}])
+        shorter_quote = copy.deepcopy(claim)
+        shorter_quote["evidence"][0]["quote"] = claim["evidence"][0]["quote"][:10]
+        cases = [
+            ("identical", [claim, copy.deepcopy(claim)], True, True),
+            ("contradictory", [claim, wrong_value], False, True),
+            ("third occurrence", [claim, wrong_value, claim], False, True),
+            ("invalid citation", [claim, wrong_evidence], True, False),
+            ("corroborating citation", [claim, shorter_quote], True, True),
+        ]
+        for name, duplicates, value_ok, evidence_ok in cases:
+            results = []
+            for reverse in (False, True):
+                with self.subTest(case=name, reverse=reverse):
+                    p = copy.deepcopy(original)
+                    p["claims"] = (
+                        list(reversed(duplicates)) if reverse else list(duplicates)
+                    )
+                    p["claims"] += original["claims"][1:]
+                    result = b.score(s, r, p)
+                    results.append(result)
+                    row = result["details"][0]
+                    self.assertEqual(row["value_ok"], value_ok)
+                    self.assertEqual(row["evidence_ok"], evidence_ok)
+                    self.assertEqual(row["joint_ok"], value_ok and evidence_ok)
+                    loss = int(not (value_ok and evidence_ok))
+                    self.assertEqual(result["facts"]["correct"], len(r["facts"]) - loss)
+                    self.assertEqual(result["facts"]["denominator"], len(r["facts"]))
+                    self.assertEqual(
+                        result["critical"]["correct"],
+                        result["critical"]["denominator"] - loss,
+                    )
+                    self.assertEqual(
+                        len(result["duplicate_claims"]), len(duplicates) - 1
+                    )
+                    self.assertTrue(result["schema_valid"])
+                    self.assertTrue(result["manual_semantic_review_required"])
+                    self.assertFalse(result["teacher_evidence"])
+            self.assertEqual(results[0], results[1])
+
     def test_malformed_pending_invalid(self):
         s, r = case("dev04")
         p = synthetic_prediction(s, r)

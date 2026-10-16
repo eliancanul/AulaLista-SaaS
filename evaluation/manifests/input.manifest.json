@@ -1,16 +1,16 @@
 {
   "files": [
     {
-      "bytes": 5727,
+      "bytes": 6777,
       "path": "README.md",
       "role": "contract_or_protocol",
-      "sha256": "c667a0df43d480a79d3a2ddb93c03ac685aa2fcf4a94eff1a3a926b2e089d0b2"
+      "sha256": "b09bff5fd9ea33585883f2d129a0d1d67f399f38acc263290ab48966072b4095"
     },
     {
-      "bytes": 3193,
+      "bytes": 3491,
       "path": "contract.json",
       "role": "contract_or_protocol",
-      "sha256": "d3cd6dec2c367f6150b09c96e1d83be7ad6947028ef5ac545c23ee2481c4dc86"
+      "sha256": "12cc377c3cff0cd8cf9ffaa4abdc78bd30c592d3c10dbfd20a3ba1f4022ed59b"
     },
     {
       "bytes": 1682,
@@ -121,10 +121,10 @@
       "sha256": "4909139cc249982ceed36b7f951af155a4c4989cb4424530b1bd6446b5823ede"
     },
     {
-      "bytes": 26019,
+      "bytes": 26075,
       "path": "scripts/benchmark.py",
       "role": "code",
-      "sha256": "2f906bf3bfa1871479f87eb88f443917650fdb244a65d6dd6a5a8ed9f9890a94"
+      "sha256": "12ee3088bcf5405431d97539a398e0d4cfd8b0a33bdc1a4a7a72c0437cab0cc0"
     },
     {
       "bytes": 10981,
@@ -151,10 +151,10 @@
       "sha256": "d31d625f0dbb0fa3dfde8eab4a370a6e57451ad57dbf96f2ce6d85a4666d7697"
     },
     {
-      "bytes": 10349,
+      "bytes": 12816,
       "path": "tests/test_benchmark.py",
       "role": "code",
-      "sha256": "b5c8ef4e2f84f58d29506418417980f8091b6b8d0282f8ab055adb09b330089e"
+      "sha256": "626823d63f1f2cde001416718eb1e7595d1a4670a837bb5478c6bbafd4b1fc3c"
     },
     {
       "bytes": 12502,
@@ -172,13 +172,13 @@
       "bytes": 3212,
       "path": "manifests/input.spec.json",
       "role": "manifest_specification",
-      "sha256": "4f7430cda422fd6e7af54023edbc9094f2ccbdd20d62ccebaefb44702d36d097"
+      "sha256": "23abd9b28015e230fba316fb3b53cb5113e46857d71d0d81efd82e49cac44b71"
     }
   ],
   "metadata": {
     "dependencies_covered": "explicit package files only; interpreter/OS/providers not certified",
     "exposure": "development and validation author-exposed; holdout absent",
-    "matcher_version": "discrete-value-and-required-evidence-v1",
+    "matcher_version": "discrete-value-and-required-evidence-v2",
     "python_observed": "3.12.14",
     "reference_kind": "synthetic",
     "scope": "Generic offline synthetic instrument; no real corpus or model outputs",

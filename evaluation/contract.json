@@ -1,8 +1,8 @@
 {
   "schema": "aulalista-evaluation-contract.v1",
   "status": "offline_preparation_no_model_results",
-  "version": 1,
-  "date_utc": "2026-10-15",
+  "version": 2,
+  "date_utc": "2026-10-16",
   "scope": "Generic offline instrument; synthetic author-exposed fixtures and sanitized event structure only",
   "source_policy": "No private source included in this package; no network calls; original PDF and extraction hashes remain distinct",
   "synthetic_splits": {
@@ -47,9 +47,10 @@
     "max_cost_amount_currency": null
   },
   "matcher": {
-    "synthetic": "discrete-value-and-required-evidence-v1",
+    "synthetic": "discrete-value-and-required-evidence-v2",
     "real": "semantic_source-grounded_adapter_pending",
-    "zero_denominator": "N/A; never zero quality"
+    "zero_denominator": "N/A; never zero quality",
+    "duplicate_claims": "One credit per subject/predicate; every structurally valid occurrence must match the reference value and independently provide valid required evidence. Identical repeats retain one credit; malformed claims invalidate schema_valid and are excluded from per-field scoring."
   },
   "references": {
     "synthetic": "synthetic_ai_authored_author_exposed",
