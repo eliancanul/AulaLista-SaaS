@@ -16,7 +16,7 @@ from aulalista_api.materials import MAX_CONTENT_BYTES, MaterialError, Materials
 
 def require_actor() -> UUID:
     # Only tests override this dependency; no runtime config/header grants identity.
-    raise HTTPException(401, "unauthorized")
+    raise HTTPException(401, "unauthorized", headers={"Cache-Control": "no-store"})
 
 
 Actor = Annotated[UUID, Depends(require_actor)]
@@ -57,15 +57,27 @@ def install_material_routes(app: FastAPI, engine: Engine) -> None:
 
     @app.exception_handler(MaterialError)
     async def material_error(request, error):
-        return JSONResponse({"detail": error.detail}, status_code=error.status)
+        return JSONResponse(
+            {"detail": error.detail},
+            status_code=error.status,
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.exception_handler(SQLAlchemyError)
     async def persistence_error(request, error):
-        return JSONResponse({"detail": "unavailable"}, status_code=503)
+        return JSONResponse(
+            {"detail": "unavailable"},
+            status_code=503,
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request, error):
-        return JSONResponse({"detail": "invalid_request"}, status_code=422)
+        return JSONResponse(
+            {"detail": "invalid_request"},
+            status_code=422,
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.post("/scopes/{scope_id}/sources", status_code=201)
     async def create_source(

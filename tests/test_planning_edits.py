@@ -136,9 +136,9 @@ def test_all_edit_routes_fail_closed_without_identity():
             {"X-Actor-Id": str(uuid4()), "Authorization": "Bearer invented"}
         )
         for kind in ["edit", "copy", "draft"]:
-            assert (
-                write(client, scope, planning, kind, draft_id=draft).status_code == 401
-            )
+            denied = write(client, scope, planning, kind, draft_id=draft)
+            assert denied.status_code == 401
+            assert denied.headers["cache-control"] == "no-store"
         for path in [
             f"plannings/{planning}/revisions/1",
             f"planning-drafts/{draft}",
@@ -515,6 +515,7 @@ def test_commit_failure_rolls_back_pointer_content_and_receipt(
         failed = write(client, scope, planning, kind, key=key, draft_id=draft_id)
         assert failed.status_code == 503
         assert failed.json() == {"detail": "unavailable"}
+        assert failed.headers["cache-control"] == "no-store"
         assert operation(client, scope, key, kind).status_code == 404
         assert client.get(f"/scopes/{scope}/plannings/{planning}").json() == original
         assert len(client.get(f"/scopes/{scope}/plannings").json()["items"]) == 1
@@ -846,7 +847,9 @@ def test_receipt_can_be_missing_while_transaction_is_still_pending(
             try:
                 assert inserted.wait(timeout=5)
                 with TestClient(actor_app(actor)) as client:
-                    assert operation(client, scope, key, kind).status_code == 404
+                    missing = operation(client, scope, key, kind)
+                    assert missing.status_code == 404
+                    assert missing.headers["cache-control"] == "no-store"
                 assert not pending.done()
             finally:
                 release.set()
@@ -856,6 +859,10 @@ def test_receipt_can_be_missing_while_transaction_is_still_pending(
         release.set()
         event.remove(Engine, "after_cursor_execute", pause)
     with TestClient(actor_app(actor)) as client:
+        confirmed = operation(client, scope, key, kind)
+        assert confirmed.status_code == 200
+        assert confirmed.headers["cache-control"] == "no-store"
+        assert confirmed.json() == saved.json()
         assert (
             write(client, scope, planning, kind, key=key, draft_id=draft_id).json()
             == saved.json()
@@ -896,3 +903,80 @@ def test_failed_draft_update_keeps_last_confirmed_working_copy(
             client.get(f"/scopes/{scope}/planning-drafts/{draft_id}").json() == original
         )
         assert operation(client, scope, key, "draft").status_code == 404
+
+
+@pytest.mark.parametrize("expected_revision", [1, 7])
+def test_draft_update_hides_foreign_missing_and_wrong_target_identity(
+    runtime_database, actors, expected_revision
+):
+    (actor_a, scope_a), (actor_b, scope_b) = actors
+    foreign_id, own_id = uuid4(), uuid4()
+    with TestClient(actor_app(actor_a)) as client:
+        planning_a = seed(client, scope_a)["receipt"]["planning_id"]
+        foreign = write(
+            client, scope_a, planning_a, "draft", draft_id=foreign_id
+        ).json()
+    with TestClient(actor_app(actor_b)) as client:
+        planning_b = seed(client, scope_b)["receipt"]["planning_id"]
+        another_b = seed(client, scope_b)["receipt"]["planning_id"]
+        own = write(client, scope_b, another_b, "draft", draft_id=own_id).json()
+        payload = body("draft", draft_revision=expected_revision)
+        for draft_id in [foreign_id, uuid4(), own_id]:
+            denied = write(
+                client, scope_b, planning_b, "draft", draft_id=draft_id, payload=payload
+            )
+            assert denied.status_code == 404
+            assert denied.json() == {"detail": "not_found"}
+            assert denied.headers["cache-control"] == "no-store"
+            with pytest.raises(MaterialError) as error:
+                PlanningEdits(runtime_database).preserve_draft(
+                    actor_b,
+                    scope_b,
+                    UUID(planning_b),
+                    draft_id,
+                    uuid4(),
+                    DraftRequest.model_validate(payload),
+                )
+            assert (error.value.status, error.value.detail) == (404, "not_found")
+        conflict = write(
+            client,
+            scope_b,
+            another_b,
+            "draft",
+            draft_id=own_id,
+            payload=body("draft", draft_revision=7),
+        )
+        assert conflict.status_code == 409
+        assert conflict.json() == {"detail": "conflict"}
+        assert conflict.headers["cache-control"] == "no-store"
+        assert client.get(f"/scopes/{scope_b}/planning-drafts/{own_id}").json() == own
+        assert (
+            write(client, scope_b, planning_b, "draft", draft_id=foreign_id).status_code
+            == 404
+        )
+        assert (
+            write(client, scope_b, planning_b, "draft", draft_id=uuid4()).status_code
+            == 201
+        )
+    with TestClient(actor_app(actor_a)) as client:
+        assert (
+            client.get(f"/scopes/{scope_a}/planning-drafts/{foreign_id}").json()
+            == foreign
+        )
+
+
+@pytest.mark.parametrize(
+    "route", ["operations", "planning-operations", "planning-draft-operations"]
+)
+def test_missing_and_invalid_private_receipts_are_not_cacheable(
+    runtime_database, actors, route
+):
+    actor, scope = actors[0]
+    with TestClient(actor_app(actor)) as client:
+        missing = client.get(f"/scopes/{scope}/{route}/{uuid4()}")
+        assert missing.status_code == 404
+        assert missing.json() == {"detail": "not_found"}
+        assert missing.headers["cache-control"] == "no-store"
+        invalid = client.get(f"/scopes/{scope}/{route}/invalid")
+        assert invalid.status_code == 422
+        assert invalid.headers["cache-control"] == "no-store"

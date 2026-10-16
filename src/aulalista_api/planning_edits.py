@@ -322,14 +322,20 @@ class PlanningEdits:
                 result = edited_result(base, request)
                 # Serialize creation as well as CAS for a stable client-chosen draft ID.
                 lock_operation(session, scope_id, draft_id, "planning-draft-id-v1")
-                draft = session.get(PlanningDraft, draft_id)
+                query = select(PlanningDraft).where(PlanningDraft.id == draft_id)
+                if request.expected_draft_revision != 0:
+                    query = query.where(
+                        PlanningDraft.scope_id == scope_id,
+                        PlanningDraft.planning_id == planning_id,
+                    )
+                draft = session.scalar(query)
                 if draft is not None and (
                     draft.scope_id != scope_id or draft.planning_id != planning_id
                 ):
                     raise MaterialError(404, "not_found")
                 if draft is None:
                     if request.expected_draft_revision != 0:
-                        raise MaterialError(409, "conflict")
+                        raise MaterialError(404, "not_found")
                     draft = PlanningDraft(
                         id=draft_id,
                         scope_id=scope_id,

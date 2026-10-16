@@ -104,7 +104,9 @@ Misma clave y payload devuelve la misma copia, también tras respuesta perdida.
 `PUT /scopes/{scope_id}/plannings/{planning_id}/drafts/{draft_id}`: campos comunes
 más `base_revision` y `expected_draft_revision` (entero estricto 0–2147483646).
 `draft_id` es una UUID estable de esa copia de trabajo elegida por cliente. Crear
-requiere expected 0; actualizar exige su revisión vigente. Dos pestañas con el
+requiere expected 0 y conserva la unicidad global de esa identidad. Actualizar
+exige su revisión vigente: un destino ausente o ajeno devuelve el mismo 404;
+un CAS incorrecto de un borrador propio existente devuelve 409. Dos pestañas con el
 mismo draft_id no se pisan. Otra copia de trabajo requiere identidad explícita
 nueva; un retry conserva draft_id, operation_id y payload completos.
 
@@ -166,8 +168,9 @@ B3/#17; no añaden búsqueda, filtros, recents ni historial visual completo.
   de operación serializan misma clave; CAS y lock de draft protegen claves distintas.
 - 401 identidad ausente; 404 ajeno/ausente; 409 `conflict` tanto CAS como key reuse;
   413 exceso; 415 media; 422 entrada o target no soportado/unchanged_text;
-  503 persistencia. No se filtran SQL, texto, DSN ni credenciales. Lecturas/éxitos
-  privados usan no-store.
+  503 persistencia. No se filtran SQL, texto, DSN ni credenciales. Las lecturas,
+  éxitos B3 y errores controlados privados usan no-store, incluidos los 404 de
+  recibos pendientes, 401, errores de validación y 503 de persistencia.
 - Un 404 de operación no demuestra que falló: puede estar en vuelo. Consultar y
   repetir exactamente la misma operación; si sigue incierta, conservar pendiente.
   Cambiar texto o deshacer local no cancela una petición ya enviada.
