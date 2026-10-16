@@ -1,16 +1,16 @@
 {
   "files": [
     {
-      "bytes": 6777,
+      "bytes": 7137,
       "path": "README.md",
       "role": "contract_or_protocol",
-      "sha256": "b09bff5fd9ea33585883f2d129a0d1d67f399f38acc263290ab48966072b4095"
+      "sha256": "de6aeff513c6fa3ceab3bc02e5438bdbda2bf32e596103c5c9f20806c450cb0e"
     },
     {
-      "bytes": 3491,
+      "bytes": 3954,
       "path": "contract.json",
       "role": "contract_or_protocol",
-      "sha256": "12cc377c3cff0cd8cf9ffaa4abdc78bd30c592d3c10dbfd20a3ba1f4022ed59b"
+      "sha256": "b4d89cf30eb268b807e93c4c25d0bbcdf288817a8983ae7a58edef67f788c40e"
     },
     {
       "bytes": 1682,
@@ -121,10 +121,10 @@
       "sha256": "4909139cc249982ceed36b7f951af155a4c4989cb4424530b1bd6446b5823ede"
     },
     {
-      "bytes": 26075,
+      "bytes": 26215,
       "path": "scripts/benchmark.py",
       "role": "code",
-      "sha256": "12ee3088bcf5405431d97539a398e0d4cfd8b0a33bdc1a4a7a72c0437cab0cc0"
+      "sha256": "7843622580f0c0b5fe2860a0806e314c410c08132218be2b378958dd66f24854"
     },
     {
       "bytes": 10981,
@@ -151,10 +151,10 @@
       "sha256": "d31d625f0dbb0fa3dfde8eab4a370a6e57451ad57dbf96f2ce6d85a4666d7697"
     },
     {
-      "bytes": 12816,
+      "bytes": 19384,
       "path": "tests/test_benchmark.py",
       "role": "code",
-      "sha256": "626823d63f1f2cde001416718eb1e7595d1a4670a837bb5478c6bbafd4b1fc3c"
+      "sha256": "ebb0a13ba62befb550f87f523218fc6e724f7ea0520f520ae48c38a0b0ce72f4"
     },
     {
       "bytes": 12502,
@@ -169,16 +169,17 @@
       "sha256": "a6fbd295408669c3511e9c9da671612c369921c3170ee6a6ad43938eeaf38340"
     },
     {
-      "bytes": 3212,
+      "bytes": 3276,
       "path": "manifests/input.spec.json",
       "role": "manifest_specification",
-      "sha256": "23abd9b28015e230fba316fb3b53cb5113e46857d71d0d81efd82e49cac44b71"
+      "sha256": "b79c772673cc93303b962eeb4b1c5b5be5e490453415fe9ad08d8db1670d75ee"
     }
   ],
   "metadata": {
     "dependencies_covered": "explicit package files only; interpreter/OS/providers not certified",
     "exposure": "development and validation author-exposed; holdout absent",
     "matcher_version": "discrete-value-and-required-evidence-v2",
+    "preprocessor_version": "exact-metadata-except-id-page-v2",
     "python_observed": "3.12.14",
     "reference_kind": "synthetic",
     "scope": "Generic offline synthetic instrument; no real corpus or model outputs",

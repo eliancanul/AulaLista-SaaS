@@ -114,6 +114,166 @@ class BenchmarkTest(unittest.TestCase):
         s["blocks"].append(dict(s["blocks"][1], id="b3"))
         self.assertIn("b3", {x["id"] for x in b.deduplicate(s["blocks"])})
 
+    def test_dedup_requires_all_metadata_except_id_and_page(self):
+        for kind in ("running_header", "running_footer"):
+            first = dict(
+                id="h1",
+                page=1,
+                kind=kind,
+                text="Repeated title",
+                unit=None,
+                dedup_safe=True,
+                dependencies=["body"],
+                metadata={"reviewed": True, "nested": {"level": 1}},
+            )
+            variants = [
+                dict(first, dependencies=["kit"]),
+                {k: v for k, v in first.items() if k != "dependencies"},
+                dict(first, dependencies=[]),
+                dict(first, dependencies=["body", "kit"]),
+                dict(first, extra="meaningful"),
+                dict(first, metadata={"reviewed": 1, "nested": {"level": 1}}),
+                dict(first, metadata={"reviewed": True, "nested": {"level": 1.0}}),
+                dict(first, metadata=None),
+                dict(first, text="Repeated title "),
+                dict(first, unit="U2"),
+                dict(first, dedup_safe=False),
+            ]
+            for index, other in enumerate(variants):
+                other = dict(other, id="h2", page=2)
+                third = dict(first, id="h3", page=3)
+                for reverse in (False, True):
+                    with self.subTest(kind=kind, variant=index, reverse=reverse):
+                        blocks = [first, other, third]
+                        if reverse:
+                            blocks.reverse()
+                        before = copy.deepcopy(blocks)
+                        result = b.deduplicate(blocks)
+                        self.assertEqual(len(result), 2)
+                        by_alias = {
+                            a["block_id"]: block
+                            for block in result
+                            for a in block["aliases"]
+                        }
+                        for original in blocks:
+                            actual = by_alias[original["id"]]
+                            self.assertEqual(
+                                {
+                                    k: v
+                                    for k, v in actual.items()
+                                    if k not in {"id", "page", "aliases"}
+                                },
+                                {
+                                    k: v
+                                    for k, v in original.items()
+                                    if k not in {"id", "page"}
+                                },
+                            )
+                        self.assertEqual(blocks, before)
+
+    def test_dedup_equivalent_metadata_keeps_all_provenance(self):
+        first = dict(
+            id="h1",
+            page=1,
+            kind="running_footer",
+            text="Repeated title",
+            unit=None,
+            dedup_safe=True,
+            dependencies=["body", "kit"],
+            metadata={"a": 1, "b": {"c": False, "d": None}},
+        )
+        second = dict(
+            first, id="h2", page=7, metadata={"b": {"d": None, "c": False}, "a": 1}
+        )
+        third = dict(first, id="h3", page=12)
+        for blocks in ([first, second, third], [third, second, first]):
+            result = b.deduplicate(blocks)
+            self.assertEqual(len(result), 1)
+            self.assertEqual(
+                result[0]["aliases"],
+                [{"block_id": x["id"], "page": x["page"]} for x in blocks],
+            )
+        reversed_dependencies = dict(second, dependencies=["kit", "body"])
+        self.assertEqual(len(b.deduplicate([first, reversed_dependencies])), 2)
+        missing_metadata = {k: v for k, v in first.items() if k != "metadata"}
+        self.assertEqual(
+            len(b.deduplicate([missing_metadata, dict(second, metadata=None)])), 2
+        )
+
+    def test_requests_preserve_transitive_dependencies_and_alias_targets(self):
+        source = dict(
+            synthetic=True,
+            split="development",
+            id="relations",
+            planning_id="synthetic-plan",
+            version=1,
+            units=["U1", "U2"],
+            subjects={"task": "U1"},
+        )
+        header = dict(
+            id="h1",
+            page=1,
+            kind="running_header",
+            text="Title",
+            unit=None,
+            dedup_safe=True,
+            dependencies=["body"],
+        )
+        body = dict(
+            id="body",
+            page=1,
+            kind="activity",
+            text="Task",
+            unit="U1",
+            dependencies=["h3"],
+        )
+        kit = dict(
+            id="kit",
+            page=2,
+            kind="context",
+            text="Materials",
+            unit="U2",
+            dependencies=["tail"],
+        )
+        tail = dict(id="tail", page=3, kind="context", text="Details", unit="U2")
+        blocks = [
+            header,
+            dict(header, id="h2", page=2, dependencies=["kit"]),
+            dict(header, id="h3", page=3),
+            body,
+            kit,
+            tail,
+        ]
+        for reverse in (False, True):
+            source["blocks"] = list(reversed(blocks)) if reverse else blocks
+            before = copy.deepcopy(source)
+            for variant in ("full", "dedup", "segmented"):
+                with self.subTest(reverse=reverse, variant=variant):
+                    prepared = b.requests(source, variant)
+                    payload = prepared[0]["input"]["blocks"]
+                    by_alias = {
+                        alias["block_id"]: block
+                        for block in payload
+                        for alias in block.get("aliases", [{"block_id": block["id"]}])
+                    }
+                    self.assertEqual(set(by_alias), {x["id"] for x in blocks})
+                    for original in blocks:
+                        self.assertEqual(
+                            by_alias[original["id"]].get("dependencies", []),
+                            original.get("dependencies", []),
+                        )
+                    self.assertEqual(len(payload), 6 if variant == "full" else 5)
+            self.assertEqual(source, before)
+
+        missing_target = copy.deepcopy(source)
+        missing_target["blocks"] = [
+            block for block in source["blocks"] if block["id"] != "tail"
+        ]
+        for variant in ("full", "dedup", "segmented"):
+            with self.subTest(missing_target=True, variant=variant):
+                with self.assertRaises(ValueError):
+                    b.requests(missing_target, variant)
+
     def test_segment_keeps_cross_unit_dependency(self):
         s, _ = case("dev03")
         self.assertIn("kit", {x["id"] for x in b.select_blocks(s, "U1")})
