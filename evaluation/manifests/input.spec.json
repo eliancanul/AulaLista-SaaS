@@ -4,7 +4,7 @@
     "split": "synthetic",
     "exposure": "development and validation author-exposed; holdout absent",
     "reference_kind": "synthetic",
-    "matcher_version": "discrete-value-and-required-evidence-v1",
+    "matcher_version": "discrete-value-and-required-evidence-v2",
     "python_observed": "3.12.14",
     "dependencies_covered": "explicit package files only; interpreter/OS/providers not certified"
   },

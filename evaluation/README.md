@@ -15,7 +15,7 @@ python3 -B -m unittest discover -s evaluation/tests -v
 python3 -B -O -m unittest discover -s evaluation/tests -v
 ```
 
-La suite conserva 58 pruebas. El workflow `evaluation-offline` ejecuta esos mismos
+La suite conserva 59 pruebas. El workflow `evaluation-offline` ejecuta esos mismos
 pasos con Python fijado; la preparación de herramientas de CI puede descargar
 Python, pero el instrumento y sus pruebas no usan red ni credenciales. El lint y
 formato de todo el árbol siguen en el workflow backend, sin exclusiones nuevas.
@@ -101,3 +101,20 @@ python3 -B evaluation/scripts/freeze.py freeze --root evaluation --input evaluat
 El manifiesto cubre los archivos enumerados, no el intérprete, SO, proveedores,
 workflows ni dependencias de la aplicación. Los outputs nuevos y cualquier
 material privado deben permanecer fuera del árbol versionado.
+
+### Duplicados en el matcher sintético v2
+
+Cada pareja `subject`/`predicate` conserva una sola oportunidad. Para acreditar
+valor y evidencia, respectivamente, **todas** sus afirmaciones estructuralmente
+válidas deben coincidir con la referencia y aportar por separado las citas
+requeridas. Duplicados idénticos no suman créditos; citas distintas corroborantes
+pueden pasar. Un valor contradictorio o una cita fabricada/incompleta no queda
+oculto por una repetición correcta, en ningún orden. No se combinan fragmentos
+de evidencia entre afirmaciones. `duplicate_claims` conserva cada repetición;
+los denominadores no cambian. Las afirmaciones malformadas se excluyen del
+cálculo por campo y hacen `schema_valid=false`, por lo que sus contadores no
+acreditan éxito global. La revisión semántica sigue siendo obligatoria.
+
+Este cambio corrige el matcher v1 que retenía la primera afirmación válida.
+Reevaluar ambos candidatos bajo v2 antes de comparar resultados con duplicados;
+no presentar los contadores anteriores como equivalentes.

@@ -286,20 +286,20 @@ def score(source, reference, prediction):
         key = (item["subject"], item["predicate"])
         if key in found:
             duplicates.append(list(key))
-            continue
-        found[key] = item
-        if key not in expected:
+        elif key not in expected:
             extras.append(list(key))
+        found.setdefault(key, []).append(item)
     rows = []
     for key, ref in expected.items():
-        actual = found.get(key)
-        value_ok = (
-            actual is not None
-            and actual["value"] == ref["value"]
+        claims = found.get(key, [])
+        value_ok = bool(claims) and all(
+            actual["value"] == ref["value"]
             and type(actual["value"]) is type(ref["value"])
+            for actual in claims
         )
-        citation_ok = actual is not None and evidence_valid(
-            actual["evidence"], source, ref["evidence_blocks"]
+        citation_ok = bool(claims) and all(
+            evidence_valid(actual["evidence"], source, ref["evidence_blocks"])
+            for actual in claims
         )
         rows.append(
             {
