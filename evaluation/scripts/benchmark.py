@@ -90,7 +90,11 @@ def deduplicate(blocks):
             original, aliases=[{"block_id": original["id"], "page": original["page"]}]
         )
         if b["kind"] in {"running_header", "running_footer"} and b.get("dedup_safe"):
-            key = (b["kind"], b["text"], b["unit"])
+            key = json.dumps(
+                {k: v for k, v in original.items() if k not in {"id", "page"}},
+                sort_keys=True,
+                ensure_ascii=False,
+            )
             if key in found:
                 found[key]["aliases"].extend(b["aliases"])
                 continue

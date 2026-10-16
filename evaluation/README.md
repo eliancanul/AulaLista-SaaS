@@ -15,7 +15,7 @@ python3 -B -m unittest discover -s evaluation/tests -v
 python3 -B -O -m unittest discover -s evaluation/tests -v
 ```
 
-La suite conserva 59 pruebas. El workflow `evaluation-offline` ejecuta esos mismos
+La suite conserva 62 pruebas. El workflow `evaluation-offline` ejecuta esos mismos
 pasos con Python fijado; la preparación de herramientas de CI puede descargar
 Python, pero el instrumento y sus pruebas no usan red ni credenciales. El lint y
 formato de todo el árbol siguen en el workflow backend, sin exclusiones nuevas.
@@ -54,8 +54,13 @@ runner rechaza `split=holdout` y cualquier fuente sin `synthetic: true`.
 ## Qué se comprueba
 
 `full`, `dedup` y `segmented` preparan la misma tarea discreta. Deduplicar sólo
-elimina cabeceras/pies exactos preanotados como seguros y conserva sus aliases;
-segmentar mantiene contexto global y dependencias transitivas. La reparación
+elimina cabeceras/pies preanotados como seguros cuando todos sus campos
+son idénticos salvo `id` y `page`; conserva cada origen en `aliases`.
+La comparación JSON ignora el orden de claves de objetos, pero conserva tipos,
+orden de listas y ausencia de campos. No combina dependencias distintas ni
+normaliza texto o metadata adicional. La selección ocurre antes de deduplicar;
+los destinos repetidos siguen referenciables por sus aliases. Segmentar mantiene
+contexto global y dependencias transitivas. La reparación
 localizada y el reintento completo conservan la misma tarea de reparación.
 Estas anotaciones disponibles no prueban que un parser/selector real las obtenga.
 

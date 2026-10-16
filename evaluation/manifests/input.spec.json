@@ -6,7 +6,8 @@
     "reference_kind": "synthetic",
     "matcher_version": "discrete-value-and-required-evidence-v2",
     "python_observed": "3.12.14",
-    "dependencies_covered": "explicit package files only; interpreter/OS/providers not certified"
+    "dependencies_covered": "explicit package files only; interpreter/OS/providers not certified",
+    "preprocessor_version": "exact-metadata-except-id-page-v2"
   },
   "files": [
     {

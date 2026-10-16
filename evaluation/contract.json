@@ -1,7 +1,7 @@
 {
   "schema": "aulalista-evaluation-contract.v1",
   "status": "offline_preparation_no_model_results",
-  "version": 2,
+  "version": 3,
   "date_utc": "2026-10-16",
   "scope": "Generic offline instrument; synthetic author-exposed fixtures and sanitized event structure only",
   "source_policy": "No private source included in this package; no network calls; original PDF and extraction hashes remain distinct",
@@ -97,5 +97,10 @@
     "native_total_tokens": null,
     "native_usage_coverage_verified": false,
     "ready_for_model_comparison": false
+  },
+  "preprocessing": {
+    "deduplication": "exact-metadata-except-id-page-v2",
+    "equivalence": "Only preannotated safe running headers/footers with identical JSON fields except id/page; object key order ignored, list order and value types preserved. No dependency union or text normalization.",
+    "provenance": "Each merged original id/page remains in aliases. Segmentation selects transitive dependencies from the original source before deduplication."
   }
 }
