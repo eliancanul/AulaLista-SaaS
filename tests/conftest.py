@@ -1,12 +1,14 @@
 import os
+from dataclasses import replace
 
 import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import text
+from sqlalchemy.orm import Session
 
-from aulalista_api.config import Settings, parse_database_url
-from aulalista_api.database import make_engine
+from aulalista_api.config import Settings, load_settings, parse_database_url
+from aulalista_api.database import PersonalScope, Principal, make_engine
 
 TEST_URL = "postgresql+psycopg://aulalista_test@127.0.0.1:55432/aulalista_test"
 DISPOSABLE_MARKER = "AulaLista disposable integration tests"
@@ -73,3 +75,83 @@ def empty_database(monkeypatch):
 def migrated_database(empty_database):
     command.upgrade(Config("alembic.ini"), "head")
     return empty_database
+
+
+@pytest.fixture
+def actors(migrated_database):
+    with Session(migrated_database) as session, session.begin():
+        ids = []
+        for _ in range(2):
+            actor = Principal()
+            session.add(actor)
+            session.flush()
+            scope = PersonalScope(owner_principal_id=actor.id)
+            session.add(scope)
+            session.flush()
+            ids.append((actor.id, scope.id))
+        return ids
+
+
+@pytest.fixture
+def runtime_database(migrated_database, actors, monkeypatch):
+    with migrated_database.begin() as connection:
+        connection.execute(
+            text("""
+            DO $$ BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'aulalista_runtime') THEN
+                    CREATE ROLE aulalista_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
+                        NOINHERIT NOREPLICATION NOBYPASSRLS;
+                END IF;
+            END $$
+        """)
+        )
+        connection.execute(text("GRANT USAGE ON SCHEMA public TO aulalista_runtime"))
+        connection.execute(
+            text("""
+            GRANT SELECT ON principal, personal_scope, alembic_version TO aulalista_runtime;
+            GRANT SELECT, INSERT ON source, source_version TO aulalista_runtime;
+            GRANT UPDATE (current_version) ON source TO aulalista_runtime;
+            GRANT SELECT, INSERT ON planning, planning_revision TO aulalista_runtime;
+            GRANT UPDATE (current_revision) ON planning TO aulalista_runtime;
+            GRANT SELECT, INSERT ON planning_draft, planning_draft_revision TO aulalista_runtime;
+            GRANT UPDATE (current_revision) ON planning_draft TO aulalista_runtime
+        """)
+        )
+    settings = load_settings()
+    url = settings.database_url.set(username="aulalista_runtime", password=None)
+    monkeypatch.setenv(
+        "AULALISTA_DATABASE_URL", url.render_as_string(hide_password=False)
+    )
+    runtime = make_engine(replace(settings, database_url=url))
+    try:
+        with runtime.connect() as connection:
+            assert connection.execute(
+                text("SELECT current_user, session_user")
+            ).one() == ("aulalista_runtime", "aulalista_runtime")
+            assert connection.execute(
+                text("""
+                SELECT rolsuper, rolcreaterole, rolcreatedb, rolreplication, rolbypassrls
+                FROM pg_roles WHERE rolname = current_user
+            """)
+            ).one() == (False, False, False, False, False)
+            assert (
+                connection.execute(
+                    text("""
+                SELECT count(*) FROM pg_auth_members
+                WHERE member = (SELECT oid FROM pg_roles WHERE rolname = current_user)
+            """)
+                ).scalar_one()
+                == 0
+            )
+            assert (
+                connection.execute(
+                    text("""
+                SELECT pg_get_userbyid(relowner) <> current_user
+                FROM pg_class WHERE oid = 'source_version'::regclass
+            """)
+                ).scalar_one()
+                is True
+            )
+        yield runtime
+    finally:
+        runtime.dispose()

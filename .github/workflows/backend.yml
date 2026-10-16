@@ -65,7 +65,7 @@ jobs:
       - name: Test installed API and configuration
         run: uv run --locked --no-editable pytest tests/test_app.py tests/test_config.py
       - name: Required PostgreSQL integration tests (no skip or fallback)
-        run: uv run --locked --no-editable pytest tests/test_postgres.py tests/test_materials.py
+        run: uv run --locked --no-editable pytest tests/test_postgres.py tests/test_materials.py tests/test_plannings.py tests/test_water_fixture.py tests/test_planning_edits.py
       - name: Verify PostgreSQL logs exclude private rows and parameters
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}

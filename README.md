@@ -29,6 +29,10 @@ real, persistencia de cuenta ni validación con docentes; H2 sigue abierto.
 Docentes individuales, suscripción con precio pendiente e inicio
 limpio siguen como alcance de producto. No se contrata ningún servicio.
 
+El [corte preparatorio B2](docs/tickets/B2-resultado-simulado.md) agrega un resultado
+fixture durable con fuente T2 y recibo independiente. Todas sus rutas privadas
+siguen cerradas: #13 y la integración UI Acenta están pendientes; #14 no está completa.
+
 ## Arranque y pruebas
 
 Sigue [desarrollo y PostgreSQL desechable](docs/development.md) para instalar,

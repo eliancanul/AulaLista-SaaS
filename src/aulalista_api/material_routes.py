@@ -23,8 +23,13 @@ Actor = Annotated[UUID, Depends(require_actor)]
 Operation = Annotated[UUID, Header(alias="Idempotency-Key")]
 
 
-async def bounded_content(request: Request) -> bytes:
-    if request.headers.get("content-type", "").lower() != "application/octet-stream":
+async def bounded_content(
+    request: Request,
+    *,
+    media_type: str = "application/octet-stream",
+    max_bytes: int = MAX_CONTENT_BYTES,
+) -> bytes:
+    if request.headers.get("content-type", "").lower() != media_type:
         raise MaterialError(415, "unsupported_media_type")
     declared = request.headers.get("content-length")
     if declared is not None:
@@ -32,12 +37,12 @@ async def bounded_content(request: Request) -> bytes:
             raise MaterialError(422, "invalid_request")
         # Compare text first so an untrusted integer cannot consume unbounded work.
         significant = declared.lstrip("0") or "0"
-        if len(significant) > 5 or int(significant) > MAX_CONTENT_BYTES:
+        if len(significant) > len(str(max_bytes)) or int(significant) > max_bytes:
             raise MaterialError(413, "content_too_large")
     content = bytearray()
     try:
         async for chunk in request.stream():
-            if len(chunk) > MAX_CONTENT_BYTES - len(content):
+            if len(chunk) > max_bytes - len(content):
                 raise MaterialError(413, "content_too_large")
             content.extend(chunk)
     except ClientDisconnect:
