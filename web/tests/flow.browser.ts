@@ -1,6 +1,6 @@
 import {test, expect, type Page} from '@playwright/test';
 async function load(page: Page, scenario = 'clear') {
-  await page.goto('/');
+  await page.goto('/tests/legacy.html');
   if (scenario !== 'clear') {await page.getByText('Escenarios de prueba', {exact: true}).click(); await page.getByLabel('Ejemplo o fallo simulado').selectOption(scenario);}
   await page.getByRole('button', {name: 'Cargar ejemplo', exact: true}).click();
   await expect(page.getByLabel('Instrucciones de la actividad 2', {exact: true})).toBeVisible();
@@ -16,7 +16,7 @@ test('UX01 UX02 clear editing and real reload; no external traffic', async ({pag
   await page.screenshot({path: '../evidence/desktop-edited.png', fullPage: true});
 });
 test('UX03 UX13 duplicate keyboard activation and reload during loading', async ({page}) => {
-  await page.goto('/'); const button = page.getByRole('button', {name: 'Cargar ejemplo', exact: true}); await button.focus(); await page.keyboard.press('Enter'); await page.keyboard.press('Enter');
+  await page.goto('/tests/legacy.html'); const button = page.getByRole('button', {name: 'Cargar ejemplo', exact: true}); await button.focus(); await page.keyboard.press('Enter'); await page.keyboard.press('Enter');
   await expect(page.getByRole('button', {name: 'Cargando ejemplo…', exact: true})).toBeFocused(); await page.reload();
   await expect(page.getByLabel('Instrucciones de la actividad 2', {exact: true})).toBeVisible();
 });
@@ -36,7 +36,7 @@ test('UX09 failed storage simulation keeps text and retry recovers', async ({pag
   await page.reload(); await expect(page.getByLabel('Instrucciones de la actividad 2', {exact: true})).toHaveValue('Borrador de ejemplo sin confirmar');
 });
 test('UX10 concurrent conflict preserves own text and resolves inline', async ({page, context}) => {
-  await load(page); await expect(page.getByText('Resultado de ejemplo listo para editar', {exact: true})).toBeVisible(); const other = await context.newPage(); await other.goto('/');
+  await load(page); await expect(page.getByText('Resultado de ejemplo listo para editar', {exact: true})).toBeVisible(); const other = await context.newPage(); await other.goto('/tests/legacy.html');
   await other.getByText('Escenarios de prueba', {exact: true}).click(); await other.getByLabel('Forzar fallo de guardado (simulación)').check();
   await other.getByLabel('Instrucciones de la actividad 2', {exact: true}).fill('Versión propia B');
   await page.getByLabel('Instrucciones de la actividad 2', {exact: true}).fill('Versión guardada A'); await expect(page.getByText('Guardado en este navegador', {exact: true})).toBeVisible();

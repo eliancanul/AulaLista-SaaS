@@ -1,0 +1,974 @@
+import {
+  AcentaApi,
+  ApiError,
+  errorMessage,
+  parsePlanning,
+  parseDraft,
+  parseSource,
+  isUuid,
+} from "./api";
+import {
+  waterPrompt,
+  waterSource,
+  type PlanningDocument,
+  type PlanningRequest,
+  type SourceReceipt,
+  type EditRequest,
+  type CopyRequest,
+  type DraftRequest,
+  type DraftDocument,
+  type Resource,
+} from "./contracts";
+export type SaveState =
+  | "clean"
+  | "dirty"
+  | "saving"
+  | "saved"
+  | "error"
+  | "unknown"
+  | "conflict";
+export type View = "home" | "result" | "resources";
+type CreateIntent = {
+  kind: "create";
+  key: string;
+  payload: PlanningRequest;
+  navigation: number;
+};
+type EditIntent = {
+  kind: "edit" | "copy";
+  key: string;
+  planningId: string;
+  payload: EditRequest | CopyRequest;
+  generation: number;
+};
+type DraftIntent = {
+  kind: "draft";
+  key: string;
+  planningId: string;
+  draftId: string;
+  payload: DraftRequest;
+  generation: number;
+};
+type EditorIntent = EditIntent | DraftIntent;
+function rejectedReplay(
+  error: unknown,
+  kind: "source" | "create" | EditorIntent["kind"],
+) {
+  if (!(error instanceof ApiError)) return false;
+  // These business errors occur after the backend serializes the key and checks replay.
+  return (
+    error.status === 409 ||
+    (error.status === 422 &&
+      ((kind === "create" && error.code === "unsupported_fixture") ||
+        (["edit", "copy", "draft"].includes(kind) &&
+          error.code === "unsupported_target") ||
+        (kind === "edit" && error.code === "unchanged_text")))
+  );
+}
+export interface EditorState {
+  document: PlanningDocument;
+  resourceKey: string;
+  elementKey: string;
+  text: string;
+  baseline: string;
+  generation: number;
+  save: SaveState;
+  latest: PlanningDocument | null;
+  draftId: string;
+  draftRevision: number;
+  error: string;
+  pending: EditorIntent | null;
+  draftSaved: boolean;
+}
+export interface State {
+  view: View;
+  prompt: string;
+  source: SourceReceipt | null;
+  attaching: boolean;
+  sourcePending: boolean;
+  submit: "idle" | "sending" | "unknown" | "error";
+  error: string;
+  result: PlanningDocument | null;
+  editor: EditorState | null;
+  items: PlanningDocument[];
+  drafts: DraftDocument[];
+  listState: "idle" | "loading" | "ready" | "error";
+  cursor: string | null;
+  draftCursor: string | null;
+  pending: CreateIntent | null;
+  backupError: boolean;
+  closed: boolean;
+}
+export interface BackupStore {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+}
+const fresh = (): State => ({
+  view: "home",
+  prompt: "",
+  source: null,
+  attaching: false,
+  sourcePending: false,
+  submit: "idle",
+  error: "",
+  result: null,
+  editor: null,
+  items: [],
+  drafts: [],
+  listState: "idle",
+  cursor: null,
+  draftCursor: null,
+  pending: null,
+  backupError: false,
+  closed: false,
+});
+export function editableResource(
+  doc: PlanningDocument,
+  key?: string,
+): Resource | undefined {
+  return doc.result.resources?.find(
+    (r) => (!key || r.key === key) && r.elements.some((e) => e.editable),
+  );
+}
+export class AcentaController {
+  state: State = fresh();
+  private listeners = new Set<() => void>();
+  private navigation = 0;
+  private busy = false;
+  private sourceIntent: {
+    key: string;
+    bytes: string;
+    cancelled?: boolean;
+  } | null = null;
+  private readonly backupKey: string;
+  constructor(
+    readonly api: AcentaApi,
+    private storage: BackupStore | null = null,
+    workspaceId: string = crypto.randomUUID(),
+  ) {
+    if (!isUuid(workspaceId)) throw Error("Invalid workspace identity");
+    this.backupKey = `acenta:work:v1:${api.session.actorId}:${api.session.scopeId}:${workspaceId}`;
+    this.restore();
+  }
+  subscribe = (fn: () => void) => {
+    this.listeners.add(fn);
+    return () => {
+      this.listeners.delete(fn);
+    };
+  };
+  snapshot = () => this.state;
+  private emit(patch: Partial<State> = {}) {
+    this.state = { ...this.state, ...patch };
+    this.persist();
+    for (const fn of this.listeners) fn();
+  }
+  private persist() {
+    if (!this.storage || this.state.closed) return;
+    try {
+      this.storage.setItem(
+        this.backupKey,
+        JSON.stringify({
+          schema: 1,
+          scope: this.api.session.scopeId,
+          actor: this.api.session.actorId,
+          navigation: this.navigation,
+          view: this.state.view,
+          prompt: this.state.prompt,
+          source: this.state.source,
+          result: this.state.result,
+          editor: this.state.editor,
+          pending: this.state.pending,
+          sourceIntent: this.sourceIntent,
+        }),
+      );
+      this.state = { ...this.state, backupError: false };
+    } catch {
+      this.state = { ...this.state, backupError: true };
+    }
+  }
+  private restore() {
+    if (!this.storage) return;
+    try {
+      const raw = this.storage.getItem(this.backupKey);
+      if (!raw) return;
+      if (raw.length > 200000) throw Error("oversize");
+      const s = JSON.parse(raw);
+      if (
+        s.schema !== 1 ||
+        s.scope !== this.api.session.scopeId ||
+        s.actor !== this.api.session.actorId
+      )
+        throw Error("scope");
+      const result = s.result ? parsePlanning(s.result) : null;
+      const source = s.source ? parseSource(s.source) : null;
+      if (
+        source &&
+        (source.scope_id !== s.scope || source.actor_id !== s.actor)
+      )
+        throw Error("source scope");
+      const validStatement = (q: any) =>
+        q &&
+        q.contract_version === 1 &&
+        typeof q.text === "string" &&
+        q.text.length <= 4000 &&
+        typeof q.resource_key === "string" &&
+        typeof q.element_key === "string";
+      const validIntent = (i: any) =>
+        i &&
+        isUuid(i.key) &&
+        isUuid(i.planningId) &&
+        Number.isInteger(i.generation) &&
+        validStatement(i.payload) &&
+        (i.kind === "edit"
+          ? Number.isInteger(i.payload.expected_revision) &&
+            i.payload.expected_revision >= 1
+          : (i.kind === "copy" || i.kind === "draft") &&
+            Number.isInteger(i.payload.base_revision) &&
+            i.payload.base_revision >= 1 &&
+            (i.kind !== "draft" ||
+              (isUuid(i.draftId) &&
+                Number.isInteger(i.payload.expected_draft_revision) &&
+                i.payload.expected_draft_revision >= 0)));
+      if (
+        s.pending &&
+        (s.pending.kind !== "create" ||
+          !isUuid(s.pending.key) ||
+          !Number.isInteger(s.pending.navigation) ||
+          s.pending.payload?.contract_version !== 1 ||
+          s.pending.payload.fixture_context !== "water-observation-v1" ||
+          typeof s.pending.payload.prompt !== "string" ||
+          !isUuid(s.pending.payload.source_id) ||
+          !Number.isInteger(s.pending.payload.expected_source_version))
+      )
+        throw Error("create intent");
+      if (
+        s.sourceIntent &&
+        (!isUuid(s.sourceIntent.key) ||
+          s.sourceIntent.bytes !== waterSource ||
+          (s.sourceIntent.cancelled !== undefined &&
+            typeof s.sourceIntent.cancelled !== "boolean"))
+      )
+        throw Error("source intent");
+      const editor = s.editor;
+      if (editor) {
+        const doc = parsePlanning(editor.document);
+        if (
+          doc.receipt.scope_id !== s.scope ||
+          doc.receipt.actor_id !== s.actor ||
+          typeof editor.text !== "string" ||
+          editor.text.length > 16000 ||
+          typeof editor.baseline !== "string" ||
+          !Number.isInteger(editor.generation) ||
+          !isUuid(editor.draftId) ||
+          !Number.isInteger(editor.draftRevision) ||
+          editor.draftRevision < 0 ||
+          typeof editor.draftSaved !== "boolean" ||
+          (editor.draftSaved && editor.draftRevision < 1) ||
+          !editableResource(doc, editor.resourceKey)?.elements.some(
+            (x) =>
+              x.key === editor.elementKey &&
+              x.editable &&
+              x.text === editor.baseline,
+          ) ||
+          (editor.pending &&
+            (!validIntent(editor.pending) ||
+              editor.pending.planningId !== doc.receipt.planning_id))
+        )
+          throw Error("editor");
+        editor.save = editor.pending
+          ? "unknown"
+          : editor.text === editor.baseline
+            ? "clean"
+            : "dirty";
+      }
+      if (
+        result &&
+        (result.receipt.scope_id !== s.scope ||
+          result.receipt.actor_id !== s.actor)
+      )
+        throw Error("scope");
+      this.sourceIntent = s.sourceIntent ?? null;
+      this.navigation =
+        Number.isInteger(s.navigation) && s.navigation >= 0
+          ? s.navigation
+          : s.pending
+            ? s.pending.navigation +
+              (s.prompt !== s.pending.payload.prompt ? 1 : 0)
+            : 0;
+      this.state = {
+        ...fresh(),
+        prompt: typeof s.prompt === "string" ? s.prompt : "",
+        source,
+        sourcePending: !!this.sourceIntent,
+        result,
+        editor: editor ?? null,
+        pending: s.pending ?? null,
+        submit: s.pending ? "unknown" : "idle",
+        view: ["home", "resources"].includes(s.view)
+          ? s.view
+          : editor || result
+            ? "result"
+            : "home",
+      };
+    } catch {
+      this.state = {
+        ...fresh(),
+        backupError: true,
+        error:
+          "No pudimos leer el respaldo local. No se han reemplazado los datos existentes.",
+      };
+      this.storage = null;
+    }
+  }
+  async init() {
+    if (this.state.view === "resources") void this.loadResources();
+    const e = this.state.editor;
+    if (!e) return;
+    try {
+      const latest = await this.api.read(e.document.receipt.planning_id);
+      if (this.state.closed || this.state.editor !== e) return;
+      if (latest.receipt.revision !== e.document.receipt.revision)
+        this.emit({
+          editor: {
+            ...e,
+            latest,
+            save: e.pending ? "unknown" : "conflict",
+            error: e.pending
+              ? "Hay un guardado sin confirmar. Comprueba su estado antes de continuar."
+              : "La revisión guardada cambió. Conservamos tu borrador.",
+          },
+        });
+    } catch (error) {
+      if (!this.state.closed) this.emit({ error: errorMessage(error) });
+    }
+  }
+  setPrompt(prompt: string) {
+    if (!this.state.closed) {
+      if ([...prompt].length > 256) {
+        this.emit({
+          error:
+            "La petición admite hasta 256 caracteres. Conservamos el texto anterior.",
+        });
+        return;
+      }
+      if (prompt !== this.state.prompt) this.navigation++;
+      this.emit({ prompt, error: "" });
+    }
+  }
+  useExample() {
+    this.setPrompt(waterPrompt);
+  }
+  navigate(view: View) {
+    if (this.state.closed) return;
+    this.navigation++;
+    this.emit({ view });
+    if (view === "resources") void this.loadResources();
+  }
+  removeSource() {
+    if (!this.state.closed) {
+      this.cancelAttachment();
+      this.navigation++;
+      this.emit({ source: null, error: "" });
+    }
+  }
+  cancelAttachment() {
+    if (this.sourceIntent && !this.state.closed) {
+      // Closing the picker cancels selection, not a possibly committed write.
+      this.sourceIntent.cancelled = true;
+      this.emit();
+    }
+  }
+  async attach(bytes: string): Promise<boolean> {
+    if (this.state.closed || this.state.attaching) return false;
+    if (bytes !== waterSource) {
+      this.emit({
+        error: "Sólo puedes seleccionar la referencia de ejemplo incorporada.",
+      });
+      return false;
+    }
+    if (this.state.source && !this.sourceIntent) return true;
+    const recovering = !!this.sourceIntent;
+    this.sourceIntent ??= { key: crypto.randomUUID(), bytes };
+    const intent = this.sourceIntent;
+    intent.cancelled = false;
+    this.navigation++;
+    this.emit({ attaching: true, sourcePending: true, error: "" });
+    let replayed = false;
+    try {
+      let source: SourceReceipt;
+      try {
+        source = await this.api.sourceOperation(intent.key);
+      } catch (e) {
+        if (!(e instanceof ApiError) || e.status !== 404) throw e;
+        replayed = true;
+        source = await this.api.createSource(intent.bytes, intent.key);
+      }
+      if (this.state.closed) return false;
+      const content = new TextEncoder().encode(intent.bytes);
+      const digest = Array.from(
+        new Uint8Array(await crypto.subtle.digest("SHA-256", content)),
+      )
+        .map((byte) => byte.toString(16).padStart(2, "0"))
+        .join("");
+      if (this.state.closed) return false;
+      if (
+        source.operation_id !== intent.key ||
+        source.actor_id !== this.api.session.actorId ||
+        source.size !== content.length ||
+        source.sha256 !== digest
+      )
+        throw new ApiError(0, "invalid_response");
+      const selected = !intent.cancelled;
+      this.sourceIntent = null;
+      this.emit({
+        source: selected ? source : this.state.source,
+        attaching: false,
+        sourcePending: false,
+      });
+      return selected;
+    } catch (e) {
+      if (!this.state.closed) {
+        if (
+          (!recovering && e instanceof ApiError && !e.uncertain) ||
+          (replayed && rejectedReplay(e, "source"))
+        )
+          this.sourceIntent = null;
+        this.emit({
+          attaching: false,
+          sourcePending: !!this.sourceIntent,
+          error: errorMessage(e),
+        });
+      }
+      return false;
+    }
+  }
+  async submit() {
+    if (this.state.closed || this.busy) return;
+    if (this.state.pending) {
+      await this.recoverCreate();
+      return;
+    }
+    const { source, prompt } = this.state;
+    if (!source || !prompt.trim()) {
+      this.emit({
+        error: "Escribe la petición y adjunta la referencia de ejemplo.",
+      });
+      return;
+    }
+    if ([...prompt].length > 256) {
+      this.emit({ error: "La petición admite hasta 256 caracteres." });
+      return;
+    }
+    const intent: CreateIntent = {
+      kind: "create",
+      key: crypto.randomUUID(),
+      navigation: this.navigation,
+      payload: {
+        contract_version: 1,
+        fixture_context: "water-observation-v1",
+        prompt,
+        source_id: source.source_id,
+        expected_source_version: source.number,
+      },
+    };
+    this.emit({ pending: intent, submit: "sending", error: "" });
+    await this.runCreate(intent, false);
+  }
+  private async runCreate(intent: CreateIntent, recover: boolean) {
+    this.busy = true;
+    let replayed = false;
+    try {
+      let doc: PlanningDocument;
+      if (recover) {
+        try {
+          doc = await this.api.operation(intent.key);
+        } catch (e) {
+          if (!(e instanceof ApiError) || e.status !== 404) throw e;
+          replayed = true;
+          doc = await this.api.create(intent.payload, intent.key);
+        }
+      } else doc = await this.api.create(intent.payload, intent.key);
+      if (this.state.closed || this.state.pending?.key !== intent.key) return;
+      if (
+        doc.receipt.operation_id !== intent.key ||
+        Object.entries(intent.payload).some(
+          ([k, v]) =>
+            (doc.request as unknown as Record<string, unknown>)[k] !== v,
+        )
+      )
+        throw new ApiError(0, "invalid_response");
+      this.emit({
+        result: this.navigation === intent.navigation ? doc : this.state.result,
+        pending: null,
+        submit: "idle",
+        view:
+          this.navigation !== intent.navigation ? this.state.view : "result",
+        items: this.upsert(doc),
+      });
+    } catch (e) {
+      if (this.state.closed) return;
+      const certain =
+        (!recover && e instanceof ApiError && !e.uncertain) ||
+        (replayed && rejectedReplay(e, "create"));
+      this.emit({
+        submit: certain ? "error" : "unknown",
+        error: errorMessage(e),
+        pending: certain ? null : intent,
+      });
+    } finally {
+      this.busy = false;
+    }
+  }
+  async recoverCreate() {
+    const i = this.state.pending;
+    if (!this.state.closed && !this.busy && i) {
+      this.emit({ submit: "sending", error: "" });
+      await this.runCreate(i, true);
+    }
+  }
+  private upsert(doc: PlanningDocument) {
+    return [
+      doc,
+      ...this.state.items.filter(
+        (d) => d.receipt.planning_id !== doc.receipt.planning_id,
+      ),
+    ];
+  }
+  openEditor(doc = this.state.result, resourceKey?: string) {
+    if (this.state.closed || !doc) return;
+    const resource = editableResource(doc, resourceKey),
+      element = resource?.elements.find((e) => e.editable);
+    if (!resource || !element) {
+      this.emit({
+        error: "Este resultado no tiene un campo editable disponible.",
+      });
+      return;
+    }
+    const old = this.state.editor;
+    if (
+      old &&
+      old.document.receipt.planning_id === doc.receipt.planning_id &&
+      old.document.receipt.revision === doc.receipt.revision
+    ) {
+      this.emit({ view: "result" });
+      return;
+    }
+    if (
+      old &&
+      (old.pending || (old.text !== old.baseline && !old.draftSaved))
+    ) {
+      this.emit({
+        error: "Conserva el borrador abierto antes de editar otro recurso.",
+      });
+      return;
+    }
+    this.emit({
+      result: doc,
+      editor: {
+        document: doc,
+        resourceKey: resource.key,
+        elementKey: element.key,
+        text: element.text,
+        baseline: element.text,
+        generation: 0,
+        save: "clean",
+        latest: null,
+        draftId: crypto.randomUUID(),
+        draftRevision: 0,
+        error: "",
+        pending: null,
+        draftSaved: false,
+      },
+    });
+  }
+  edit(text: string) {
+    const e = this.state.editor;
+    if (!e || this.state.closed) return;
+    if ([...text].length > 1000) {
+      this.emit({
+        editor: {
+          ...e,
+          error:
+            "El enunciado admite hasta 1000 caracteres. Conservamos el texto anterior.",
+        },
+      });
+      return;
+    }
+    this.emit({
+      editor: {
+        ...e,
+        text,
+        generation: e.generation + 1,
+        save: e.pending ? "unknown" : text === e.baseline ? "clean" : "dirty",
+        error: "",
+        draftSaved: false,
+      },
+    });
+  }
+  undo() {
+    const e = this.state.editor;
+    if (!e || e.pending || this.state.closed) return;
+    this.emit({
+      editor: {
+        ...e,
+        text: e.baseline,
+        generation: e.generation + 1,
+        save: "clean",
+        error: "",
+        draftSaved: false,
+      },
+    });
+  }
+  closeEditor() {
+    const e = this.state.editor;
+    if (!e) return true;
+    if (e.pending || (e.text !== e.baseline && !e.draftSaved)) return false;
+    this.emit({ editor: null });
+    return true;
+  }
+  async save(copy = false) {
+    const e = this.state.editor;
+    if (!e || this.state.closed || this.busy) return;
+    if (e.pending) {
+      await this.recoverEditor();
+      return;
+    }
+    if (e.text === e.baseline && !copy) return;
+    if (!e.text.trim() || [...e.text].length > 1000) {
+      this.emit({
+        editor: {
+          ...e,
+          error: "El enunciado debe contener entre 1 y 1000 caracteres.",
+        },
+      });
+      return;
+    }
+    const common = {
+      contract_version: 1 as const,
+      resource_key: e.resourceKey,
+      element_key: e.elementKey,
+      text: e.text,
+    };
+    const intent: EditIntent = {
+      kind: copy ? "copy" : "edit",
+      key: crypto.randomUUID(),
+      planningId: e.document.receipt.planning_id,
+      generation: e.generation,
+      payload: copy
+        ? { ...common, base_revision: e.document.receipt.revision }
+        : { ...common, expected_revision: e.document.receipt.revision },
+    };
+    this.emit({ editor: { ...e, save: "saving", pending: intent, error: "" } });
+    await this.runEditor(intent, false);
+  }
+  async preserveDraft() {
+    const e = this.state.editor;
+    if (!e || this.state.closed || this.busy) return;
+    if (e.pending) {
+      await this.recoverEditor();
+      return;
+    }
+    if (!e.text.trim() || [...e.text].length > 1000) {
+      this.emit({
+        editor: {
+          ...e,
+          error: "El enunciado debe contener entre 1 y 1000 caracteres.",
+        },
+      });
+      return;
+    }
+    const intent: DraftIntent = {
+      kind: "draft",
+      key: crypto.randomUUID(),
+      planningId: e.document.receipt.planning_id,
+      draftId: e.draftId,
+      generation: e.generation,
+      payload: {
+        contract_version: 1,
+        base_revision: e.document.receipt.revision,
+        expected_draft_revision: e.draftRevision,
+        resource_key: e.resourceKey,
+        element_key: e.elementKey,
+        text: e.text,
+      },
+    };
+    this.emit({ editor: { ...e, save: "saving", pending: intent, error: "" } });
+    await this.runEditor(intent, false);
+  }
+  private async runEditor(intent: EditorIntent, recover: boolean) {
+    this.busy = true;
+    let replayed = false;
+    try {
+      const write = () =>
+        intent.kind === "draft"
+          ? this.api.draft(
+              intent.planningId,
+              intent.draftId,
+              intent.payload,
+              intent.key,
+            )
+          : intent.kind === "copy"
+            ? this.api.copy(
+                intent.planningId,
+                intent.payload as CopyRequest,
+                intent.key,
+              )
+            : this.api.save(
+                intent.planningId,
+                intent.payload as EditRequest,
+                intent.key,
+              );
+      let raw: unknown;
+      if (recover) {
+        try {
+          raw = await (intent.kind === "draft"
+            ? this.api.draftOperation(intent.key)
+            : this.api.operation(intent.key));
+        } catch (e) {
+          if (!(e instanceof ApiError) || e.status !== 404) throw e;
+          replayed = true;
+          raw = await write();
+        }
+      } else raw = await write();
+      const current = this.state.editor;
+      if (this.state.closed || current?.pending?.key !== intent.key) return;
+      const changed = current.generation !== intent.generation;
+      if (intent.kind === "draft") {
+        const d = parseDraft(raw);
+        if (
+          d.receipt.scope_id !== this.api.session.scopeId ||
+          d.receipt.actor_id !== this.api.session.actorId ||
+          d.receipt.operation_id !== intent.key ||
+          d.receipt.draft_id !== intent.draftId ||
+          d.receipt.planning_id !== intent.planningId ||
+          d.receipt.base_revision_id !== current.document.receipt.revision_id ||
+          Object.entries(intent.payload).some(
+            ([k, v]) =>
+              (d.request as unknown as Record<string, unknown>)[k] !== v,
+          )
+        )
+          throw new ApiError(0, "invalid_response");
+        this.emit({
+          drafts: [
+            d,
+            ...this.state.drafts.filter(
+              (x) => x.receipt.draft_id !== d.receipt.draft_id,
+            ),
+          ],
+          editor: {
+            ...current,
+            pending: null,
+            save: changed ? "dirty" : "clean",
+            draftRevision: d.receipt.draft_revision,
+            draftSaved: !changed,
+            error: changed
+              ? "Conservamos el borrador anterior; tu edición más reciente sigue pendiente."
+              : "",
+          },
+        });
+        return;
+      }
+      const doc = parsePlanning(raw);
+      if (
+        doc.receipt.operation_id !== intent.key ||
+        doc.receipt.scope_id !== this.api.session.scopeId ||
+        doc.receipt.actor_id !== this.api.session.actorId ||
+        !("kind" in doc.request) ||
+        doc.request.kind !== intent.kind ||
+        Object.entries(intent.payload).some(
+          ([k, v]) =>
+            (doc.request as unknown as Record<string, unknown>)[k] !== v,
+        ) ||
+        (intent.kind === "edit" &&
+          doc.receipt.planning_id !== intent.planningId) ||
+        (intent.kind === "copy" &&
+          (doc.receipt.planning_id === intent.planningId ||
+            doc.origin?.planning_id !== intent.planningId ||
+            doc.origin?.revision_id !== current.document.receipt.revision_id ||
+            doc.origin?.revision !== current.document.receipt.revision)) ||
+        (
+          [
+            "source_id",
+            "source_version_id",
+            "source_version",
+            "source_sha256",
+          ] as const
+        ).some(
+          (field) => doc.receipt[field] !== current.document.receipt[field],
+        )
+      )
+        throw new ApiError(0, "invalid_response");
+      const element = editableResource(doc, current.resourceKey)?.elements.find(
+        (e) => e.key === current.elementKey,
+      );
+      if (!element || element.text !== intent.payload.text)
+        throw new ApiError(0, "invalid_response");
+      this.emit({
+        result: doc,
+        items: this.upsert(doc),
+        editor: {
+          ...current,
+          document: doc,
+          baseline: element.text,
+          text: changed ? current.text : element.text,
+          pending: null,
+          save: changed ? "dirty" : "saved",
+          latest: null,
+          error: "",
+          draftSaved: false,
+          draftId:
+            intent.kind === "copy" ? crypto.randomUUID() : current.draftId,
+          draftRevision: intent.kind === "copy" ? 0 : current.draftRevision,
+        },
+      });
+    } catch (error) {
+      const current = this.state.editor;
+      if (this.state.closed || !current || current.pending?.key !== intent.key)
+        return;
+      const conflict = error instanceof ApiError && error.status === 409,
+        certain =
+          (!recover && error instanceof ApiError && !error.uncertain) ||
+          (replayed && rejectedReplay(error, intent.kind));
+      this.emit({
+        editor: {
+          ...current,
+          save: conflict ? "conflict" : certain ? "error" : "unknown",
+          error: errorMessage(error),
+          pending: certain ? null : intent,
+        },
+      });
+      if (conflict) {
+        try {
+          const latest = await this.api.read(intent.planningId),
+            now = this.state.editor;
+          if (
+            !this.state.closed &&
+            now?.document.receipt.planning_id === intent.planningId
+          )
+            this.emit({ editor: { ...now, latest } });
+        } catch {
+          /* A failed refresh never destroys the base or draft. */
+        }
+      }
+    } finally {
+      this.busy = false;
+    }
+  }
+  async recoverEditor() {
+    const i = this.state.editor?.pending;
+    if (!this.state.closed && !this.busy && i) {
+      this.emit({
+        editor: { ...this.state.editor!, save: "saving", error: "" },
+      });
+      await this.runEditor(i, true);
+    }
+  }
+  async open(id: string) {
+    if (this.state.closed) return;
+    if (
+      this.state.editor &&
+      (this.state.editor.pending ||
+        (this.state.editor.text !== this.state.editor.baseline &&
+          !this.state.editor.draftSaved))
+    ) {
+      this.emit({
+        error: "Conserva el borrador abierto antes de editar otro recurso.",
+      });
+      return;
+    }
+    const nav = ++this.navigation;
+    try {
+      const doc = await this.api.read(id);
+      if (this.state.closed || nav !== this.navigation) return;
+      this.emit({ result: doc, view: "result", error: "" });
+      this.openEditor(doc);
+    } catch (e) {
+      if (!this.state.closed && nav === this.navigation)
+        this.emit({ error: errorMessage(e) });
+    }
+  }
+  async openDraft(id: string) {
+    if (this.state.closed) return;
+    if (
+      this.state.editor &&
+      (this.state.editor.pending ||
+        (this.state.editor.text !== this.state.editor.baseline &&
+          !this.state.editor.draftSaved))
+    ) {
+      this.emit({
+        error: "Conserva el borrador abierto antes de recuperar otro.",
+      });
+      return;
+    }
+    const nav = ++this.navigation;
+    try {
+      const draft = parseDraft(await this.api.readDraft(id));
+      if (
+        draft.receipt.scope_id !== this.api.session.scopeId ||
+        draft.receipt.actor_id !== this.api.session.actorId
+      )
+        throw new ApiError(0, "invalid_response");
+      const base = await this.api.read(
+        draft.receipt.planning_id,
+        draft.receipt.base_revision,
+      );
+      if (this.state.closed || nav !== this.navigation) return;
+      this.openEditor(base, draft.request.resource_key);
+      const e = this.state.editor;
+      if (
+        e &&
+        e.document.receipt.planning_id === base.receipt.planning_id &&
+        e.document.receipt.revision === base.receipt.revision &&
+        !e.pending &&
+        e.text === e.baseline
+      )
+        this.emit({
+          view: "result",
+          editor: {
+            ...e,
+            text: draft.request.text,
+            draftId: id,
+            draftRevision: draft.receipt.draft_revision,
+            draftSaved: true,
+            save: "clean",
+          },
+        });
+    } catch (e) {
+      if (!this.state.closed && nav === this.navigation)
+        this.emit({ error: errorMessage(e) });
+    }
+  }
+  async loadResources(more = false) {
+    if (this.state.closed || this.state.listState === "loading") return;
+    this.emit({ listState: "loading", error: "" });
+    try {
+      const [page, drafts] = await Promise.all([
+        more && !this.state.cursor
+          ? Promise.resolve({ items: [], next_cursor: null })
+          : this.api.list(more ? (this.state.cursor ?? undefined) : undefined),
+        more && !this.state.draftCursor
+          ? Promise.resolve({ items: [], next_cursor: null })
+          : this.api.listDrafts(
+              more ? (this.state.draftCursor ?? undefined) : undefined,
+            ),
+      ]);
+      if (!this.state.closed)
+        this.emit({
+          items: more ? [...this.state.items, ...page.items] : page.items,
+          drafts: more ? [...this.state.drafts, ...drafts.items] : drafts.items,
+          cursor: page.next_cursor,
+          draftCursor: drafts.next_cursor,
+          listState: "ready",
+        });
+    } catch (e) {
+      if (!this.state.closed)
+        this.emit({ listState: "error", error: errorMessage(e) });
+    }
+  }
+  closeSession() {
+    this.navigation++;
+    this.state = { ...fresh(), closed: true };
+    for (const fn of this.listeners) fn();
+  }
+}
