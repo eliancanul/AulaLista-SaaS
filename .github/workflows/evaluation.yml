@@ -40,3 +40,9 @@ jobs:
         run: |
           uv run --no-project --offline python -B -m unittest discover -s evaluation/tests -v
           uv run --no-project --offline python -B -O -m unittest discover -s evaluation/tests -v
+      - name: Test source-integrity contracts with synthetic software fixtures
+        env:
+          PYTHONPATH: src:.
+        run: |
+          uv run --no-project --offline python -B -m unittest discover -s document_checks/tests -v
+          uv run --no-project --offline python -B -O -m unittest discover -s document_checks/tests -v
