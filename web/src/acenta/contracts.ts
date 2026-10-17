@@ -135,3 +135,40 @@ export interface Origin {
   revision_id: string;
   revision: number;
 }
+
+/** Fixed synthetic selections; family distinguishes a revision from another file. */
+export const sourceSamples = [
+  {
+    id: "water",
+    family: "water",
+    name: "Planeación de ciencias · ejemplo",
+    bytes: waterSource,
+  },
+  {
+    id: "water-revised",
+    family: "water",
+    name: "Planeación de ciencias · revisión de ejemplo",
+    bytes:
+      waterSource +
+      "Nota sintética de revisión: observar nuevamente al finalizar.\n",
+  },
+  {
+    id: "water-other",
+    family: "water-other",
+    name: "Otra planeación de ciencias · ejemplo",
+    bytes:
+      waterSource +
+      "Archivo sintético independiente para otra sesión de observación.\n",
+  },
+] as const;
+export interface SourceReference {
+  source_id: string;
+  number: number;
+  sha256: string;
+  size?: number;
+}
+export interface OriginalContent {
+  text: string;
+  size: number;
+  sha256: string;
+}

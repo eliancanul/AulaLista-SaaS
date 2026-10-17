@@ -15,6 +15,7 @@ import {
 import {
   waterContext,
   waterSource,
+  sourceSamples,
   type PlanningDocument,
   type Resource,
 } from "./contracts";
@@ -324,7 +325,9 @@ const toolCatalog: Record<string, string[]> = {
 function ResultView({
   document,
   onOpen,
+  onOriginal,
 }: {
+  onOriginal: () => void;
   document: PlanningDocument;
   onOpen: (key: string) => void;
 }) {
@@ -383,6 +386,7 @@ function ResultView({
             Fuente de ejemplo · Versión {document.receipt.source_version}. El
             original no cambia.
           </p>
+          <button onClick={onOriginal}>Abrir original del resultado</button>
         </section>
         <div className="resource-cards">
           {r.resources?.map((resource) => (
@@ -825,7 +829,16 @@ function Workspace({ controller }: { controller: AcentaController }) {
                 </div>
                 {s.source && (
                   <div className="attachment-line">
-                    <span>Planeación de ciencias · ejemplo</span>
+                    <span>
+                      {s.sourceName} · Versión {s.source.number} ·{" "}
+                      {s.source.size} bytes
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void controller.openOriginal(s.source!)}
+                    >
+                      Abrir original
+                    </button>
                     <button
                       type="button"
                       onClick={() => controller.removeSource()}
@@ -873,7 +886,7 @@ function Workspace({ controller }: { controller: AcentaController }) {
                   <p role="status">
                     Referencia sin confirmar. Tu selección anterior se conserva.
                   </p>
-                  <button onClick={() => void controller.attach(waterSource)}>
+                  <button onClick={() => void controller.recoverAttachment()}>
                     Comprobar estado del adjunto
                   </button>
                 </div>
@@ -889,7 +902,17 @@ function Workspace({ controller }: { controller: AcentaController }) {
             </p>
           </section>
         ) : s.view === "result" && s.result ? (
-          <ResultView document={s.result} onOpen={openEditor} />
+          <ResultView
+            document={s.result}
+            onOpen={openEditor}
+            onOriginal={() =>
+              void controller.openOriginal({
+                source_id: s.result!.receipt.source_id,
+                number: s.result!.receipt.source_version,
+                sha256: s.result!.receipt.source_sha256,
+              })
+            }
+          />
         ) : (
           <section className="library">
             <h1>Mis recursos</h1>
@@ -987,6 +1010,68 @@ function Workspace({ controller }: { controller: AcentaController }) {
           </p>
         )}
       </main>
+      {s.original && (
+        <Dialog
+          title="Original de ejemplo"
+          className="original-dialog"
+          onClose={() => controller.closeOriginal()}
+        >
+          <header>
+            <h2>Original de ejemplo</h2>
+            <button onClick={() => controller.closeOriginal()}>Cerrar</button>
+          </header>
+          <div className="original-body">
+            <p className="secondary">
+              Texto UTF-8 sintético · Versión {s.original.reference.number}
+            </p>
+            <p className="original-metadata">
+              Fuente: {s.original.reference.source_id}
+            </p>
+            {s.original.status === "loading" && (
+              <p role="status">Leyendo original…</p>
+            )}
+            {s.original.status === "ready" && s.original.content && (
+              <>
+                <p role="status">
+                  Original disponible · {s.original.content.size} bytes
+                  verificados
+                </p>
+                <p className="original-metadata">
+                  SHA-256: {s.original.content.sha256}
+                </p>
+                <pre tabIndex={0} aria-label="Contenido original">
+                  {s.original.content.text}
+                </pre>
+              </>
+            )}
+            {s.original.status === "unavailable" && (
+              <p role="status">Original no disponible.</p>
+            )}
+            {s.original.status === "error" && (
+              <p role="alert">
+                No se pudo leer el original. Tu trabajo sigue aquí.
+              </p>
+            )}
+            {s.original.status === "viewer-error" && (
+              <p role="alert">
+                No se pudo verificar o mostrar el original. No mostramos
+                contenido sin verificar.
+              </p>
+            )}
+            {["unavailable", "error", "viewer-error"].includes(
+              s.original.status,
+            ) && (
+              <button
+                onClick={() =>
+                  void controller.openOriginal(s.original!.reference)
+                }
+              >
+                Reintentar lectura
+              </button>
+            )}
+          </div>
+        </Dialog>
+      )}
       {overlay === "context" && (
         <Dialog
           title="Contexto de clase"
@@ -1014,26 +1099,41 @@ function Workspace({ controller }: { controller: AcentaController }) {
           <p className="secondary">
             {s.source ? "Cambiar referencia" : "Adjuntar referencia"}
           </p>
-          <button
-            className="menu-option"
-            disabled={s.attaching}
-            onClick={async () => {
-              if (await controller.attach(waterSource)) setOverlay(null);
-            }}
-          >
-            <strong>Planeación de ciencias · ejemplo</strong>
-            <span>
-              {s.attaching ? "Adjuntando…" : "Referencia sintética incorporada"}
-            </span>
-          </button>
+          {sourceSamples.map((sample) => (
+            <button
+              key={sample.id}
+              className="menu-option"
+              disabled={s.attaching || s.sourcePending}
+              onClick={async () => {
+                if (await controller.attach(sample.bytes)) setOverlay(null);
+              }}
+            >
+              <strong>{sample.name}</strong>
+              <span>
+                Selección de ejemplo · texto UTF-8 ·{" "}
+                {new TextEncoder().encode(sample.bytes).length} bytes
+              </span>
+            </button>
+          ))}
           <p className="field-hint">
-            Selección de ejemplo · texto UTF-8 ·{" "}
-            {new TextEncoder().encode(waterSource).length} bytes.
+            Una revisión conserva la identidad del archivo. Otro archivo tiene
+            su propia fuente. No se admiten documentos reales.
           </p>
+          {s.attaching && <p role="status">Conservando referencia…</p>}
           {s.sourcePending && !s.attaching && (
-            <p role="status">
-              Referencia sin confirmar. Selecciónala para comprobar el recibo.
-            </p>
+            <div>
+              <p role="status">
+                Referencia sin confirmar. Comprueba el recibo antes de
+                cambiarla.
+              </p>
+              <button
+                onClick={async () => {
+                  if (await controller.recoverAttachment()) setOverlay(null);
+                }}
+              >
+                Comprobar estado del adjunto
+              </button>
+            </div>
           )}
           {s.error && <p role="alert">{s.error}</p>}
           <button className="quiet" onClick={dismissAttachment}>
