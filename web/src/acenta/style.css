@@ -1,11 +1,11 @@
 @font-face {
-  font-family: Source Sans 3;
+  font-family: "Source Sans 3";
   src: url("/acenta/fonts/SourceSans3-Regular.ttf") format("truetype");
   font-weight: 400;
   font-display: swap;
 }
 @font-face {
-  font-family: Source Sans 3;
+  font-family: "Source Sans 3";
   src: url("/acenta/fonts/SourceSans3-Semibold.ttf") format("truetype");
   font-weight: 600;
   font-display: swap;
@@ -18,7 +18,7 @@
 }
 :root {
   font-family:
-    Source Sans 3,
+    "Source Sans 3",
     Arial,
     sans-serif;
   color: #171e24;
@@ -932,10 +932,16 @@ dialog::backdrop {
     width: calc(100vw - 24px);
     height: calc(100dvh - 24px);
   }
+  .editor-dialog[open] {
+    display: flex;
+    flex-direction: column;
+  }
   .editor-body {
     grid-template-columns: 1fr;
     overflow: auto;
-    height: calc(100% - 156px);
+    height: auto;
+    min-height: 0;
+    flex: 1;
   }
   .preview-column,
   .elements-column {
@@ -944,17 +950,21 @@ dialog::backdrop {
   .editor-header {
     height: 72px;
     padding: 16px;
+    flex: none;
   }
   .editor-header h2 {
     font-size: 24px;
   }
   .editor-footer {
-    height: 84px;
+    height: auto;
+    flex: none;
+    flex-wrap: wrap;
     padding: 12px;
     gap: 8px;
   }
   .editor-footer .actions {
     gap: 8px;
+    margin-left: auto;
   }
   .editor-footer button {
     font-size: 14px;

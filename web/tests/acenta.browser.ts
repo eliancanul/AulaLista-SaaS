@@ -1,6 +1,47 @@
 import { test, expect, type Page } from "@playwright/test";
 import { FixtureServer, revised, json } from "./acenta-fixtures";
 const evidence = process.env.ACENTA_EVIDENCE_DIR ?? "../evidence/acenta";
+async function assertTypography(page: Page) {
+  const typography = await page.evaluate(async () => {
+    const unquote = (name: string) => name.replace(/^["']|["']$/g, "");
+    const loaded = [];
+    for (const [family, weight] of [
+      ["Source Sans 3", "400"],
+      ["Source Sans 3", "600"],
+      ["Instrument Serif", "400"],
+    ]) {
+      const faces = await document.fonts.load(`${weight} 16px "${family}"`);
+      loaded.push(
+        faces.map((face) => ({
+          family: unquote(face.family),
+          weight: face.weight,
+          status: face.status,
+        })),
+      );
+    }
+    await document.fonts.ready;
+    const controls = [
+      ...document.querySelectorAll(
+        "body, button:not(.google), input, textarea, .editor-header h2, .element-card, .sheet",
+      ),
+    ].map((element) => ({
+      tag: element.tagName,
+      family: unquote(
+        getComputedStyle(element).fontFamily.split(",")[0].trim(),
+      ),
+    }));
+    return { loaded, controls };
+  });
+  expect(typography.loaded).toEqual([
+    [{ family: "Source Sans 3", weight: "400", status: "loaded" }],
+    [{ family: "Source Sans 3", weight: "600", status: "loaded" }],
+    [{ family: "Instrument Serif", weight: "400", status: "loaded" }],
+  ]);
+  expect(typography.controls.length).toBeGreaterThan(1);
+  for (const control of typography.controls) {
+    expect(control.family, control.tag).toBe("Source Sans 3");
+  }
+}
 async function assertNoHorizontalOverflow(page: Page) {
   await page.evaluate(() => document.fonts.ready);
   const layout = await page.evaluate(() => ({
@@ -19,8 +60,39 @@ async function assertNoHorizontalOverflow(page: Page) {
     layout.viewport,
   );
 }
+async function assertEditorActionsFit(page: Page) {
+  const layout = await page.locator(".editor-dialog").evaluate((dialog) => {
+    const bounds = (element: Element) => {
+      const { top, right, bottom, left } = element.getBoundingClientRect();
+      return { top, right, bottom, left };
+    };
+    const footer = dialog.querySelector(".editor-footer")!;
+    return {
+      dialog: bounds(dialog),
+      footer: bounds(footer),
+      body: bounds(dialog.querySelector(".editor-body")!),
+      buttons: [...footer.querySelectorAll("button")].map(bounds),
+      viewport: { width: innerWidth, height: innerHeight },
+    };
+  });
+  expect(layout.buttons).toHaveLength(3);
+  expect(layout.body.bottom).toBeLessThanOrEqual(layout.footer.top);
+  for (const button of layout.buttons) {
+    expect(button.top).toBeGreaterThanOrEqual(layout.footer.top + 12);
+    expect(button.bottom).toBeLessThanOrEqual(layout.footer.bottom - 12);
+    expect(button.top).toBeGreaterThanOrEqual(Math.max(0, layout.dialog.top));
+    expect(button.left).toBeGreaterThanOrEqual(Math.max(0, layout.dialog.left));
+    expect(button.bottom).toBeLessThanOrEqual(
+      Math.min(layout.dialog.bottom, layout.viewport.height),
+    );
+    expect(button.right).toBeLessThanOrEqual(
+      Math.min(layout.dialog.right, layout.viewport.width),
+    );
+  }
+}
 async function assertLoadedAssets(page: Page) {
   await expect(page.locator("img").first()).toBeVisible();
+  await assertTypography(page);
   for (const img of await page.locator("img").all()) {
     await expect
       .poll(() =>
@@ -85,6 +157,7 @@ async function edit(page: Page) {
   await expect(
     page.getByRole("dialog", { name: "Editar actividad" }),
   ).toBeVisible();
+  await assertTypography(page);
 }
 test("access remains closed, current heading is 96px, no personal data is sent", async ({
   page,
@@ -133,6 +206,10 @@ test("home geometry, modal inertia, keyboard and sidebar preserve input", async 
   await expect(page.getByLabel("Petición para tu clase")).toHaveValue(
     "Conservar este texto",
   );
+  await page.screenshot({
+    path: `${evidence}/home-expanded-1440.png`,
+    animations: "disabled",
+  });
   await page.getByRole("button", { name: "Contraer menú" }).click();
   const tools = page.getByRole("button", { name: "Más herramientas" });
   await tools.click();
@@ -157,6 +234,16 @@ test("home geometry, modal inertia, keyboard and sidebar preserve input", async 
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
+  const input = page.getByLabel("Petición para tu clase");
+  const multiline =
+    "Primera línea para preparar mi clase.\nSegunda línea con materiales y tiempos.\nTercera línea que conserva mis instrucciones.";
+  await input.fill(multiline);
+  await expect(input).toHaveValue(multiline);
+  await expect
+    .poll(async () => (await input.boundingBox())!.height)
+    .toBeGreaterThan(40);
+  expect((await input.boundingBox())!.height).toBeLessThanOrEqual(160);
+  await page.screenshot({ path: `${evidence}/home-multiline-1440.png` });
 });
 test("fixture request yields payload times, saved edit reloads and original remains", async ({
   page,
@@ -170,6 +257,7 @@ test("fixture request yields payload times, saved edit reloads and original rema
   await expect(
     page.getByRole("dialog", { name: "Editar actividad" }),
   ).toBeVisible();
+  await assertTypography(page);
   await page.evaluate(() => document.fonts.ready);
   await page.screenshot({ path: `${evidence}/editor-1440.png` });
   await page
@@ -290,11 +378,13 @@ test("mobile access and composer reflow without horizontal overflow", async ({
   await assertNoHorizontalOverflow(page);
   await edit(page);
   await page.getByLabel("Texto", { exact: true }).fill("Texto móvil");
+  await assertEditorActionsFit(page);
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
   await expect(
     page.getByText("Guardado confirmado", { exact: true }),
   ).toBeVisible();
   await assertNoHorizontalOverflow(page);
+  await assertEditorActionsFit(page);
   await page.screenshot({ path: `${evidence}/editor-mobile.png` });
 });
 
