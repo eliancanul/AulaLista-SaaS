@@ -97,7 +97,10 @@ def receipt(version: SourceVersion) -> dict:
     }
 
 
-def authorize(session: Session, actor_id: UUID, scope_id: UUID) -> None:
+def authorize(session: Session, actor_id, scope_id: UUID) -> UUID:
+    from aulalista_api.auth import revalidate_actor
+
+    actor_id = revalidate_actor(session, actor_id)
     if (
         session.scalar(
             select(PersonalScope.id).where(
@@ -108,6 +111,7 @@ def authorize(session: Session, actor_id: UUID, scope_id: UUID) -> None:
         is None
     ):
         raise MaterialError(404, "not_found")
+    return actor_id
 
 
 class Materials:
@@ -149,7 +153,7 @@ class Materials:
             signed=True,
         )
         with Session(self.engine) as session, session.begin():
-            authorize(session, actor_id, scope_id)
+            actor_id = authorize(session, actor_id, scope_id)
             # Same-key contenders wait for its commit; unrelated keys use the CAS below.
             session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": lock})
             previous = session.scalar(
@@ -206,7 +210,7 @@ class Materials:
 
     def read(self, actor_id: UUID, scope_id: UUID, source_id: UUID, number: int):
         with Session(self.engine) as session, session.begin():
-            authorize(session, actor_id, scope_id)
+            actor_id = authorize(session, actor_id, scope_id)
             version = session.scalar(
                 select(SourceVersion).where(
                     SourceVersion.scope_id == scope_id,
@@ -220,7 +224,7 @@ class Materials:
 
     def operation(self, actor_id: UUID, scope_id: UUID, operation_id: UUID) -> dict:
         with Session(self.engine) as session, session.begin():
-            authorize(session, actor_id, scope_id)
+            actor_id = authorize(session, actor_id, scope_id)
             version = session.scalar(
                 select(SourceVersion).where(
                     SourceVersion.scope_id == scope_id,

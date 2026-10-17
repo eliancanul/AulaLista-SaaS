@@ -5,7 +5,9 @@ description = "Bootstrap de la API de AulaLista SaaS"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "alembic==1.20.0",
+    "cachecontrol==0.14.4",
     "fastapi==0.143.1",
+    "google-auth[requests]==2.62.0",
     "psycopg[binary]==3.3.6",
     "sqlalchemy==2.1.4",
     "uvicorn==0.54.0",

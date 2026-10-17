@@ -3,7 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, Header, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.engine import Engine
@@ -11,15 +11,22 @@ from sqlalchemy.exc import SQLAlchemyError
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import ClientDisconnect
 
+from aulalista_api.auth import AuthenticatedActor
 from aulalista_api.materials import MAX_CONTENT_BYTES, MaterialError, Materials
 
 
-def require_actor() -> UUID:
-    # Only tests override this dependency; no runtime config/header grants identity.
-    raise HTTPException(401, "unauthorized", headers={"Cache-Control": "no-store"})
+def require_actor(request: Request):
+    auth = request.app.state.auth
+    token = request.cookies.get("__Host-acenta-session", "")
+    actor = auth.actor(token)
+    if request.method not in {"GET", "HEAD", "OPTIONS"}:
+        auth.check_origin(
+            request.headers.get("origin"), request.headers.get("x-csrf-token"), token
+        )
+    return actor
 
 
-Actor = Annotated[UUID, Depends(require_actor)]
+Actor = Annotated[AuthenticatedActor, Depends(require_actor)]
 Operation = Annotated[UUID, Header(alias="Idempotency-Key")]
 
 

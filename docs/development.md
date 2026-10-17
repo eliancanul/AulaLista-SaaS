@@ -22,7 +22,9 @@ Después de editar código local, repetir `uv sync --locked --no-editable
 --reinstall-package aulalista-api` para no probar una wheel anterior de la caché.
 
 Las migraciones requieren el rol dueño de esquema. No se ejecutan en el arranque
-ni desde endpoints. El head esperado es `0004_planning_edits`. El downgrade de
+ni desde endpoints. El head esperado es `0005_auth`. El downgrade de 0005 elimina identidades,
+sesiones, desafíos y contadores; los ámbitos/materiales quedan sin método de
+acceso. No es un mecanismo de recuperación. El downgrade de
 0004 elimina borradores y origen de copias; el de 0003 elimina planeaciones y
 revisiones; el de 0002 elimina fuentes y versiones. Usarlo sólo en esta DB
 desechable, nunca para restaurar datos. Las pruebas recrean el esquema desde todas las migraciones.
@@ -47,6 +49,13 @@ CREATE ROLE aulalista_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
     NOINHERIT NOREPLICATION NOBYPASSRLS;
 GRANT USAGE ON SCHEMA public TO aulalista_runtime;
 GRANT SELECT ON principal, personal_scope, alembic_version TO aulalista_runtime;
+GRANT INSERT ON principal, personal_scope TO aulalista_runtime;
+GRANT SELECT, INSERT ON auth_identity, auth_pre_session, auth_session, auth_email_challenge, auth_rate TO aulalista_runtime;
+GRANT UPDATE (email, email_verified) ON auth_identity TO aulalista_runtime;
+GRANT UPDATE (consumed, expires_at) ON auth_pre_session TO aulalista_runtime;
+GRANT UPDATE (revoked, idle_expires_at) ON auth_session TO aulalista_runtime;
+GRANT UPDATE (attempts, consumed) ON auth_email_challenge TO aulalista_runtime;
+GRANT UPDATE (count) ON auth_rate TO aulalista_runtime;
 GRANT SELECT, INSERT ON source, source_version TO aulalista_runtime;
 GRANT UPDATE (current_version) ON source TO aulalista_runtime;
 GRANT SELECT, INSERT ON planning, planning_revision TO aulalista_runtime;
@@ -55,12 +64,12 @@ GRANT SELECT, INSERT ON planning_draft, planning_draft_revision TO aulalista_run
 GRANT UPDATE (current_revision) ON planning_draft TO aulalista_runtime;
 SQL
 export AULALISTA_DATABASE_URL='postgresql+psycopg://aulalista_runtime@127.0.0.1:55432/aulalista_test'
-uv run --locked --no-editable uvicorn aulalista_api.app:create_app --factory --host 127.0.0.1 --port 8000 --no-access-log
+uv run --locked --no-editable uvicorn aulalista_api.app:create_app --factory --host 127.0.0.1 --port 8000 --no-access-log --no-proxy-headers
 ```
 
 Después de nuevas migraciones, revisar los grants necesarios antes de arrancar.
-No dar al runtime el rol dueño/superuser. La app nunca crea principales, ámbitos
-ni roles. El rol runtime puede insertar versiones y avanzar la revisión; no puede
+No dar al runtime el rol dueño/superuser. La autenticación válida aprovisiona principal/ámbito de forma idempotente;
+la app nunca crea roles. El rol runtime puede insertar versiones y avanzar la revisión; no puede
 actualizar/eliminar/truncar versiones, cambiar propietario o desactivar triggers.
 Los triggers bloquean además UPDATE/DELETE/TRUNCATE sobre historia aun cuando un
 rol tenga esos privilegios. Un administrador aún puede cambiar el esquema.
@@ -81,7 +90,7 @@ cumplir controles equivalentes antes de usar cualquier dato privado.
 
 - `GET /health/live`: 200 `{"status":"ok"}`, independiente de DB.
 - `GET /health/ready`: 200 sólo con conexión y única revisión
-  `0004_planning_edits`; fallo/timeout/revisión distinta: 503 sin detalle interno.
+  `0005_auth`; fallo/timeout/revisión distinta: 503 sin detalle interno.
 - `AULALISTA_DB_TIMEOUT_SECONDS`: entero 2–30, predeterminado 3. Deadline HTTP de
   readiness completo, incluyendo espera, DNS, conexión y consulta; también fija
   timeouts de driver/servidor. Una sola sonda en vuelo evita acumular hilos.
@@ -219,3 +228,29 @@ fallo diferido de commit, pérdida de respuesta tras commit, recibo aún no visi
 borradores ajenos y sobre base superada, copia idempotente tras conflicto,
 inmutabilidad y fuente/origen coherentes. Los tests frontend son un gate separado;
 identidad real #13 sigue pendiente y runtime permanece cerrado.
+
+
+## Autenticación preparatoria B1
+
+Ver [contrato HTTP y límites](specs/0005-autenticacion-local.md). Sin configuración
+explícita, las operaciones privadas siguen cerradas. No introducir secretos en
+archivos del repo. `.env.example` contiene sólo nombres y marcadores, no valores
+utilizables; no se carga automáticamente. Este corte no permite recibir OTP en
+runtime: EmailSender carece de proveedor. El harness de pruebas es el único que
+inyecta verificador/transporte; nunca se distribuye como mecanismo de acceso.
+
+Google usa google-auth y caché HTTP de certificados con timeout de3segundos.
+No se solicita client secret, refresh token ni acceso a otros servicios Google.
+No se han creado credenciales ni validado servicios externos. La conexión real
+requiere configuración y comprobaciones autorizadas posteriores. La migración
+0005 no concede permisos; revisar/aplicar grants sólo en entorno autorizado.
+Los límites PG son ventanas fijas de hora/minuto, excepto cooldown de reenvío
+exacto60segundos. Purga de filas expiradas y retención se resolverán antes del
+piloto; no se añade tarea programada ni se borra historial ahora.
+
+El arranque local desactiva también `ProxyHeadersMiddleware` con
+`--no-proxy-headers`: Uvicorn confía por defecto en cabeceras reenviadas desde
+loopback, lo que permitiría alterar la IP usada por los límites. Todos los
+launchers del repositorio fijan `proxy_headers=False` o su equivalente CLI.
+No habilitar proxy headers ni publicar detrás de un proxy antes de diseñar y
+probar una frontera de confianza explícita; este incremento sólo usa el peer TCP.

@@ -1,14 +1,35 @@
 # Acenta: interfaz #14 y edición durable #15
 
-React + TypeScript + Vite. La entrada de producción muestra el acceso Acenta,
-con Google/correo todavía pendientes. **El acceso está bloqueado hasta implementar B1**: no existe sesión de
-prueba seleccionable, header de actor, flag demo, envío de correo ni OAuth.
-`AcentaApp` recibe un controller únicamente cuando el futuro bootstrap disponga
-de identidad verificada. El servidor normal sigue respondiendo 401.
+React + TypeScript + Vite. La entrada real recupera la sesión mediante
+`GET /auth/session` antes de abrir un espacio privado. El acceso implementa
+Google Identity Services directo (cliente y nonce de bootstrap) y códigos de
+un uso por correo. [Contrato B1](../docs/specs/0005-autenticacion-local.md).
 
-El código de interfaz y adaptador HTTP para los flujos #14/#15 está implementado;
-las pruebas lo montan con una sesión sintética e interceptan HTTP. Eso no certifica
-autenticación real ni una experiencia completa disponible en producción.
+Este corte es preparatorio: no configura cliente Google, cuentas, credenciales
+ni proveedor de correo. Sin configuración, la interfaz informa indisponibilidad;
+no existen actores seleccionables, identidad por header ni flags demo. El código
+no afirma que un correo se entregó: muestra la respuesta genérica del servidor.
+No solicita consentimiento de marketing ni vincula Google y correo por email.
+
+Las credenciales sólo viajan al endpoint auth de mismo origen. La sesión usa
+cookie HttpOnly; el token CSRF queda en memoria y acompaña escrituras privadas.
+Runtime no almacena sesiones, borradores ni respuestas privadas en localStorage.
+La recarga recupera la autoridad del servidor; recursos y borradores confirmados
+se recuperan desde la biblioteca. El trabajo aún sin guardar conserva su aviso
+antes de salir. Cierre, caducidad y cambio de cuenta eliminan el controlador,
+sus referencias privadas y las respuestas pendientes. El logout fallido oculta
+el espacio y exige reintentar antes de ofrecer cambio de cuenta. La sesión se
+revalida al volver a la pestaña y cada minuto visible, sin alargar su inactividad. Una caída de red, error de servicio o respuesta inválida de esa
+comprobación suspende el espacio y bloquea nuevas peticiones privadas, conservando
+el trabajo pendiente sólo en memoria. La interfaz advierte que no se recargue y
+permite reintentar. Sólo una sesión confirmada idéntica recupera ese buffer; una
+sesión caducada o distinta lo elimina. Nunca se trata un fallo de red como prueba
+de caducidad.
+
+Las pruebas antiguas de #14/#15 conservan fixtures aislados de runtime; no
+acreditan autenticación externa. El harness auth offline sustituye únicamente
+el sender/verificador, usa sesión real y tiene su configuración separada de CI.
+No completa #13 ni habilita producción o documentos reales.
 
 ## Ejecutar y verificar
 

@@ -220,7 +220,7 @@ class PlanningEdits:
         kind = "copy" if copy else "edit"
         digest = fingerprint(kind, planning_id, request)
         with Session(self.engine) as session, session.begin():
-            authorize(session, actor_id, scope_id)
+            actor_id = authorize(session, actor_id, scope_id)
             lock_operation(session, scope_id, operation_id)
             previous = session.scalar(
                 select(PlanningRevision).where(
@@ -301,7 +301,7 @@ class PlanningEdits:
     ):
         digest = fingerprint("draft", planning_id, request, draft_id)
         with Session(self.engine) as session, session.begin():
-            authorize(session, actor_id, scope_id)
+            actor_id = authorize(session, actor_id, scope_id)
             lock_operation(session, scope_id, operation_id, "planning-draft-v1")
             previous = session.scalar(
                 select(PlanningDraftRevision).where(
@@ -378,7 +378,7 @@ class PlanningEdits:
 
     def read_revision(self, actor_id, scope_id, planning_id, number):
         with Session(self.engine) as session, session.begin():
-            authorize(session, actor_id, scope_id)
+            actor_id = authorize(session, actor_id, scope_id)
             revision = exact_revision(session, scope_id, planning_id, number)
             return document(
                 revision, session.get(SourceVersion, revision.source_version_id)
@@ -386,7 +386,7 @@ class PlanningEdits:
 
     def read_draft(self, actor_id, scope_id, *, draft_id=None, operation_id=None):
         with Session(self.engine) as session, session.begin():
-            authorize(session, actor_id, scope_id)
+            actor_id = authorize(session, actor_id, scope_id)
             query = (
                 select(PlanningDraftRevision, PlanningRevision)
                 .join(
@@ -411,7 +411,7 @@ class PlanningEdits:
 
     def list_items(self, actor_id, scope_id, *, drafts=False, after=None, limit=50):
         with Session(self.engine) as session, session.begin():
-            authorize(session, actor_id, scope_id)
+            actor_id = authorize(session, actor_id, scope_id)
             if drafts:
                 query = (
                     select(PlanningDraft, PlanningDraftRevision, PlanningRevision)

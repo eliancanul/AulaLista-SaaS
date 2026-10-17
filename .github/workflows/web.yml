@@ -2,10 +2,10 @@ name: web
 
 on:
   pull_request:
-    paths: ["web/**", "src/**", "migrations/**", "pyproject.toml", "uv.lock", "tests/browser_integration.py", "tests/conftest.py", "tests/test_materials.py", "tests/postgres-init.sql", ".github/workflows/web.yml"]
+    paths: ["web/**", "src/**", "migrations/**", "pyproject.toml", "uv.lock", "tests/browser_integration.py", "tests/auth_browser_integration.py", "tests/test_auth_integration.py", "tests/conftest.py", "tests/test_materials.py", "tests/postgres-init.sql", ".github/workflows/web.yml"]
   push:
     branches: [main]
-    paths: ["web/**", "src/**", "migrations/**", "pyproject.toml", "uv.lock", "tests/browser_integration.py", "tests/conftest.py", "tests/test_materials.py", "tests/postgres-init.sql", ".github/workflows/web.yml"]
+    paths: ["web/**", "src/**", "migrations/**", "pyproject.toml", "uv.lock", "tests/browser_integration.py", "tests/auth_browser_integration.py", "tests/test_auth_integration.py", "tests/conftest.py", "tests/test_materials.py", "tests/postgres-init.sql", ".github/workflows/web.yml"]
 
 permissions:
   contents: read
@@ -85,6 +85,11 @@ jobs:
         if: ${{ !cancelled() && steps.web_dependencies.outcome == 'success' && steps.api_setup.outcome == 'success' && steps.web_build.outcome == 'success' && steps.chromium.outcome == 'success' }}
         working-directory: .
         run: uv run --locked --no-editable pytest tests/browser_integration.py
+      - name: Auth browser through real sessions and PostgreSQL
+        if: ${{ !cancelled() && steps.web_dependencies.outcome == 'success' && steps.api_setup.outcome == 'success' && steps.web_build.outcome == 'success' && steps.chromium.outcome == 'success' }}
+        working-directory: .
+        # Only the email transport is replaced. Never export auth traces/cookies/codes.
+        run: uv run --locked --no-editable pytest tests/auth_browser_integration.py
       - name: Preserve synthetic browser evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
