@@ -266,13 +266,13 @@ test("Planear keeps Planeación and Proyecto without a separate Secuencia action
   await expect(menu).toHaveCount(0);
   await expect(trigger).toBeFocused();
   await expect(input).toHaveValue("Conservar mi petición y contexto");
-  await expect(page.locator(".composer-controls")).toHaveText(context);
+  await expect(page.locator(".composer-controls")).toHaveText(context, { useInnerText: true });
   expect(server.calls).toHaveLength(0);
   await trigger.click();
   await menu.getByRole("button", { name: "Ajustar planeación ↗", exact: true }).click();
   await expect(menu).toHaveCount(0);
   await expect(input).toHaveValue("Hoy tengo 30 minutos. Ajusta los tiempos sin cambiar mis materiales.");
-  await expect(page.locator(".composer-controls")).toHaveText(context);
+  await expect(page.locator(".composer-controls")).toHaveText(context, { useInnerText: true });
   expect(server.calls).toHaveLength(0);
 });
 for (const viewport of [
