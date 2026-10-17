@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import event, select, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 from starlette.requests import Request
@@ -66,6 +67,184 @@ def state(engine):
             ).all(),
             connection.execute(text("SELECT * FROM source_version ORDER BY id")).all(),
         )
+
+
+def test_source_catalog_without_planning_restarts_and_pins_exact_version(
+    runtime_database, actors
+):
+    actor, scope = actors[0]
+    content = bytes(range(256)) + b"\x00 synthetic catalog original"
+    path = f"/scopes/{scope}/sources"
+    with TestClient(actor_app(actor)) as client:
+        empty = client.get(path)
+        assert empty.status_code == 200
+        assert empty.json() == {"items": [], "next_cursor": None}
+        assert empty.headers["cache-control"] == "no-store"
+        saved = create(client, scope, content).json()
+    with TestClient(actor_app(actor)) as restarted:
+        listed = restarted.get(path)
+        assert listed.status_code == 200
+        assert listed.headers["cache-control"] == "no-store"
+        assert listed.json() == {"items": [saved], "next_cursor": None}
+        pinned = listed.json()["items"][0]
+        v2 = append(restarted, scope, pinned["source_id"], content=b"second").json()
+        read = exact(restarted, scope, pinned["source_id"], pinned["number"])
+        assert read.content == content
+        assert len(read.content) == pinned["size"]
+        assert hashlib.sha256(read.content).hexdigest() == pinned["sha256"]
+        assert read.headers["x-version"] == str(pinned["number"])
+        assert read.headers["x-source-id"] == pinned["source_id"]
+        assert restarted.get(path).json() == {"items": [v2], "next_cursor": None}
+    with runtime_database.connect() as connection:
+        assert connection.execute(text("SELECT count(*) FROM planning")).scalar() == 0
+        assert (
+            connection.execute(text("SELECT count(*) FROM planning_draft")).scalar()
+            == 0
+        )
+
+
+def test_source_catalog_paginates_once_per_source_and_never_fetches_content(
+    runtime_database, actors
+):
+    actor, scope = actors[0]
+    other, other_scope = actors[1]
+    service = Materials(runtime_database)
+    saved = [service.write(actor, scope, uuid4(), b"synthetic") for _ in range(7)]
+    service.write(other, other_scope, uuid4(), b"other private synthetic")
+    saved[0] = service.write(
+        actor,
+        scope,
+        uuid4(),
+        b"synthetic v2",
+        source_id=UUID(saved[0]["source_id"]),
+        expected_version=1,
+    )
+    queries = []
+
+    def capture(connection, cursor, statement, parameters, context, executemany):
+        if "source_version" in statement:
+            queries.append(statement)
+
+    event.listen(Engine, "before_cursor_execute", capture)
+    try:
+        with TestClient(actor_app(actor)) as client:
+            after, received = None, []
+            for _ in range(4):
+                response = client.get(
+                    f"/scopes/{scope}/sources",
+                    params={"limit": 2, **({"after": after} if after else {})},
+                )
+                assert response.status_code == 200
+                assert response.headers["cache-control"] == "no-store"
+                page = response.json()
+                assert 1 <= len(page["items"]) <= 2
+                received.extend(page["items"])
+                after = page["next_cursor"]
+                if after:
+                    assert after == page["items"][-1]["source_id"]
+            assert after is None
+            assert received == sorted(saved, key=lambda item: item["source_id"])
+            assert len({item["source_id"] for item in received}) == 7
+            tail = client.get(
+                f"/scopes/{scope}/sources",
+                params={"after": received[-1]["source_id"]},
+            )
+            assert tail.json() == {"items": [], "next_cursor": None}
+    finally:
+        event.remove(Engine, "before_cursor_execute", capture)
+    assert queries
+    # Guard both the API payload and the DB read: no BYTEA or fingerprint load.
+    for query in queries:
+        columns = query.split("FROM", 1)[0]
+        assert "source_version.content," not in columns
+        assert "source_version.content " not in columns
+        assert "source_version.request_fingerprint" not in columns
+
+
+def test_source_catalog_page_limit_default_and_maximum(runtime_database, actors):
+    actor, scope = actors[0]
+    service = Materials(runtime_database)
+    for _ in range(101):
+        service.write(actor, scope, uuid4(), b"synthetic page boundary")
+    with TestClient(actor_app(actor)) as client:
+        path = f"/scopes/{scope}/sources"
+        default = client.get(path).json()
+        maximum = client.get(path, params={"limit": 100}).json()
+        assert len(default["items"]) == 50
+        assert default["next_cursor"] == default["items"][-1]["source_id"]
+        assert len(maximum["items"]) == 100
+        assert maximum["next_cursor"] == maximum["items"][-1]["source_id"]
+        final = client.get(
+            path, params={"limit": 100, "after": maximum["next_cursor"]}
+        ).json()
+        assert len(final["items"]) == 1
+        assert final["next_cursor"] is None
+
+
+def test_source_catalog_invalid_and_foreign_cursors_are_controlled(
+    runtime_database, actors
+):
+    actor, scope = actors[0]
+    other, other_scope = actors[1]
+    foreign = Materials(runtime_database).write(
+        other, other_scope, uuid4(), b"other synthetic"
+    )
+    with TestClient(actor_app(actor)) as client:
+        for after in ("", "invalid", "a" * 5000, str(uuid4()), foreign["source_id"]):
+            response = client.get(f"/scopes/{scope}/sources", params={"after": after})
+            assert response.status_code == 422
+            assert response.json() == {"detail": "invalid_request"}
+            assert response.headers["cache-control"] == "no-store"
+        for limit in (0, -1, 101, "invalid", "9" * 5000):
+            response = client.get(f"/scopes/{scope}/sources", params={"limit": limit})
+            assert response.status_code == 422
+            assert response.json() == {"detail": "invalid_request"}
+            assert response.headers["cache-control"] == "no-store"
+        # Authorize the scope first; valid UUID cursors must not be an oracle.
+        for target in (other_scope, uuid4()):
+            for after in (str(uuid4()), foreign["source_id"]):
+                response = client.get(
+                    f"/scopes/{target}/sources", params={"after": after}
+                )
+                assert response.status_code == 404
+                assert response.json() == {"detail": "not_found"}
+                assert response.headers["cache-control"] == "no-store"
+            # HTTP syntax checks do not query scope/cursor existence. Both an
+            # existing foreign scope and a nonexistent one get the same 422.
+            for params in ({"after": "invalid"}, {"limit": 0}):
+                response = client.get(f"/scopes/{target}/sources", params=params)
+                assert response.status_code == 422
+                assert response.json() == {"detail": "invalid_request"}
+                assert response.headers["cache-control"] == "no-store"
+        assert client.get(f"/scopes/{scope}/sources").json() == {
+            "items": [],
+            "next_cursor": None,
+        }
+
+
+def test_source_catalog_revalidates_scope_and_bounds_at_service_boundary(
+    runtime_database, actors
+):
+    actor, scope = actors[0]
+    other, other_scope = actors[1]
+    service = Materials(runtime_database)
+    saved = service.write(actor, scope, uuid4(), b"synthetic")
+    for call, status in [
+        (lambda: service.list_sources(other, scope), 404),
+        (
+            lambda: service.list_sources(
+                other, other_scope, after=UUID(saved["source_id"])
+            ),
+            422,
+        ),
+        (lambda: service.list_sources(actor, scope, limit=0), 422),
+        (lambda: service.list_sources(actor, scope, limit=101), 422),
+        (lambda: service.list_sources(actor, scope, limit=True), 422),
+        (lambda: service.list_sources(actor, scope, after="invalid"), 422),
+    ]:
+        with pytest.raises(MaterialError) as error:
+            call()
+        assert error.value.status == status
 
 
 def test_http_restarts_preserve_bytes_metadata_and_immutable_history(
@@ -225,6 +404,9 @@ def test_new_app_never_accepts_client_identity(runtime_database, actors, monkeyp
         )
         responses = [
             create(client, scope),
+            client.get(f"/scopes/{scope}/sources"),
+            client.get(f"/scopes/{scope}/sources", params={"after": "invalid"}),
+            client.get(f"/scopes/{scope}/sources", params={"limit": 0}),
             append(client, scope, saved["source_id"]),
             exact(client, scope, saved["source_id"]),
             operation(client, scope, saved["operation_id"]),

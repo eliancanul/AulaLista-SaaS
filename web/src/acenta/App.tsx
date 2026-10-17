@@ -18,6 +18,7 @@ import {
   waterContext,
   waterSource,
   sourceSamples,
+  knownSourceSample,
   type PlanningDocument,
   type Resource,
 } from "./contracts";
@@ -805,6 +806,9 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
             <p className="secondary">
               Originales, revisiones y copias de trabajo de esta cuenta.
             </p>
+            <p className="secondary">
+              Abrir un original conserva tu petición y no lo adjunta al próximo envío.
+            </p>
             {s.listState === "loading" && (
               <p role="status">Recuperando recursos…</p>
             )}
@@ -813,8 +817,29 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
                 Reintentar listado
               </button>
             )}
-            {s.listState === "ready" && !s.items.length && !s.drafts.length && (
-              <p>No hay recursos todavía. Ajusta el ejemplo para empezar.</p>
+            {s.listState === "ready" && !s.sources.length && !s.items.length && !s.drafts.length && (
+              <p>No hay recursos todavía. Adjunta un ejemplo para empezar.</p>
+            )}
+            {s.sources.map((source) => (
+              <article key={source.source_id} className="library-card" aria-label={`Recurso original · Versión ${source.number}`}>
+                <h2>{knownSourceSample(source.sha256)?.name ?? "Recurso original"}</h2>
+                <p>Original conservado · Versión {source.number} · {source.size} bytes</p>
+                <p className="field-hint">
+                  Conservado el <time dateTime={source.created_at}>{new Date(source.created_at).toLocaleString("es-MX")}</time>
+                </p>
+                <p className="original-metadata">Fuente: {source.source_id}</p>
+                <p className="original-metadata">SHA-256: {source.sha256}</p>
+                <button
+                  className="primary"
+                  data-navigation-focus={`source-${source.source_id}`}
+                  onClick={() => void controller.openOriginal(source)}
+                >
+                  Abrir original
+                </button>
+              </article>
+            ))}
+            {s.listState === "ready" && !!s.sources.length && !s.items.length && !s.drafts.length && (
+              <p>Aún no hay copias ni borradores guardados.</p>
             )}
             {s.items.map((doc) => (
               <article key={doc.receipt.planning_id} className="library-card">
@@ -873,8 +898,8 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
                 </button>
               </article>
             ))}
-            {(s.cursor || s.draftCursor) && (
-              <button onClick={() => void controller.loadResources(true)}>
+            {(s.cursor || s.draftCursor || s.sourceCursor) && (
+              <button disabled={s.listState === "loading"} onClick={() => void controller.loadResources(true)}>
                 Ver más recursos
               </button>
             )}
@@ -900,17 +925,17 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
       </main>
       {s.original && (
         <Dialog
-          title="Original de ejemplo"
+          title={knownSourceSample(s.original.reference.sha256) ? "Original de ejemplo" : "Recurso original"}
           className="original-dialog"
           onClose={() => controller.closeOriginal()}
         >
           <header>
-            <h2>Original de ejemplo</h2>
+            <h2>{knownSourceSample(s.original.reference.sha256) ? "Original de ejemplo" : "Recurso original"}</h2>
             <button onClick={() => controller.closeOriginal()}>Cerrar</button>
           </header>
           <div className="original-body">
             <p className="secondary">
-              Texto UTF-8 sintético · Versión {s.original.reference.number}
+              {knownSourceSample(s.original.reference.sha256) ? "Texto UTF-8 sintético · " : ""}Versión {s.original.reference.number}
             </p>
             <p className="original-metadata">
               Fuente: {s.original.reference.source_id}

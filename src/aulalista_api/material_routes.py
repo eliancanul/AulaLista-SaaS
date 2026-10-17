@@ -86,6 +86,18 @@ def install_material_routes(app: FastAPI, engine: Engine) -> None:
             headers={"Cache-Control": "no-store"},
         )
 
+    @app.get("/scopes/{scope_id}/sources")
+    def list_sources(
+        scope_id: UUID,
+        actor: Actor,
+        after: UUID | None = None,
+        limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    ):
+        return JSONResponse(
+            materials.list_sources(actor, scope_id, after=after, limit=limit),
+            headers={"Cache-Control": "no-store"},
+        )
+
     @app.post("/scopes/{scope_id}/sources", status_code=201)
     async def create_source(
         scope_id: UUID, actor: Actor, operation: Operation, request: Request

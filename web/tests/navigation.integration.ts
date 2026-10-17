@@ -7,7 +7,7 @@ test("real library pages survive history with private editing, focus and narrow 
   await page.goto("/tests/acenta-api.html");
   const url = page.url();
   await page.getByRole("button", { name: "Mis recursos", exact: true }).first().click();
-  await expect(page.getByText("No hay recursos todavía. Ajusta el ejemplo para empezar.")).toBeVisible();
+  await expect(page.getByText("No hay recursos todavía. Adjunta un ejemplo para empezar.")).toBeVisible();
   await page.getByRole("button", { name: "Volver a la petición" }).click();
   await page.getByRole("button", { name: "Adjuntar referencia", exact: true }).click();
   const sourceResponse = page.waitForResponse(r => r.request().method() === "POST" && new URL(r.url()).pathname.endsWith("/sources"));

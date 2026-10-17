@@ -42,6 +42,7 @@ def test_health_and_fail_closed_material_routes_are_registered(client):
         ("/auth/email/verify", {"POST"}),
         ("/auth/session", {"GET"}),
         ("/auth/logout", {"POST"}),
+        ("/scopes/{scope_id}/sources", {"GET"}),
         ("/scopes/{scope_id}/sources", {"POST"}),
         ("/scopes/{scope_id}/sources/{source_id}/versions", {"POST"}),
         ("/scopes/{scope_id}/sources/{source_id}/versions/{number}", {"GET"}),

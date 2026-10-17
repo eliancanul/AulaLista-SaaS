@@ -410,6 +410,31 @@ export class AcentaApi {
   async sourceOperation(key: string) {
     return this.source(await this.request(`operations/${this.id(key)}`), key);
   }
+  async listSources(cursor?: string, limit = 50): Promise<Page<SourceReceipt>> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100)
+      throw new ApiError(422, "invalid_request");
+    const v = await this.request(
+      `sources?${cursor === undefined ? "" : `after=${this.id(cursor)}&`}limit=${limit}`,
+    );
+    assert(
+      object(v) && Array.isArray(v.items) && v.items.length <= limit &&
+      (v.next_cursor === null || isUuid(v.next_cursor)),
+    );
+    let previous = cursor?.toLowerCase() ?? "";
+    const items = v.items.map((value) => {
+      const receipt = parseSource(value);
+      this.scoped(receipt);
+      assert(receipt.size > 0 && receipt.size <= 65536);
+      // Source UUID order is the backend keyset contract, not creation-date order.
+      const id = receipt.source_id.toLowerCase();
+      assert(id > previous);
+      previous = id;
+      return receipt;
+    });
+    assert(v.next_cursor === null ||
+      (items.length > 0 && v.next_cursor === items.at(-1)!.source_id));
+    return { items, next_cursor: v.next_cursor };
+  }
   async create(payload: PlanningRequest, key: string) {
     return this.planning(
       await this.request("plannings", "POST", payload, key, false, 4096),

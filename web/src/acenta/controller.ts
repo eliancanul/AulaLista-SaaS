@@ -102,9 +102,11 @@ export interface State {
   editor: EditorState | null;
   items: PlanningDocument[];
   drafts: DraftDocument[];
+  sources: SourceReceipt[];
   listState: "idle" | "loading" | "ready" | "error";
   cursor: string | null;
   draftCursor: string | null;
+  sourceCursor: string | null;
   pending: CreateIntent | null;
   backupError: boolean;
   closed: boolean;
@@ -128,9 +130,11 @@ const fresh = (): State => ({
   editor: null,
   items: [],
   drafts: [],
+  sources: [],
   listState: "idle",
   cursor: null,
   draftCursor: null,
+  sourceCursor: null,
   pending: null,
   backupError: false,
   closed: false,
@@ -516,12 +520,20 @@ export class AcentaController {
       const selected = !intent.cancelled;
       this.selections[sample.id] = source;
       this.sourceIntent = null;
+      // A newly confirmed source must be discoverable even after an earlier empty visit.
+      // Revisions do not invalidate the catalog: its existing cards stay pinned until refresh.
+      if (!intent.base) {
+        this.listGeneration++;
+        this.listLoaded = false;
+      }
       this.emit({
         sourceName: selected ? sample.name : this.state.sourceName,
         source: selected ? source : this.state.source,
         attaching: false,
         sourcePending: false,
+        ...(!intent.base ? { listState: "idle" as const } : {}),
       });
+      if (!intent.base && this.state.view === "resources") void this.loadResources();
       return selected;
     } catch (e) {
       if (!this.state.closed) {
@@ -1072,7 +1084,7 @@ export class AcentaController {
     const generation = ++this.listGeneration;
     this.emit({ listState: "loading", error: "" });
     try {
-      const [page, drafts] = await Promise.all([
+      const [page, drafts, sources] = await Promise.all([
         more && !this.state.cursor
           ? Promise.resolve({ items: [], next_cursor: null })
           : this.api.list(more ? (this.state.cursor ?? undefined) : undefined),
@@ -1081,14 +1093,21 @@ export class AcentaController {
           : this.api.listDrafts(
               more ? (this.state.draftCursor ?? undefined) : undefined,
             ),
+        more && !this.state.sourceCursor
+          ? Promise.resolve({ items: [], next_cursor: null })
+          : this.api.listSources(
+              more ? (this.state.sourceCursor ?? undefined) : undefined,
+            ),
       ]);
       if (this.state.closed || generation !== this.listGeneration) return;
       this.listLoaded = true;
       this.emit({
           items: more ? [...this.state.items, ...page.items] : page.items,
           drafts: more ? [...this.state.drafts, ...drafts.items] : drafts.items,
+          sources: more ? [...this.state.sources, ...sources.items] : sources.items,
           cursor: page.next_cursor,
           draftCursor: drafts.next_cursor,
+          sourceCursor: sources.next_cursor,
           listState: "ready",
         });
     } catch (e) {

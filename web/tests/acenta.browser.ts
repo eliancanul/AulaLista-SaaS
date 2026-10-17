@@ -717,12 +717,12 @@ test("library failure is distinct from empty and retry clears the error", async 
     page.getByRole("button", { name: "Reintentar listado" }),
   ).toBeVisible();
   await expect(
-    page.getByText("No hay recursos todavía. Ajusta el ejemplo para empezar."),
+    page.getByText("No hay recursos todavía. Adjunta un ejemplo para empezar."),
   ).toHaveCount(0);
   server.before = null;
   await page.getByRole("button", { name: "Reintentar listado" }).click();
   await expect(
-    page.getByText("No hay recursos todavía. Ajusta el ejemplo para empezar."),
+    page.getByText("No hay recursos todavía. Adjunta un ejemplo para empezar."),
   ).toBeVisible();
   await expect(page.getByRole("alert")).toHaveCount(0);
 });

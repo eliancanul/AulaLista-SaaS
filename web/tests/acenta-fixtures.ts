@@ -155,6 +155,21 @@ export class FixtureServer {
       return this.sources.has(path.split("/")[1])
         ? json(this.sources.get(path.split("/")[1]))
         : missing();
+    if ((path === "sources" || path.startsWith("sources?")) && method === "GET") {
+      const query = new URLSearchParams(path.split("?")[1]);
+      const after = query.get("after") ?? "";
+      const limit = Number(query.get("limit") ?? 50);
+      const current = new Map<string, SourceReceipt>();
+      for (const receipt of this.sources.values()) {
+        const previous = current.get(receipt.source_id);
+        if (!previous || receipt.number > previous.number)
+          current.set(receipt.source_id, receipt);
+      }
+      const all = [...current.values()].filter((r) => r.source_id > after)
+        .sort((a, b) => a.source_id.localeCompare(b.source_id));
+      const items = all.slice(0, limit);
+      return json({ items, next_cursor: all.length > limit ? items.at(-1)!.source_id : null });
+    }
     if (path.startsWith("planning-operations/"))
       return this.operations.has(path.split("/")[1])
         ? json(this.operations.get(path.split("/")[1]))

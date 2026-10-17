@@ -17,7 +17,7 @@ from sqlalchemy import (
     update,
 )
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import Mapped, Session, mapped_column
+from sqlalchemy.orm import Mapped, Session, load_only, mapped_column
 
 from aulalista_api.database import Base, PersonalScope
 
@@ -117,6 +117,63 @@ def authorize(session: Session, actor_id, scope_id: UUID) -> UUID:
 class Materials:
     def __init__(self, engine: Engine):
         self.engine = engine
+
+    def list_sources(
+        self,
+        actor_id: UUID,
+        scope_id: UUID,
+        *,
+        after: UUID | None = None,
+        limit: int = 50,
+    ) -> dict:
+        with Session(self.engine) as session, session.begin():
+            actor_id = authorize(session, actor_id, scope_id)
+            if type(limit) is not int or not 1 <= limit <= 100:
+                raise MaterialError(422, "invalid_request")
+            if after is not None and (
+                not isinstance(after, UUID)
+                or session.scalar(
+                    select(Source.id).where(
+                        Source.scope_id == scope_id, Source.id == after
+                    )
+                )
+                is None
+            ):
+                # An unrecognized boundary and another scope's ID are indistinguishable.
+                raise MaterialError(422, "invalid_request")
+            query = (
+                select(SourceVersion)
+                .join(
+                    Source,
+                    (SourceVersion.source_id == Source.id)
+                    & (SourceVersion.scope_id == Source.scope_id)
+                    & (SourceVersion.number == Source.current_version),
+                )
+                .where(Source.scope_id == scope_id)
+                .options(
+                    load_only(
+                        SourceVersion.id,
+                        SourceVersion.source_id,
+                        SourceVersion.scope_id,
+                        SourceVersion.number,
+                        SourceVersion.content_sha256,
+                        SourceVersion.size,
+                        SourceVersion.actor_id,
+                        SourceVersion.created_at,
+                        SourceVersion.operation_id,
+                        raiseload=True,
+                    )
+                )
+            )
+            if after is not None:
+                query = query.where(Source.id > after)
+            versions = session.scalars(query.order_by(Source.id).limit(limit + 1)).all()
+            return {
+                "items": [receipt(version) for version in versions[:limit]],
+                "next_cursor": str(versions[limit - 1].source_id)
+                if len(versions) > limit
+                else None,
+            }
 
     def write(
         self,
