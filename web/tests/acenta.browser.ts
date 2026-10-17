@@ -236,6 +236,45 @@ test("home geometry, modal inertia, keyboard and sidebar preserve input", async 
   expect((await input.boundingBox())!.height).toBeLessThanOrEqual(160);
   await page.screenshot({ path: `${evidence}/home-multiline-1440.png` });
 });
+test("Planear keeps Planeación and Proyecto without a separate Secuencia action", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 924 });
+  const server = await mount(page);
+  const input = page.getByLabel("Petición para tu clase");
+  await input.fill("Conservar mi petición y contexto");
+  const context = await page.locator(".composer-controls").innerText();
+  const trigger = page.getByRole("button", { name: "Más herramientas" });
+  await trigger.focus();
+  await page.keyboard.press("Enter");
+  const menu = page.getByRole("dialog", { name: "Herramientas" });
+  await expect(menu.getByRole("button", { name: "Cerrar", exact: true })).toBeFocused();
+  await expect(menu.getByRole("tab", { name: "Planear", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(menu.locator(".catalog-items > p")).toHaveText([
+    "Planeación de clase, todavía no disponible",
+    "Proyecto de aula, todavía no disponible",
+  ]);
+  await expect(menu.getByText("Secuencia didáctica", { exact: true })).toHaveCount(0);
+  await expect(menu.locator(".catalog-items button, .catalog-items a, .catalog-items input, .catalog-items img")).toHaveCount(0);
+  await expect(menu.getByText("Catálogo propuesto · herramientas futuras", { exact: true })).toBeVisible();
+  await expect(menu.getByRole("button")).toHaveText([
+    "Cerrar", "Ajustar planeación ↗", "Revisar recurso ↗",
+  ]);
+  await page.evaluate(() => document.fonts.ready);
+  await page.screenshot({ path: `${evidence}/tools-planeacion-secuencia-1440x924.png` });
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  await expect(input).toHaveValue("Conservar mi petición y contexto");
+  await expect(page.locator(".composer-controls")).toHaveText(context, { useInnerText: true });
+  expect(server.calls).toHaveLength(0);
+  await trigger.click();
+  await menu.getByRole("button", { name: "Ajustar planeación ↗", exact: true }).click();
+  await expect(menu).toHaveCount(0);
+  await expect(input).toHaveValue("Hoy tengo 30 minutos. Ajusta los tiempos sin cambiar mis materiales.");
+  await expect(page.locator(".composer-controls")).toHaveText(context, { useInnerText: true });
+  expect(server.calls).toHaveLength(0);
+});
 for (const viewport of [
   { width: 1440, height: 924 },
   { width: 1470, height: 762 },
