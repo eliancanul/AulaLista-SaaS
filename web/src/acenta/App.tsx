@@ -153,7 +153,7 @@ function AccountLinks() {
   );
 }
 const toolCatalog: Record<string, string[]> = {
-  Planear: ["Planeación de clase", "Secuencia didáctica", "Proyecto de aula"],
+  Planear: ["Planeación de clase", "Proyecto de aula"],
   Materiales: [
     "Hoja de actividades",
     "Preguntas sobre un texto",

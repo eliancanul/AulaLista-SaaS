@@ -143,7 +143,8 @@ Contratos: [B2](../docs/tickets/B2-resultado-simulado.md) y
   de borrador confirmado y su revisión; un valor corrupto no autoriza descartarlo.
   El cambio/cierre de sesión elimina el estado privado visible y descarta callbacks
   tardíos, conservando su respaldo bajo la cuenta original.
-- Los 14 títulos del catálogo se identifican como herramientas futuras. Búsqueda,
+- Las 13 entradas del catálogo se identifican como herramientas futuras;
+  Secuencia didáctica se incluye dentro de Planeación de clase. Búsqueda,
   nueva conversación, ajustes y micrófono están pendientes. No hay generación
   libre, interpretación documental ni validación NEM/curricular declarada.
 
