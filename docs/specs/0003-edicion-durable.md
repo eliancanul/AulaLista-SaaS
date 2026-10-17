@@ -205,3 +205,13 @@ en vuelo, reabrir desde nueva app, FK de origen/fuente, grants y migración.
 Evidencia local y revisión independiente se registran con el candidato exacto en
 el PR. Las pruebas backend no acreditan UI visual, identidad real, recuperación
 de navegador por cuenta, CI remota, calidad curricular ni aptitud de producción.
+
+
+## Respaldo de recarga en la misma sesión (incremento parcial #15)
+
+El [contrato acotado](../../web/README.md#respaldo-temporal-de-edición-b3-15-corte-parcial)
+añade un único envelope mínimo en sessionStorage, TTL fijo recuperable de hasta24h,
+base autenticada exacta y pending B3 idéntico. Ninguna mutación ocurre al restaurar.
+El ID nullable de sesión se define en [0005](0005-autenticacion-local.md); no otorga
+autoridad ni permite recuperar tras401/relogin. Limpieza física es best effort,
+fallos visibles y datos locales en claro. No cubre fuentes/creaciónB2 ni cierra#15.

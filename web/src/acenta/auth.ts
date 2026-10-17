@@ -1,3 +1,4 @@
+import { EditorRecovery, uncertainPurgeNotice } from "./editor-recovery";
 import { AcentaApi, ApiError, isUuid, type Transport } from "./api";
 import { AcentaController } from "./controller";
 
@@ -5,6 +6,7 @@ export interface AuthSession {
   principal_id: string;
   scope_id: string;
   csrf_token: string;
+  recovery_context_id: string | null;
 }
 export interface Bootstrap {
   csrf_token: string;
@@ -20,13 +22,15 @@ export function parseSession(v: unknown): AuthSession {
     !isUuid(v.principal_id) ||
     !isUuid(v.scope_id) ||
     typeof v.csrf_token !== "string" ||
-    !v.csrf_token
+    !v.csrf_token ||
+    !(v.recovery_context_id === undefined || v.recovery_context_id === null || isUuid(v.recovery_context_id))
   )
     throw new ApiError(0, "invalid_response");
   return {
     principal_id: v.principal_id,
     scope_id: v.scope_id,
     csrf_token: v.csrf_token,
+    recovery_context_id: (v.recovery_context_id as string | null | undefined) ?? null,
   };
 }
 export class AuthApi {
@@ -140,8 +144,9 @@ interface AuthState {
   busy: boolean;
   challenge: { challenge_id: string; message: string } | null;
   error: string;
+  recoveryWarning: string;
 }
-/** Owns all account-specific state. No credentials or private cache in browser storage. */
+/** Owns authority and the private-view gate. Credentials never enter browser storage. */
 export class AuthController {
   private state: AuthState = {
     workspaceVersion: 0,
@@ -151,13 +156,17 @@ export class AuthController {
     busy: false,
     challenge: null,
     error: "",
+    recoveryWarning: "",
   };
   private listeners = new Set<() => void>();
   private generation = 0;
   private session: AuthSession | null = null;
   private logoutSession: AuthSession | null = null;
   private checking = false;
-  constructor(readonly api = new AuthApi()) {}
+  private recovering = false;
+  private inactive = false;
+  private visibilityEpoch = 0;
+  constructor(readonly api = new AuthApi(), readonly recovery = new EditorRecovery()) {}
   snapshot = () => this.state;
   subscribe = (fn: () => void) => {
     this.listeners.add(fn);
@@ -166,45 +175,53 @@ export class AuthController {
     };
   };
   private emit(patch: Partial<AuthState>) {
-    this.state = { ...this.state, ...patch };
+    this.state = { ...this.state, ...patch, recoveryWarning: this.recovery.warning };
     for (const fn of this.listeners) fn();
   }
-  private clear() {
+  private clear(purge = true) {
     this.state.controller?.closeSession();
+    if (purge) this.recovery.purge();
+    this.recovering = false;
     this.session = null;
     this.emit({ controller: null, bootstrap: null, challenge: null });
   }
-  private accept(session: AuthSession) {
-    this.clear();
+  private async accept(session: AuthSession, generation: number, restore = false) {
+    const uncertain = !!this.state.controller?.snapshot().editor?.pending || !!this.recovery.candidate?.pending;
+    this.clear(!restore);
     this.session = session;
     const transport: Transport = async (input, init) => {
-      // Old controllers cannot issue new requests after an account change.
       if (this.session !== session) throw new ApiError(401, "unauthorized");
-      if (this.state.phase !== "ready")
+      if (this.state.phase !== "ready" && !(this.recovering && (!init?.method || init.method === "GET")))
         throw new ApiError(0, "session_unconfirmed");
+      const epoch=this.generation;
       const headers = new Headers(init?.headers);
-      if (init?.method && init.method !== "GET")
-        headers.set("X-CSRF-Token", session.csrf_token);
+      if (init?.method && init.method !== "GET") headers.set("X-CSRF-Token", session.csrf_token);
       const response = await this.api.transport(input, { ...init, headers });
-      if (
-        (response.status === 401 || response.status === 403) &&
-        this.session === session
-      )
-        void this.expire();
+      if (epoch !== this.generation || this.session !== session) throw new ApiError(0,"session_unconfirmed");
+      if (response.status === 401 || response.status === 403) void this.expire();
       return response;
     };
-    this.emit({
-      phase: "ready",
-      workspaceVersion: this.state.workspaceVersion + 1,
-      busy: false,
-      error: "",
-      controller: new AcentaController(
-        new AcentaApi(
-          { actorId: session.principal_id, scopeId: session.scope_id },
-          transport,
-        ),
-      ),
-    });
+    this.recovery.admit(session, restore);
+    if (uncertain) this.recovery.warning = [this.recovery.warning, uncertainPurgeNotice].filter(Boolean).join(" ");
+    const controller=new AcentaController(new AcentaApi({actorId:session.principal_id,scopeId:session.scope_id},transport),null,crypto.randomUUID(),this.recovery);
+    this.emit({phase:"loading", controller, workspaceVersion:this.state.workspaceVersion+1, busy:true, error:""});
+    this.recovering=true;
+    await controller.restoreRecovery();
+    if (generation !== this.generation || this.session !== session) return;
+    this.recovering=false;
+    this.emit({phase:"ready",busy:false});
+  }
+  private async acceptLogin(session: AuthSession, generation: number, visibilityEpoch: number) {
+    if (this.inactive || visibilityEpoch !== this.visibilityEpoch) {
+      // A login may finish while the email app is open. Keep its authority gated
+      // until a fresh session check, without repeating the single-use submission.
+      this.clear();
+      this.session = session;
+      this.emit({ phase: "suspended", busy: false, error: "Comprueba tu sesión para continuar." });
+      if (!this.inactive) await this.revalidate(true);
+      return;
+    }
+    await this.accept(session, generation);
   }
   async start() {
     if (this.logoutSession) return;
@@ -213,19 +230,21 @@ export class AuthController {
       return;
     }
     const generation = ++this.generation;
-    this.clear();
+    this.clear(false);
+    this.checking=true;
     this.emit({ phase: "loading", busy: true, error: "" });
     try {
       const session = await this.api.session();
-      if (generation === this.generation) this.accept(session);
+      if (generation === this.generation) await this.accept(session, generation, true);
     } catch (error) {
       if (generation !== this.generation) return;
-      if (!(error instanceof ApiError) || error.status !== 401) {
+      if (!(error instanceof ApiError) || ![401,403].includes(error.status)) {
         this.emit({ phase: "access", busy: false, error: authMessage(error) });
         return;
       }
+      this.recovery.purge(true);
       await this.prepare(generation);
-    }
+    } finally { if (generation === this.generation) this.checking=false; }
   }
   private async prepare(generation: number) {
     try {
@@ -238,47 +257,65 @@ export class AuthController {
     }
   }
   async expire() {
+    this.checking=false;
     const generation = ++this.generation;
     this.clear();
     this.emit({
       phase: "access",
       busy: true,
-      error: "Tu sesión ha terminado. Vuelve a entrar.",
+      error: `Tu sesión ha terminado. Vuelve a entrar. ${uncertainPurgeNotice}`,
     });
     await this.prepare(generation);
   }
-  async revalidate() {
-    if (
-      !this.session ||
-      this.checking ||
-      !["ready", "suspended"].includes(this.state.phase)
-    )
+  suspend() {
+    this.inactive = true;
+    this.visibilityEpoch++;
+    if (this.logoutSession) return; // Already hidden; do not interrupt revocation confirmation.
+    if (!["ready","suspended","loading"].includes(this.state.phase)) return;
+    this.generation++;
+    this.checking=false;
+    this.recovering=false;
+    this.state.controller?.suspend();
+    this.emit({phase:"suspended",busy:false,error:"Comprueba tu sesión para continuar."});
+  }
+  async revalidate(activation = false) {
+    if (this.logoutSession) return;
+    if (activation && this.state.phase === "ready") this.suspend();
+    this.inactive = false;
+    if (this.checking) return;
+    if (!this.session) {
+      if (["loading","suspended"].includes(this.state.phase)) await this.start();
       return;
-    this.checking = true;
-    const session = this.session;
-    try {
-      const current = await this.api.session();
-      if (this.session !== session) return;
-      if (
-        current.principal_id !== session.principal_id ||
-        current.scope_id !== session.scope_id ||
-        current.csrf_token !== session.csrf_token
-      )
-        this.accept(current);
-      else this.emit({ phase: "ready", error: "" });
-    } catch (error) {
-      if (this.session !== session) return;
-      if (error instanceof ApiError && error.status === 401)
-        await this.expire();
-      else
-        this.emit({
-          phase: "suspended",
-          error:
-            "No pudimos comprobar tu sesión. Conservamos tu trabajo pendiente en esta pestaña; vuelve a intentarlo sin recargarla.",
-        });
-    } finally {
-      this.checking = false;
     }
+    if (!["ready","suspended"].includes(this.state.phase)) return;
+    this.checking=true;
+    const session=this.session, generation=this.generation;
+    // Activation closes the gate; periodic observation keeps a confirmed workspace mounted.
+    if (this.state.phase === "suspended") this.emit({error:"Comprobando tu sesión…"});
+    try {
+      const current=await this.api.session();
+      if (this.session !== session || generation !== this.generation) return;
+      if (!this.state.controller || current.principal_id !== session.principal_id || current.scope_id !== session.scope_id || current.csrf_token !== session.csrf_token || current.recovery_context_id !== session.recovery_context_id) {
+        await this.accept(current,generation);
+      } else if (this.state.phase === "ready") {
+        this.emit({error:""});
+      } else {
+        const controller=this.state.controller;
+        controller?.resume();
+        this.recovering=true;
+        await controller?.restoreRecovery();
+        if (this.session !== session || generation !== this.generation) return;
+        this.recovering=false;
+        this.emit({phase:"ready",error:"",busy:false});
+      }
+    } catch(error) {
+      if (this.session !== session || generation !== this.generation) return;
+      if (error instanceof ApiError && [401,403].includes(error.status)) await this.expire();
+      else {
+        this.suspend();
+        this.emit({phase:"suspended",busy:false,error:"No pudimos comprobar tu sesión. Conservamos tu trabajo pendiente en esta pestaña; vuelve a intentarlo sin recargarla."});
+      }
+    } finally { if (generation === this.generation) { this.checking=false; this.recovering=false; } }
   }
   async requestCode(email: string) {
     const bootstrap = this.state.bootstrap;
@@ -311,7 +348,7 @@ export class AuthController {
       (method === "google" && !bootstrap.google_client_id)
     )
       return;
-    const generation = this.generation;
+    const generation = this.generation, visibilityEpoch = this.visibilityEpoch;
     this.emit({ busy: true, error: "" });
     try {
       const session =
@@ -322,7 +359,7 @@ export class AuthController {
               value,
               bootstrap.csrf_token,
             );
-      if (generation === this.generation) this.accept(session);
+      if (generation === this.generation) await this.acceptLogin(session, generation, visibilityEpoch);
     } catch (error) {
       if (generation !== this.generation) return;
       // A lost login response can still have installed the HttpOnly session cookie.
@@ -330,7 +367,7 @@ export class AuthController {
       if (error instanceof ApiError && error.uncertain) {
         try {
           const session = await this.api.session();
-          if (generation === this.generation) this.accept(session);
+          if (generation === this.generation) await this.acceptLogin(session, generation, visibilityEpoch);
           return;
         } catch {
           /* Remain anonymous if the server cannot confirm authority. */
@@ -355,10 +392,14 @@ export class AuthController {
   async logout() {
     const session = this.session ?? this.logoutSession;
     if (this.state.busy || !session) return;
+    const uncertain = !!this.state.controller?.snapshot().editor?.pending || !!this.recovery.candidate?.pending;
     this.logoutSession = session;
     this.session = null;
     const generation = ++this.generation;
     this.state.controller?.closeSession();
+    this.recovery.purge(uncertain);
+    this.recovering=false;
+    this.checking=false;
     this.emit({
       phase: "loading",
       controller: null,

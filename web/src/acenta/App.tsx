@@ -377,6 +377,8 @@ function Editor({
               />
             </section>
             <section className="elements-column">
+              {s.recoveryEnabled && <p className="field-hint">El respaldo queda en claro en este navegador. Puede recuperar esta edición en la misma sesión durante un máximo de 24 horas. Al guardar intentamos borrarlo; no se recupera al volver a entrar.</p>}
+              {s.recoveryWarning && <p role="alert">{s.recoveryWarning}</p>}
               <h3>
                 Elementos de la actividad · {resource.elements.length} elementos
               </h3>
@@ -925,6 +927,11 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
             {s.error}
           </p>
         )}
+        {s.recoveryWarning && <p className="workspace-error" role="alert">{s.recoveryWarning}</p>}
+        {(s.recoveryAvailable || s.recoveryWarning) && <div>
+          {s.recoveryAvailable && <button onClick={() => void controller.restoreRecovery()}>Reintentar recuperar edición</button>}
+          <button onClick={() => controller.discardRecovery()}>Descartar respaldo de este navegador</button>
+        </div>}
         {s.backupError && (
           <p className="workspace-error" role="alert">
             No se pudo guardar el respaldo local. Mantén esta pestaña abierta y
