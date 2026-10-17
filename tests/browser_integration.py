@@ -79,7 +79,7 @@ def run_process_group(command, *, timeout, **kwargs):
         process.wait(timeout=5)
 
 
-@pytest.mark.parametrize("journey", ["acenta", "draft", "copy", "original"])
+@pytest.mark.parametrize("journey", ["acenta", "draft", "copy", "original", "navigation"])
 def test_journey_through_real_api(runtime_database, actors, journey):
     actor, scope = actors[0]
     app = actor_app(actor)

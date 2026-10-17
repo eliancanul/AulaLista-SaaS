@@ -19,6 +19,7 @@ import {
   type PlanningDocument,
   type Resource,
 } from "./contracts";
+import { AcentaNavigation, type NavigationPosition } from "./navigation";
 import { toolsMenuPosition, toolsMenuScroll } from "./tools-menu";
 const asset = (name: string) => `/acenta/${name}`;
 function Icon({ name, small = false }: { name: string; small?: boolean }) {
@@ -663,6 +664,38 @@ function Workspace({ controller }: { controller: AcentaController }) {
   const [showEditor, setShowEditor] = useState(!!s.editor);
   const input = useRef<HTMLTextAreaElement>(null);
   const toolsTrigger = useRef<HTMLButtonElement>(null);
+  const [position, setPosition] = useState<{ value: NavigationPosition | null } | null>(null);
+  useEffect(() => {
+    const previous = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
+    const navigation = new AcentaNavigation(controller, window.history, () => ({
+      x: window.scrollX, y: window.scrollY,
+      focus: (document.activeElement as HTMLElement | null)?.dataset.navigationFocus ?? null,
+    }), (value) => {
+      setOverlay(null);
+      setShowEditor(false);
+      setPosition({ value });
+    });
+    const pop = (event: PopStateEvent) => navigation.restore(event.state);
+    window.addEventListener("popstate", pop);
+    return () => {
+      window.removeEventListener("popstate", pop);
+      window.history.scrollRestoration = previous;
+      navigation.dispose();
+    };
+  }, [controller]);
+  useLayoutEffect(() => {
+    if (!position) return;
+    const frame = requestAnimationFrame(() => {
+      const saved = position.value;
+      const focus = saved?.focus ? Array.from(document.querySelectorAll<HTMLElement>("[data-navigation-focus]"))
+        .find((node) => node.dataset.navigationFocus === saved.focus) : null;
+      (focus ?? document.querySelector<HTMLElement>("main"))?.focus({ preventScroll: true });
+      window.scrollTo(saved?.x ?? 0, saved?.y ?? 0);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [position]);
+
   useEffect(() => {
     void controller.init();
   }, [controller]);
@@ -758,7 +791,7 @@ function Workspace({ controller }: { controller: AcentaController }) {
           {expanded && <span>Cerrar sesión</span>}
         </button>
       </aside>
-      <main className={s.view === "home" ? "home-main" : "content-main"}>
+      <main tabIndex={-1} className={s.view === "home" ? "home-main" : "content-main"}>
         <AccountLinks />
         {s.view === "home" ? (
           <section className="home-panel">
@@ -916,6 +949,12 @@ function Workspace({ controller }: { controller: AcentaController }) {
         ) : (
           <section className="library">
             <h1>Mis recursos</h1>
+            <button disabled={s.listState === "loading"} onClick={() => void controller.loadResources()}>
+              Actualizar listado
+            </button>
+            {s.editor && <button onClick={() => { controller.resumeEditor(); setShowEditor(true); }}>
+              Retomar edición abierta
+            </button>}
             <p className="secondary">
               Originales, revisiones y copias de trabajo de esta cuenta.
             </p>
@@ -945,6 +984,7 @@ function Workspace({ controller }: { controller: AcentaController }) {
                 </p>
                 <button
                   className="primary"
+                  data-navigation-focus={`planning-${doc.receipt.planning_id}`}
                   onClick={async () => {
                     await controller.open(doc.receipt.planning_id);
                     const current = controller.snapshot();
@@ -971,6 +1011,7 @@ function Workspace({ controller }: { controller: AcentaController }) {
                   {d.receipt.draft_revision}
                 </p>
                 <button
+                  data-navigation-focus={`draft-${d.receipt.draft_id}`}
                   onClick={async () => {
                     await controller.openDraft(d.receipt.draft_id);
                     const current = controller.snapshot();
@@ -1187,7 +1228,7 @@ function Workspace({ controller }: { controller: AcentaController }) {
           </footer>
         </Dialog>
       )}
-      {showEditor && s.editor && (
+      {showEditor && s.view === "result" && s.editor && (
         <Editor
           controller={controller}
           onDismiss={() => setShowEditor(false)}

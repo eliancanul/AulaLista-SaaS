@@ -147,6 +147,8 @@ export class AcentaController {
   state: State = fresh();
   private listeners = new Set<() => void>();
   private navigation = 0;
+  private listGeneration = 0;
+  private listLoaded = false;
   private busy = false;
   private originalGeneration = 0;
   private selections: Record<string, SourceReceipt> = {};
@@ -394,11 +396,33 @@ export class AcentaController {
   useExample() {
     this.setPrompt(waterPrompt);
   }
+  private leaveReads() {
+    this.navigation++;
+    this.listGeneration++;
+    return this.state.listState === "loading"
+      ? this.listLoaded ? "ready" as const : "idle" as const
+      : this.state.listState;
+  }
   navigate(view: View) {
     if (this.state.closed) return;
-    this.navigation++;
-    this.emit({ view });
-    if (view === "resources") void this.loadResources();
+    const listState = this.leaveReads();
+    this.closeOriginal();
+    this.emit({ view, listState, error: "" });
+    if (view === "resources" && listState === "idle") void this.loadResources();
+  }
+  restoreNavigation(location: { view: View; result: PlanningDocument | null }) {
+    if (this.state.closed) return;
+    const listState = this.leaveReads();
+    this.closeOriginal();
+    // Navigation never replaces the editor buffer or the next request's source.
+    this.emit({ view: location.view, listState, error: "",
+      ...(location.view === "result" ? { result: location.result } : {}) });
+    if (location.view === "resources" && listState === "idle") void this.loadResources();
+  }
+  resumeEditor() {
+    if (!this.state.editor || this.state.closed) return;
+    const listState = this.leaveReads();
+    this.emit({ view: "result", result: this.state.editor.document, listState, error: "" });
   }
   removeSource() {
     if (!this.state.closed) {
@@ -634,6 +658,7 @@ export class AcentaController {
   }
   openEditor(doc = this.state.result, resourceKey?: string) {
     if (this.state.closed || !doc) return;
+    this.navigation++;
     const resource = editableResource(doc, resourceKey),
       element = resource?.elements.find((e) => e.editable);
     if (!resource || !element) {
@@ -648,7 +673,7 @@ export class AcentaController {
       old.document.receipt.planning_id === doc.receipt.planning_id &&
       old.document.receipt.revision === doc.receipt.revision
     ) {
-      this.emit({ view: "result" });
+      this.emit({ view: "result", result: doc });
       return;
     }
     if (
@@ -682,6 +707,7 @@ export class AcentaController {
   edit(text: string) {
     const e = this.state.editor;
     if (!e || this.state.closed) return;
+    this.navigation++;
     if ([...text].length > 1000) {
       this.emit({
         editor: {
@@ -902,7 +928,8 @@ export class AcentaController {
       if (!element || element.text !== intent.payload.text)
         throw new ApiError(0, "invalid_response");
       this.emit({
-        result: doc,
+        result: this.state.result?.receipt.revision_id === current.document.receipt.revision_id
+          ? doc : this.state.result,
         items: this.upsert(doc),
         editor: {
           ...current,
@@ -974,7 +1001,9 @@ export class AcentaController {
       });
       return;
     }
-    const nav = ++this.navigation;
+    const listState = this.leaveReads();
+    this.emit({ listState });
+    const nav = this.navigation;
     try {
       const doc = await this.api.read(id);
       if (this.state.closed || nav !== this.navigation) return;
@@ -998,7 +1027,9 @@ export class AcentaController {
       });
       return;
     }
-    const nav = ++this.navigation;
+    const listState = this.leaveReads();
+    this.emit({ listState });
+    const nav = this.navigation;
     try {
       const draft = parseDraft(await this.api.readDraft(id));
       if (
@@ -1038,6 +1069,7 @@ export class AcentaController {
   }
   async loadResources(more = false) {
     if (this.state.closed || this.state.listState === "loading") return;
+    const generation = ++this.listGeneration;
     this.emit({ listState: "loading", error: "" });
     try {
       const [page, drafts] = await Promise.all([
@@ -1050,8 +1082,9 @@ export class AcentaController {
               more ? (this.state.draftCursor ?? undefined) : undefined,
             ),
       ]);
-      if (!this.state.closed)
-        this.emit({
+      if (this.state.closed || generation !== this.listGeneration) return;
+      this.listLoaded = true;
+      this.emit({
           items: more ? [...this.state.items, ...page.items] : page.items,
           drafts: more ? [...this.state.drafts, ...drafts.items] : drafts.items,
           cursor: page.next_cursor,
@@ -1059,7 +1092,7 @@ export class AcentaController {
           listState: "ready",
         });
     } catch (e) {
-      if (!this.state.closed)
+      if (!this.state.closed && generation === this.listGeneration)
         this.emit({ listState: "error", error: errorMessage(e) });
     }
   }
