@@ -952,6 +952,13 @@ dialog::backdrop {
     font-size: 14px;
     padding: 10px;
   }
+  .workspace.expanded .composer-controls button,
+  .workspace.expanded .tool-tray button {
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
   .tool-tray {
     width: 100%;
     padding: 8px;
