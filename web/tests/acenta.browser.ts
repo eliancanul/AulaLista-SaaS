@@ -870,7 +870,10 @@ for (const state of ["prompt", "attachment", "sending"] as const) {
         await expect(dialog.getByRole("button")).toHaveCount(2);
         await page.keyboard.press("Tab");
         await expect(dialog.getByRole("button", { name: "Cancelar", exact: true })).toBeFocused();
-        await page.keyboard.press("Tab");
+        await page.keyboard.press("Shift+Tab");
+        await expect(option).toBeFocused();
+        expect(await dialog.evaluate((element) => element.matches(":modal"))).toBe(true);
+        await page.locator('.sidebar button[aria-label="Inicio"]').evaluate((element: HTMLElement) => element.focus());
         await expect(option).toBeFocused();
         if (dismissal === "Escape") await page.keyboard.press("Escape");
         else if (dismissal === "Cancelar") await dialog.getByRole("button", { name: "Cancelar", exact: true }).click();
@@ -1003,7 +1006,10 @@ for (const width of [1440, 390]) {
       expect(server.calls).toEqual(sourceWrites);
     }
     await page.getByRole("button", { name: "Expandir menú", exact: true }).click();
-    await page.screenshot({ path: `${evidence}/sidebar-attachment-expanded-${width}.png` });
+    await page.locator(".sidebar").evaluate(async (element) => {
+      await Promise.all(element.getAnimations().map((animation) => animation.finished));
+    });
+    await page.screenshot({ path: `${evidence}/sidebar-attachment-expanded-${width}.png`, fullPage: true });
     await page.getByRole("button", { name: "Contraer menú", exact: true }).click();
     await page.getByRole("button", { name: "Enviar petición" }).click();
     await expect(page.getByRole("heading", { name: "Agua que cambia", exact: true })).toBeVisible();
