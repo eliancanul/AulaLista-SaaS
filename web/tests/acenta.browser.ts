@@ -245,6 +245,177 @@ test("home geometry, modal inertia, keyboard and sidebar preserve input", async 
   expect((await input.boundingBox())!.height).toBeLessThanOrEqual(160);
   await page.screenshot({ path: `${evidence}/home-multiline-1440.png` });
 });
+for (const viewport of [
+  { width: 1440, height: 924 },
+  { width: 1470, height: 762 },
+  { width: 390, height: 844 },
+  { width: 320, height: 844 },
+]) {
+  test(`tools open below their trigger, stay contained and return focus at ${viewport.width}x${viewport.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    const server = await mount(page);
+    const input = page.getByLabel("Petición para tu clase");
+    await input.fill("Conservar mi petición");
+    const trigger = page.getByRole("button", { name: "Más herramientas" });
+    const menu = page.getByRole("dialog", { name: "Herramientas" });
+    const assertPlacement = async () => {
+      await page.locator(".sidebar").evaluate(async (element) => {
+        await Promise.all(
+          element.getAnimations().map((animation) => animation.finished),
+        );
+      });
+      await expect
+        .poll(async () => {
+          const anchor = (await trigger.boundingBox())!;
+          return Math.abs(
+            (await menu.boundingBox())!.y - anchor.y - anchor.height - 8,
+          );
+        })
+        .toBeLessThan(1);
+      const anchor = (await trigger.boundingBox())!;
+      const box = (await menu.boundingBox())!;
+      const current = page.viewportSize()!;
+      expect(box.y).toBeCloseTo(anchor.y + anchor.height + 8, 0);
+      expect(box.width).toBe(Math.min(560, current.width - 32));
+      expect(box.x).toBeCloseTo(
+        Math.max(
+          16,
+          Math.min(
+            anchor.x + anchor.width - box.width,
+            current.width - box.width - 16,
+          ),
+        ),
+        0,
+      );
+      expect(box.x).toBeGreaterThanOrEqual(16);
+      expect(box.x + box.width).toBeLessThanOrEqual(current.width - 16);
+      expect(box.y + box.height).toBeLessThanOrEqual(current.height - 16);
+      expect(box.height).toBeGreaterThan(100);
+      await assertNoHorizontalOverflow(page);
+    };
+    await trigger.click();
+    await expect(trigger).toHaveAttribute("aria-expanded", "true");
+    await expect(
+      menu.getByRole("button", { name: "Cerrar", exact: true }),
+    ).toBeFocused();
+    await assertPlacement();
+    await page.screenshot({
+      path: `${evidence}/tools-${viewport.width}x${viewport.height}.png`,
+    });
+    const box = (await menu.boundingBox())!;
+    await page.mouse.click(box.x + 3, box.y + 3);
+    await expect(menu).toBeVisible();
+    for (const [name, item] of [
+      ["Materiales", "Hoja de actividades"],
+      ["Evaluar", "Diagnóstico breve"],
+      ["Juegos y repaso", "Bingo temático"],
+      ["Planear", "Planeación de clase"],
+    ]) {
+      await menu.getByRole("tab", { name, exact: true }).click();
+      await expect(
+        menu.getByRole("tab", { name, exact: true }),
+      ).toHaveAttribute("aria-selected", "true");
+      await expect(menu.locator(".catalog-items")).toContainText(item);
+    }
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+    await expect(trigger).toHaveAttribute("aria-expanded", "false");
+    await expect(page.locator(".tools-menu-space")).toHaveCount(0);
+    await expect(input).toHaveValue("Conservar mi petición");
+    await trigger.click();
+    await menu.getByRole("button", { name: "Cerrar", exact: true }).click();
+    await expect(trigger).toBeFocused();
+    await trigger.click();
+    await page.mouse.click(10, 10);
+    await expect(menu).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+    await trigger.click();
+    const resized =
+      viewport.width > 800
+        ? { width: 390, height: 844 }
+        : { width: 1440, height: 924 };
+    await page.setViewportSize(resized);
+    await assertPlacement();
+    await page.setViewportSize({ width: 390, height: 400 });
+    await expect(page.locator(".tools-menu-space")).toHaveCount(1);
+    await assertPlacement();
+    await page.screenshot({
+      path: `${evidence}/tools-short-from-${viewport.width}.png`,
+    });
+    await page.keyboard.press("Escape");
+    await expect(trigger).toBeFocused();
+    await expect(page.locator(".tools-menu-space")).toHaveCount(0);
+    await trigger.click();
+    await assertPlacement();
+    await menu
+      .getByRole("button", { name: "Revisar recurso", exact: false })
+      .click();
+    await expect(
+      page.getByRole("dialog", { name: "Adjuntar referencia" }),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(input).toHaveValue("Conservar mi petición");
+    await expect(page.locator(".tools-menu-space")).toHaveCount(0);
+    expect(server.calls).toHaveLength(0);
+  });
+}
+test("tools follow a late attachment confirmation that moves their trigger", async ({
+  page,
+}) => {
+  const server = await mount(page);
+  server.after = async (call, response) => {
+    if (call.path === "sources" && call.method === "POST") throw Error("lost");
+    return response;
+  };
+  await page
+    .getByRole("button", { name: "Adjuntar referencia", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: /Planeación de ciencias · ejemplo/ })
+    .click();
+  await expect(
+    page.getByText(
+      "Referencia sin confirmar. Selecciónala para comprobar el recibo.",
+    ),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  server.after = null;
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  server.before = async () => {
+    await gate;
+  };
+  await page
+    .getByRole("button", { name: "Comprobar estado del adjunto" })
+    .click();
+  const trigger = page.locator(".tool-tray .more");
+  await trigger.click();
+  const menu = page.getByRole("dialog", { name: "Herramientas" });
+  const before = (await menu.boundingBox())!.y;
+  release();
+  await expect(page.locator(".attachment-line")).toBeVisible();
+  await expect
+    .poll(async () => (await menu.boundingBox())!.y)
+    .toBeGreaterThan(before);
+  await expect
+    .poll(async () => {
+      const anchor = (await trigger.boundingBox())!;
+      return Math.abs(
+        (await menu.boundingBox())!.y - anchor.y - anchor.height - 8,
+      );
+    })
+    .toBeLessThan(1);
+  await page.keyboard.press("Escape");
+  await expect(trigger).toBeFocused();
+  await expect(
+    page.getByRole("button", { name: "Referencia adjunta", exact: true }),
+  ).toBeVisible();
+});
 test("fixture request yields payload times, saved edit reloads and original remains", async ({
   page,
 }) => {

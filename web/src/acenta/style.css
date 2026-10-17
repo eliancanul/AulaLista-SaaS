@@ -648,14 +648,22 @@ dialog::backdrop {
   top: 375px;
   margin: 0;
 }
+.tools-menu-space {
+  height: 361px;
+}
 .tools-menu {
   width: 560px;
-  min-height: 361px;
+  height: 361px;
+  min-height: 0;
+  padding: 12px;
+  box-shadow: 0 4px 8px rgba(23, 31, 36, 0.12);
   position: fixed;
   margin: 0;
-  top: 120px;
-  right: 48px;
-  left: auto;
+  right: auto;
+  overflow: auto;
+}
+.tools-menu > * {
+  flex-shrink: 0;
 }
 .tools-menu header {
   display: flex;
@@ -663,11 +671,18 @@ dialog::backdrop {
   justify-content: space-between;
 }
 .tools-menu h2 {
-  font-size: 18px;
+  font-size: 17px;
+  line-height: normal;
 }
 .tools-menu header button {
   padding: 0;
   font-size: 14px;
+  line-height: normal;
+  color: var(--secondary);
+}
+.tools-menu .field-hint {
+  font-size: 12px;
+  line-height: normal;
 }
 .tool-tabs {
   display: flex;
@@ -675,33 +690,42 @@ dialog::backdrop {
 }
 .tool-tabs button {
   border: 0;
-  padding: 10px;
+  padding: 8px 10px;
   background: transparent;
   font-size: 14px;
+  line-height: normal;
+  color: var(--secondary);
   border-radius: 6px;
   white-space: nowrap;
 }
 .tool-tabs button[aria-selected="true"] {
   background: var(--selection);
   font-weight: 600;
+  color: var(--ink);
 }
 .catalog-items {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  margin: 8px;
-  flex: 1;
+  min-height: 192px;
+  margin: 0;
+  flex: 1 0 auto;
   font-weight: 600;
+  font-size: 15px;
+  line-height: normal;
+}
+.catalog-items p {
+  padding: 6px 0 6px 8px;
 }
 .tools-menu footer {
   display: flex;
   gap: 16px;
-  margin-top: 24px;
+  flex-wrap: wrap;
 }
 .tools-menu footer button {
-  padding: 0;
+  padding: 8px 0;
   font-size: 14px;
   font-weight: 600;
+  line-height: normal;
 }
 .editor-dialog {
   width: calc(100vw - 58.576px);
@@ -974,10 +998,6 @@ dialog::backdrop {
   .attachment-menu {
     left: 80px;
     top: 300px;
-    max-width: calc(100vw - 96px);
-  }
-  .tools-menu {
-    right: 16px;
     max-width: calc(100vw - 96px);
   }
   .tool-tabs {
