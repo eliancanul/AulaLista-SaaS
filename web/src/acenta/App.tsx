@@ -93,6 +93,9 @@ function Dialog({
           .closest(".composer-stack")
           ?.querySelector(".composer");
         if (composer) observer!.observe(composer);
+        // The centered composer can move without resizing while the rail animates.
+        const panel = anchor.current.closest(".home-panel");
+        if (panel) observer!.observe(panel);
       }
     }
     return () => {
