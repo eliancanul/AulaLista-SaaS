@@ -146,8 +146,9 @@ E2E ni sustituye la CI del candidato exacto.
 
 ### Cierre voluntario con edición pendiente (#15, corte parcial)
 
-`Cerrar sesión` reutiliza la guardia del editor cuando existe una edición sin
-confirmar, incluso si quedó oculta al navegar. `Seguir editando` y Escape cancelan
+Desde el espacio de trabajo con sesión confirmada, `Cerrar sesión` reutiliza la
+guardia del editor cuando existe una edición sin confirmar, incluso si quedó
+oculta al navegar. `Seguir editando` y Escape cancelan
 la intención de salir. `Conservar borrador y salir` espera un recibo válido del
 borrador privado, ligado al recurso, base y texto de esa generación, antes de
 invocar logout. La revisión confirmada y su fuente permanecen intactas. No basta
@@ -164,8 +165,11 @@ la sesión siga válida, la guardia permanece y conserva el texto. Si logout fal
 después de confirmar el borrador, se mantiene el flujo de reintento de cierre
 existente; el borrador ya confirmado se recupera desde Mis recursos.
 
-Este guard protege sólo el editor. No guarda automáticamente la petición ni un
-adjunto pendiente y no cambia su tratamiento. 401/403, caducidad, revocación y
+Esta guardia protege sólo el editor dentro del espacio con sesión confirmada.
+En la pantalla de suspensión por no poder revalidar la sesión, `Cerrar sesión`
+conserva la purga inmediata y el reintento de logout existentes; no intenta
+confirmar un borrador sin autoridad comprobada. No guarda automáticamente la
+petición ni un adjunto pendiente y no cambia su tratamiento. 401/403, caducidad, revocación y
 cambio de sesión/CSRF mantienen la purga actual: recuperar trabajo no confirmado
 tras esos casos sigue pendiente. No hay nuevo almacenamiento de navegador ni
 recuperación del trabajo no confirmado al recargar o cerrar el navegador. #15 y
