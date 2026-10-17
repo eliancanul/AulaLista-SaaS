@@ -10,6 +10,9 @@ import {
 import {
   waterPrompt,
   waterSource,
+  sourceSamples,
+  type SourceReference,
+  type OriginalContent,
   type PlanningDocument,
   type PlanningRequest,
   type SourceReceipt,
@@ -80,7 +83,14 @@ export interface EditorState {
   pending: EditorIntent | null;
   draftSaved: boolean;
 }
+export interface OriginalState {
+  reference: SourceReference;
+  status: "loading" | "ready" | "unavailable" | "error" | "viewer-error";
+  content?: OriginalContent;
+}
 export interface State {
+  original: OriginalState | null;
+  sourceName: string;
   view: View;
   prompt: string;
   source: SourceReceipt | null;
@@ -105,6 +115,8 @@ export interface BackupStore {
   removeItem(key: string): void;
 }
 const fresh = (): State => ({
+  original: null,
+  sourceName: "Planeación de ciencias · ejemplo",
   view: "home",
   prompt: "",
   source: null,
@@ -136,7 +148,10 @@ export class AcentaController {
   private listeners = new Set<() => void>();
   private navigation = 0;
   private busy = false;
+  private originalGeneration = 0;
+  private selections: Record<string, SourceReceipt> = {};
   private sourceIntent: {
+    base?: SourceReceipt;
     key: string;
     bytes: string;
     cancelled?: boolean;
@@ -180,6 +195,8 @@ export class AcentaController {
           editor: this.state.editor,
           pending: this.state.pending,
           sourceIntent: this.sourceIntent,
+          selections: this.selections,
+          sourceName: this.state.sourceName,
         }),
       );
       this.state = { ...this.state, backupError: false };
@@ -245,7 +262,9 @@ export class AcentaController {
       if (
         s.sourceIntent &&
         (!isUuid(s.sourceIntent.key) ||
-          s.sourceIntent.bytes !== waterSource ||
+          !sourceSamples.some(
+            (sample) => sample.bytes === s.sourceIntent.bytes,
+          ) ||
           (s.sourceIntent.cancelled !== undefined &&
             typeof s.sourceIntent.cancelled !== "boolean"))
       )
@@ -288,6 +307,19 @@ export class AcentaController {
           result.receipt.actor_id !== s.actor)
       )
         throw Error("scope");
+      for (const [id, receipt] of Object.entries(s.selections ?? {})) {
+        if (!sourceSamples.some((sample) => sample.id === id))
+          throw Error("sample");
+        const saved = parseSource(receipt);
+        if (saved.scope_id !== s.scope || saved.actor_id !== s.actor)
+          throw Error("sample scope");
+        this.selections[id] = saved;
+      }
+      if (s.sourceIntent?.base) {
+        const base = parseSource(s.sourceIntent.base);
+        if (base.scope_id !== s.scope || base.actor_id !== s.actor)
+          throw Error("base scope");
+      }
       this.sourceIntent = s.sourceIntent ?? null;
       this.navigation =
         Number.isInteger(s.navigation) && s.navigation >= 0
@@ -300,6 +332,9 @@ export class AcentaController {
         ...fresh(),
         prompt: typeof s.prompt === "string" ? s.prompt : "",
         source,
+        sourceName:
+          sourceSamples.find((sample) => sample.name === s.sourceName)?.name ??
+          "Planeación de ciencias · ejemplo",
         sourcePending: !!this.sourceIntent,
         result,
         editor: editor ?? null,
@@ -379,17 +414,42 @@ export class AcentaController {
       this.emit();
     }
   }
+  async recoverAttachment() {
+    return this.sourceIntent ? this.attach(this.sourceIntent.bytes) : false;
+  }
   async attach(bytes: string): Promise<boolean> {
     if (this.state.closed || this.state.attaching) return false;
-    if (bytes !== waterSource) {
+    const sample = sourceSamples.find((sample) => sample.bytes === bytes);
+    if (!sample) {
       this.emit({
         error: "Sólo puedes seleccionar la referencia de ejemplo incorporada.",
       });
       return false;
     }
-    if (this.state.source && !this.sourceIntent) return true;
+    if (this.sourceIntent && this.sourceIntent.bytes !== bytes) {
+      this.emit({
+        error:
+          "Comprueba primero la referencia pendiente antes de seleccionar otra.",
+      });
+      return false;
+    }
+    if (!this.sourceIntent) {
+      if (this.state.source && !Object.keys(this.selections).length)
+        this.selections.water = this.state.source;
+      const cached = this.selections[sample.id];
+      if (cached) {
+        this.navigation++;
+        this.emit({ source: cached, sourceName: sample.name, error: "" });
+        return true;
+      }
+    }
     const recovering = !!this.sourceIntent;
-    this.sourceIntent ??= { key: crypto.randomUUID(), bytes };
+    const base = sourceSamples
+      .filter((s) => s.family === sample.family)
+      .map((s) => this.selections[s.id])
+      .filter((s): s is SourceReceipt => !!s)
+      .sort((a, b) => b.number - a.number)[0];
+    this.sourceIntent ??= { key: crypto.randomUUID(), bytes, base };
     const intent = this.sourceIntent;
     intent.cancelled = false;
     this.navigation++;
@@ -402,7 +462,14 @@ export class AcentaController {
       } catch (e) {
         if (!(e instanceof ApiError) || e.status !== 404) throw e;
         replayed = true;
-        source = await this.api.createSource(intent.bytes, intent.key);
+        source = intent.base
+          ? await this.api.reviseSource(
+              intent.base.source_id,
+              intent.base.number,
+              intent.bytes,
+              intent.key,
+            )
+          : await this.api.createSource(intent.bytes, intent.key);
       }
       if (this.state.closed) return false;
       const content = new TextEncoder().encode(intent.bytes);
@@ -416,12 +483,17 @@ export class AcentaController {
         source.operation_id !== intent.key ||
         source.actor_id !== this.api.session.actorId ||
         source.size !== content.length ||
-        source.sha256 !== digest
+        source.sha256 !== digest ||
+        (intent.base &&
+          (source.source_id !== intent.base.source_id ||
+            source.number !== intent.base.number + 1))
       )
         throw new ApiError(0, "invalid_response");
       const selected = !intent.cancelled;
+      this.selections[sample.id] = source;
       this.sourceIntent = null;
       this.emit({
+        sourceName: selected ? sample.name : this.state.sourceName,
         source: selected ? source : this.state.source,
         attaching: false,
         sourcePending: false,
@@ -441,6 +513,31 @@ export class AcentaController {
         });
       }
       return false;
+    }
+  }
+  closeOriginal() {
+    this.originalGeneration++;
+    this.emit({ original: null });
+  }
+  async openOriginal(reference: SourceReference) {
+    if (this.state.closed) return;
+    const generation = ++this.originalGeneration;
+    const exact = { ...reference };
+    this.emit({ original: { reference: exact, status: "loading" } });
+    try {
+      const content = await this.api.original(exact);
+      if (this.state.closed || generation !== this.originalGeneration) return;
+      this.emit({ original: { reference: exact, status: "ready", content } });
+    } catch (error) {
+      if (this.state.closed || generation !== this.originalGeneration) return;
+      const status =
+        error instanceof ApiError && error.status === 404
+          ? "unavailable"
+          : error instanceof ApiError &&
+              ["invalid_response", "original_view_failed"].includes(error.code)
+            ? "viewer-error"
+            : "error";
+      this.emit({ original: { reference: exact, status } });
     }
   }
   async submit() {

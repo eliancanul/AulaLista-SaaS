@@ -1,4 +1,6 @@
 import type {
+  SourceReference,
+  OriginalContent,
   Session,
   SourceReceipt,
   PlanningRequest,
@@ -318,6 +320,92 @@ export class AcentaApi {
       await this.request("sources", "POST", bytes, key, true),
       key,
     );
+  }
+  async reviseSource(
+    sourceId: string,
+    expected: number,
+    bytes: string,
+    key: string,
+  ) {
+    assert(positive(expected));
+    const result = this.source(
+      await this.request(
+        `sources/${this.id(sourceId)}/versions?expected_version=${expected}`,
+        "POST",
+        bytes,
+        key,
+        true,
+      ),
+      key,
+    );
+    assert(result.source_id === sourceId && result.number === expected + 1);
+    return result;
+  }
+  async original(ref: SourceReference): Promise<OriginalContent> {
+    assert(positive(ref.number) && sha(ref.sha256));
+    let response: Response;
+    try {
+      response = await this.transport(
+        `/scopes/${this.session.scopeId}/sources/${this.id(ref.source_id)}/versions/${ref.number}`,
+        {
+          credentials: "same-origin",
+          cache: "no-store",
+          signal: AbortSignal.timeout(15000),
+        },
+      );
+    } catch {
+      throw new ApiError(0, "original_read_failed");
+    }
+    if (!response.ok)
+      throw new ApiError(response.status, "original_unavailable");
+    const size = Number(response.headers.get("X-Content-Size"));
+    assert(
+      response.headers.get("X-Source-Id") === ref.source_id &&
+        response.headers.get("X-Version") === String(ref.number) &&
+        response.headers.get("X-Content-SHA256") === ref.sha256 &&
+        response.headers.get("X-Actor-Id") === this.session.actorId &&
+        Number.isInteger(size) &&
+        size > 0 &&
+        size <= 65536 &&
+        (ref.size === undefined || ref.size === size),
+    );
+    const bytes = new Uint8Array(size);
+    const reader = response.body?.getReader();
+    assert(reader);
+    let offset = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value.length > size - offset) {
+          await reader.cancel();
+          throw new ApiError(0, "invalid_response");
+        }
+        bytes.set(value, offset);
+        offset += value.length;
+      }
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw new ApiError(0, "original_read_failed");
+    } finally {
+      reader.releaseLock();
+    }
+    assert(offset === size);
+    const digest = Array.from(
+      new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)),
+    )
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    assert(bytes.length === size && digest === ref.sha256);
+    try {
+      return {
+        text: new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+        size,
+        sha256: digest,
+      };
+    } catch {
+      throw new ApiError(0, "original_view_failed");
+    }
   }
   async sourceOperation(key: string) {
     return this.source(await this.request(`operations/${this.id(key)}`), key);

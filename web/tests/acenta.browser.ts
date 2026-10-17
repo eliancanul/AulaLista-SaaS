@@ -376,11 +376,22 @@ test("tools follow a late attachment confirmation that moves their trigger", asy
   await page
     .getByRole("button", { name: /Planeación de ciencias · ejemplo/ })
     .click();
+  const pendingAttachment = page.getByRole("dialog", {
+    name: "Adjuntar referencia",
+  });
+  await expect(pendingAttachment.getByRole("status")).toBeVisible();
+  await expect(pendingAttachment.getByRole("status")).toHaveText(
+    "Referencia sin confirmar. Comprueba el recibo antes de cambiarla.",
+  );
+  const options = pendingAttachment.locator(".menu-option");
+  await expect(options).toHaveCount(3);
+  for (const option of await options.all()) await expect(option).toBeDisabled();
   await expect(
-    page.getByText(
-      "Referencia sin confirmar. Selecciónala para comprobar el recibo.",
-    ),
-  ).toBeVisible();
+    pendingAttachment.getByRole("button", {
+      name: "Comprobar estado del adjunto",
+      exact: true,
+    }),
+  ).toBeEnabled();
   await page.keyboard.press("Escape");
   server.after = null;
   let release!: () => void;
@@ -607,11 +618,22 @@ test("lost attachment response remains recoverable after reload without a duplic
   await page
     .getByRole("button", { name: /Planeación de ciencias · ejemplo/ })
     .click();
+  const pendingAttachment = page.getByRole("dialog", {
+    name: "Adjuntar referencia",
+  });
+  await expect(pendingAttachment.getByRole("status")).toBeVisible();
+  await expect(pendingAttachment.getByRole("status")).toHaveText(
+    "Referencia sin confirmar. Comprueba el recibo antes de cambiarla.",
+  );
+  const options = pendingAttachment.locator(".menu-option");
+  await expect(options).toHaveCount(3);
+  for (const option of await options.all()) await expect(option).toBeDisabled();
   await expect(
-    page.getByText(
-      "Referencia sin confirmar. Selecciónala para comprobar el recibo.",
-    ),
-  ).toBeVisible();
+    pendingAttachment.getByRole("button", {
+      name: "Comprobar estado del adjunto",
+      exact: true,
+    }),
+  ).toBeEnabled();
   await page.keyboard.press("Escape");
   server.after = null;
   page.on("dialog", (dialog) => dialog.accept());

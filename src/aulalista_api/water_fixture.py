@@ -9,13 +9,25 @@ FIXTURE_SOURCE = (
     "Observa el vaso. Describe lo que ves.\n"
     "¿Qué observaste? ¿Qué cambió?\n"
 ).encode("utf-8")
+FIXTURE_REVISION = (
+    FIXTURE_SOURCE
+    + "Nota sintética de revisión: observar nuevamente al finalizar.\n".encode("utf-8")
+)
+FIXTURE_OTHER = (
+    FIXTURE_SOURCE
+    + "Archivo sintético independiente para otra sesión de observación.\n".encode(
+        "utf-8"
+    )
+)
+SUPPORTED_SOURCES = (FIXTURE_SOURCE, FIXTURE_REVISION, FIXTURE_OTHER)
+
 SUPPORTED_PROMPT = (
     "Hoy tengo 30 minutos. Ajusta los tiempos sin cambiar mis materiales."
 )
 
 
 def generate(prompt: str, source: bytes) -> dict:
-    if (prompt, source) != (SUPPORTED_PROMPT, FIXTURE_SOURCE):
+    if prompt != SUPPORTED_PROMPT or source not in SUPPORTED_SOURCES:
         raise ValueError("unsupported_fixture")
     return {
         "provenance": "synthetic-fixture-v1",

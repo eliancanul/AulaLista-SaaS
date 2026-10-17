@@ -1042,3 +1042,46 @@ dialog::backdrop {
     scroll-behavior: auto !important;
   }
 }
+
+.original-dialog {
+  width: min(1000px, calc(100vw - 32px));
+  max-height: calc(100dvh - 48px);
+  padding: 0;
+  border-radius: 20px;
+}
+.original-dialog header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 32px;
+}
+.original-dialog h2 {
+  margin: 0;
+}
+.original-body {
+  padding: 24px 32px;
+  background: var(--canvas);
+}
+.original-body pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 24px;
+  background: white;
+  border-radius: 16px;
+  font: inherit;
+}
+.original-metadata {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  color: var(--secondary);
+}
+@media (max-width: 600px) {
+  .original-dialog header,
+  .original-body {
+    padding: 16px;
+  }
+  .original-body pre {
+    padding: 16px;
+  }
+}
