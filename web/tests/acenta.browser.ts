@@ -174,18 +174,9 @@ test("access remains closed, current heading is 96px, no personal data is sent",
       .evaluate((e) => getComputedStyle(e).fontSize),
   ).toBe("96px");
   await page.screenshot({ path: `${evidence}/access-1440.png` });
-  await page.getByRole("button", { name: "Continuar con correo" }).click();
-  await page.getByLabel("Correo electrónico").fill("invalid");
-  await page.getByRole("button", { name: "Continuar", exact: true }).click();
-  await expect(
-    page.getByText("Escribe un correo válido para continuar."),
-  ).toBeVisible();
-  await expect(page.getByRole("checkbox")).not.toBeChecked();
-  await page.getByLabel("Correo electrónico").fill("synthetic@example.test");
-  await page.getByRole("button", { name: "Continuar", exact: true }).click();
-  await expect(
-    page.getByRole("heading", { name: "Acceso pendiente" }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continuar con correo" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Continuar con Google" })).toBeDisabled();
+  await expect(page.getByRole("alert")).toHaveText("El acceso no está disponible ahora. Vuelve a intentarlo.");
   expect(calls.every((url) => url.startsWith("http://127.0.0.1:4173/"))).toBe(
     true,
   );

@@ -726,6 +726,7 @@ def test_documented_server_launch_keeps_secrets_out_of_access_logs(
                 sys.executable,
                 "-m",
                 "uvicorn",
+                "--no-proxy-headers",
                 "aulalista_api.app:create_app",
                 "--factory",
                 "--host",

@@ -32,6 +32,12 @@ def test_health_and_fail_closed_material_routes_are_registered(client):
     assert [(route.path, route.methods) for route in client.app.routes] == [
         ("/health/live", {"GET"}),
         ("/health/ready", {"GET"}),
+        ("/auth/bootstrap", {"GET"}),
+        ("/auth/google", {"POST"}),
+        ("/auth/email/request", {"POST"}),
+        ("/auth/email/verify", {"POST"}),
+        ("/auth/session", {"GET"}),
+        ("/auth/logout", {"POST"}),
         ("/scopes/{scope_id}/sources", {"POST"}),
         ("/scopes/{scope_id}/sources/{source_id}/versions", {"POST"}),
         ("/scopes/{scope_id}/sources/{source_id}/versions/{number}", {"GET"}),
@@ -59,7 +65,7 @@ def test_docs_can_be_enabled_explicitly(monkeypatch):
         assert set(schema.json()["paths"]) == {
             route.path
             for route in client.app.routes
-            if route.path.startswith(("/health/", "/scopes/"))
+            if route.path.startswith(("/health/", "/scopes/", "/auth/"))
         }
         assert client.get("/redoc").status_code == 404
 

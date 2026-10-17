@@ -109,6 +109,13 @@ def runtime_database(migrated_database, actors, monkeypatch):
         connection.execute(
             text("""
             GRANT SELECT ON principal, personal_scope, alembic_version TO aulalista_runtime;
+            GRANT INSERT ON principal, personal_scope TO aulalista_runtime;
+            GRANT SELECT, INSERT ON auth_identity, auth_pre_session, auth_session, auth_email_challenge, auth_rate TO aulalista_runtime;
+            GRANT UPDATE (email, email_verified) ON auth_identity TO aulalista_runtime;
+            GRANT UPDATE (consumed, expires_at) ON auth_pre_session TO aulalista_runtime;
+            GRANT UPDATE (revoked, idle_expires_at) ON auth_session TO aulalista_runtime;
+            GRANT UPDATE (attempts, consumed) ON auth_email_challenge TO aulalista_runtime;
+            GRANT UPDATE (count) ON auth_rate TO aulalista_runtime;
             GRANT SELECT, INSERT ON source, source_version TO aulalista_runtime;
             GRANT UPDATE (current_version) ON source TO aulalista_runtime;
             GRANT SELECT, INSERT ON planning, planning_revision TO aulalista_runtime;

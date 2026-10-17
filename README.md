@@ -81,3 +81,14 @@ El siguiente recorrido prioriza mínima fricción: resolver automáticamente pri
 Los contratos de producto proceden de [AulaLista #165](https://github.com/eliancanul/AulaLista/issues/165) y [#166](https://github.com/eliancanul/AulaLista/issues/166). El integrador verificó los enlaces y su correspondencia con conservación de originales, versiones y autoridad el 15 de octubre de 2026 UTC. Las decisiones actuales de público, stack e inicio limpio prevalecen sobre hipótesis históricas institucionales o de migración.
 
 Este repositorio nuevo conserva esos contratos sin copiar código, fixtures, dumps ni documentos privados del anterior, que permanece intacto. Si se decide reutilizar un artefacto después, se revisan expresamente propósito, procedencia, licencia y datos.
+
+
+## Autenticación preparatoria local (B1 / #13)
+
+El [contrato B1](docs/specs/0005-autenticacion-local.md) prepara acceso mediante
+Google Identity Services directo y OTP de correo, sesión propia revocable y
+provisión del ámbito personal. Sin configuración explícita el servidor sigue
+cerrado. No hay cliente Google configurado ni proveedor de correo runtime; las
+pruebas locales sustituyen exclusivamente transportes/verificación y no acreditan
+login externo. La vinculación de métodos queda pendiente y nunca ocurre por
+coincidencia de email. Este incremento no cierra #13 ni habilita producción.

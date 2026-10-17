@@ -91,7 +91,13 @@ def test_journey_through_real_api(runtime_database, actors, journey):
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
         server = uvicorn.Server(
-            uvicorn.Config(app, access_log=False, log_level="warning", ws="none")
+            uvicorn.Config(
+                app,
+                access_log=False,
+                log_level="warning",
+                ws="none",
+                proxy_headers=False,
+            )
         )
         worker = threading.Thread(
             target=server.run, kwargs={"sockets": [listener]}, daemon=True

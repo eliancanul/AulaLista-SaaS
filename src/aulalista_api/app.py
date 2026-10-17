@@ -6,6 +6,7 @@ from typing import Literal
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+from aulalista_api.auth_routes import install_auth_routes
 from aulalista_api.config import load_settings
 from aulalista_api.database import Readiness, make_engine
 from aulalista_api.material_routes import install_material_routes
@@ -45,6 +46,7 @@ def create_app() -> FastAPI:
             status_code=200 if ready else 503,
         )
 
+    install_auth_routes(app, engine)
     install_material_routes(app, engine)
     install_planning_routes(app, engine)
     install_planning_edit_routes(app, engine)

@@ -3,6 +3,7 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests",
   testMatch: "**/*.integration.ts",
+  testIgnore: "**/auth.integration.ts",
   outputDir: "test-results/integration",
   workers: 1,
   use: {

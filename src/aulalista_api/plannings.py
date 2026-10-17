@@ -168,7 +168,7 @@ class Plannings:
             signed=True,
         )
         with Session(self.engine) as session, session.begin():
-            authorize(session, actor_id, scope_id)
+            actor_id = authorize(session, actor_id, scope_id)
             session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": lock})
             previous = session.scalar(
                 select(PlanningRevision).where(
@@ -237,7 +237,7 @@ class Plannings:
         operation_id: UUID | None = None,
     ) -> dict:
         with Session(self.engine) as session, session.begin():
-            authorize(session, actor_id, scope_id)
+            actor_id = authorize(session, actor_id, scope_id)
             query = (
                 select(PlanningRevision, SourceVersion)
                 .join(

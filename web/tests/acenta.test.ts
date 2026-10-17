@@ -789,6 +789,14 @@ describe("Acenta operation state", () => {
     expect(corrupt.state.backupError).toBe(true);
     expect(write).not.toHaveBeenCalled();
   });
+  it("closing a session purges a legacy private browser backup", () => {
+    const store = memory();
+    const { controller, api } = setup(store);
+    controller.useExample();
+    controller.closeSession();
+    const restored = new AcentaController(api, store, workspaceId);
+    expect(restored.snapshot()).toMatchObject({ prompt: "", result: null, editor: null });
+  });
   it("closing the session clears visible private state and ignores late responses", async () => {
     const { controller: c, server } = setup();
     c.useExample();

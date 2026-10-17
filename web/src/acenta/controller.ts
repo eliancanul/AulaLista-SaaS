@@ -1098,6 +1098,14 @@ export class AcentaController {
   }
   closeSession() {
     this.navigation++;
+    this.listGeneration++;
+    this.originalGeneration++;
+    this.sourceIntent = null;
+    this.selections = {};
+    this.listLoaded = false;
+    // Runtime has no browser backup store; test/legacy stores are also purged.
+    try { this.storage?.removeItem(this.backupKey); } catch { /* Never retain visible private state if browser storage fails. */ }
+    this.storage = null;
     this.state = { ...fresh(), closed: true };
     for (const fn of this.listeners) fn();
   }

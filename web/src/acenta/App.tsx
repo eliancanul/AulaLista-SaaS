@@ -1,3 +1,5 @@
+import { AuthController } from "./auth";
+import { AuthAccessView } from "./AuthView";
 import React, {
   useEffect,
   useLayoutEffect,
@@ -136,165 +138,9 @@ function Dialog({
   );
 }
 export function AccessView() {
-  const [view, setView] = useState<
-    "select" | "email" | "register" | "pending" | "legal"
-  >("select");
-  const [previous, setPrevious] = useState<
-    "select" | "email" | "register" | "pending"
-  >("select");
-  const [email, setEmail] = useState("");
-  const [invalid, setInvalid] = useState(false);
-  const [marketing, setMarketing] = useState(false);
-  const change = (next: typeof view) => {
-    setInvalid(false);
-    setView(next);
-  };
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setInvalid(true);
-      return;
-    }
-    change("pending");
-  }
-  return (
-    <main className="access">
-      <div className="access-left">
-        <div className="access-brand">
-          <Logo large />
-        </div>
-        {view === "select" ? (
-          <section className="access-selector">
-            <h1>Bienvenido</h1>
-            <button className="google" onClick={() => change("pending")}>
-              <img
-                src={asset("google-g-oficial.svg")}
-                alt=""
-                width="20"
-                height="20"
-              />
-              Continuar con Google
-            </button>
-            <button className="text-action" onClick={() => change("email")}>
-              Continuar con correo
-            </button>
-          </section>
-        ) : view === "email" || view === "register" ? (
-          <section className="access-form">
-            <button
-              className="text-action small-text"
-              onClick={() => change("select")}
-            >
-              Volver
-            </button>
-            <h1>
-              {view === "register"
-                ? "Crea tu cuenta"
-                : "Continúa con tu correo"}
-            </h1>
-            <p className="secondary">
-              Tu espacio para preparar la próxima clase.
-            </p>
-            <form onSubmit={submit} noValidate>
-              <label htmlFor="email">Correo electrónico</label>
-              <input
-                id="email"
-                type="email"
-                autoComplete="email"
-                value={email}
-                placeholder="nombre@ejemplo.com"
-                aria-invalid={invalid}
-                aria-describedby="email-help"
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  setInvalid(false);
-                }}
-              />
-              <p
-                id="email-help"
-                className={invalid ? "validation" : "field-hint"}
-              >
-                {invalid
-                  ? "Escribe un correo válido para continuar."
-                  : "Usaremos tu correo para continuar."}
-              </p>
-              <button className="primary wide" type="submit">
-                Continuar
-              </button>
-              <label className="marketing">
-                <input
-                  type="checkbox"
-                  checked={marketing}
-                  onChange={(e) => setMarketing(e.target.checked)}
-                />
-                Quiero recibir novedades de Acenta (opcional).
-              </label>
-            </form>
-            <button
-              className="text-action"
-              onClick={() => change(view === "email" ? "register" : "email")}
-            >
-              {view === "email"
-                ? "¿Aún no tienes cuenta? Crear cuenta"
-                : "¿Ya tienes cuenta? Entrar"}
-            </button>
-            <p className="field-hint">
-              Acceso pendiente. Este formulario no envía ni guarda tu correo.
-            </p>
-          </section>
-        ) : view === "pending" ? (
-          <section className="access-form">
-            <h1>Acceso pendiente</h1>
-            <p>La conexión de acceso aún no está disponible.</p>
-            <p>
-              Google y correo están previstos. El método de correo sigue por
-              confirmar.
-            </p>
-            <p className="secondary">
-              No se han creado cuentas ni enviado datos.
-            </p>
-            <button onClick={() => change("select")}>Volver al acceso</button>
-          </section>
-        ) : (
-          <section className="access-form">
-            <h1>Documentos en preparación</h1>
-            <p>
-              Los Términos y condiciones y el Aviso de privacidad de Acenta
-              están pendientes de redacción y revisión.
-            </p>
-            <p>Esta vista no registra aceptación ni recopila datos.</p>
-            <button onClick={() => change(previous)}>Volver</button>
-          </section>
-        )}
-        {view !== "legal" && (
-          <footer className="access-legal">
-            <button
-              onClick={() => {
-                setPrevious(view);
-                change("legal");
-              }}
-            >
-              Términos y condiciones
-            </button>
-            <button
-              onClick={() => {
-                setPrevious(view);
-                change("legal");
-              }}
-            >
-              Aviso de privacidad
-            </button>
-          </footer>
-        )}
-      </div>
-      <div className="access-photo">
-        <img
-          src={asset("foto-aprobada-recorte.png")}
-          alt="Docente preparando su clase junto a una computadora y un cuaderno"
-        />
-      </div>
-    </main>
-  );
+  const [auth] = useState(() => new AuthController());
+  useEffect(() => { void auth.start(); }, [auth]);
+  return <AuthAccessView auth={auth} />;
 }
 function AccountLinks() {
   return (
@@ -648,13 +494,14 @@ function Editor({
   );
 }
 export function AcentaApp({
-  controller,
+  controller, onLogout,
 }: {
   controller: AcentaController | null;
+  onLogout?: () => void;
 }) {
-  return controller ? <Workspace controller={controller} /> : <AccessView />;
+  return controller ? <Workspace controller={controller} onLogout={onLogout} /> : <AccessView />;
 }
-function Workspace({ controller }: { controller: AcentaController }) {
+function Workspace({ controller, onLogout }: { controller: AcentaController; onLogout?: () => void }) {
   const s = useSyncExternalStore(controller.subscribe, controller.snapshot);
   const [expanded, setExpanded] = useState(false);
   const [overlay, setOverlay] = useState<
@@ -785,7 +632,7 @@ function Workspace({ controller }: { controller: AcentaController }) {
         </button>
         <button
           aria-label="Cerrar sesión"
-          onClick={() => controller.closeSession()}
+          onClick={() => onLogout ? onLogout() : controller.closeSession()}
         >
           <Icon name="chat" />
           {expanded && <span>Cerrar sesión</span>}

@@ -1,6 +1,7 @@
 import React from 'react';
 import {createRoot} from 'react-dom/client';
-import {AcentaApp} from './acenta/App';
+import {AuthenticatedApp} from './acenta/AuthenticatedApp';
+import {AuthController} from './acenta/auth';
 import './acenta/style.css';
-// B1 has no configured identity provider yet. No URL, build flag or browser header grants a session.
-createRoot(document.getElementById('root')!).render(<AcentaApp controller={null}/>);
+// Session authority comes exclusively from the server's HttpOnly cookie.
+createRoot(document.getElementById('root')!).render(<AuthenticatedApp auth={new AuthController()}/>);
