@@ -144,6 +144,43 @@ cooldown real de correo, sin cambiar reloj ni política de autenticación. Este
 recorrido requiere Chromium; su bloqueo local de socket no acredita el paso del
 E2E ni sustituye la CI del candidato exacto.
 
+### Cierre voluntario con edición pendiente (#15, corte parcial)
+
+`Cerrar sesión` reutiliza la guardia del editor cuando existe una edición sin
+confirmar, incluso si quedó oculta al navegar. `Seguir editando` y Escape cancelan
+la intención de salir. `Conservar borrador y salir` espera un recibo válido del
+borrador privado, ligado al recurso, base y texto de esa generación, antes de
+invocar logout. La revisión confirmada y su fuente permanecen intactas. No basta
+que termine una promesa: una operación aún incierta, un controller cerrado o una
+edición posterior impiden salir. Cambiar de workspace/desmontar la vista invalida
+el callback anterior, que nunca puede cerrar la sesión nueva.
+
+Una respuesta perdida se comprueba con la misma clave y, ante recibo 404, se
+repite el intento exacto. Doble clic no duplica borradores ni logout. Si ya había
+un edit/copy pendiente se resuelve primero, sin convertirlo silenciosamente en
+un borrador; un clic explícito posterior conserva el borrador. Comprobar un
+borrador confirmado no crea otra revisión al salir. Ante red/503/error, mientras
+la sesión siga válida, la guardia permanece y conserva el texto. Si logout falla
+después de confirmar el borrador, se mantiene el flujo de reintento de cierre
+existente; el borrador ya confirmado se recupera desde Mis recursos.
+
+Este guard protege sólo el editor. No guarda automáticamente la petición ni un
+adjunto pendiente y no cambia su tratamiento. 401/403, caducidad, revocación y
+cambio de sesión/CSRF mantienen la purga actual: recuperar trabajo no confirmado
+tras esos casos sigue pendiente. No hay nuevo almacenamiento de navegador ni
+recuperación del trabajo no confirmado al recargar o cerrar el navegador. #15 y
+#13 siguen abiertos; esto no habilita el proveedor de correo ni autentica con un
+servicio externo real.
+
+`tests/editor-exit.test.ts` y `tests/auth.test.ts` verifican el gate y sus carreras.
+`tests/auth.integration.ts` usa la entrada de producción, OTP/cookies/CSRF reales
+y PostgreSQL, sustituye sólo el transporte de correo existente y pierde una
+respuesta de borrador después de su commit real. Comprueba guardia/cancelación,
+recibo previo a logout, reapertura en otra sesión sin storage, fuente/base exactas
+y 404 de la cuenta B. El presupuesto del runner admite dos cooldowns reales de
+correo; no se relaja la política auth. La recogida de estos tests no acredita su
+ejecución: Chromium local sigue bloqueado y se requiere CI del candidato exacto.
+
 ### Operaciones y trabajo pendiente
 
 - Un write conserva clave UUID y payload. Tras timeout o respuesta incierta,
@@ -156,19 +193,21 @@ E2E ni sustituye la CI del candidato exacto.
   validación de transporte, timeout o recibos contradictorios siguen inciertos.
 - El selector sólo acepta los bytes del ejemplo incorporado antes de guardarlos
   localmente o enviarlos. Comprueba tamaño/hash del recibo y recupera una fuente
-  incierta con la misma clave tras recargar. Elegir de nuevo la referencia ya
+  incierta con la misma clave mientras el controller sigue vivo. El harness con
+  respaldo también prueba recarga; runtime no conserva ese intento al recargar. Elegir de nuevo la referencia ya
   adjunta no crea otra fuente; quitarla no borra bytes confirmados del servidor.
 - Cancelar el selector impide aplicar la selección tardía, sin asumir que la
   escritura se canceló. Un prompt o referencia nuevos invalidan el salto visual
   de un resultado anterior; éste sigue disponible en la biblioteca. Esa separación
-  también se conserva tras una recarga con una operación pendiente.
+  también se prueba en el harness con respaldo tras una recarga con operación
+  pendiente; esa persistencia no está habilitada en runtime.
 - Guardar confirma sólo el texto de esa generación; una edición posterior queda
   pendiente. Deshacer afecta únicamente al buffer y se bloquea con write incierto.
 - Conflicto muestra la revisión vigente y conserva el texto local. Conservar
   copia crea otro objeto desde la base exacta, sin merge ni modificación del original.
 - Conservar borrador confirma otro recibo/namespace; no anuncia una revisión
   guardada. El cierre con cambios requiere continuar o conservar ese borrador.
-- El respaldo local usa cuenta/ámbito y UUID de workspace. El bootstrap debe
+- El respaldo local exclusivo del harness usa cuenta/ámbito y UUID de workspace. El bootstrap debe
   conservar esa UUID al recargar la misma pestaña y usar otra para otro workspace;
   el harness lo hace con sessionStorage. No hay índice global de borradores locales
   ni garantía de recuperarlos al borrar storage/cerrar todas las pestañas. El
@@ -178,7 +217,8 @@ E2E ni sustituye la CI del candidato exacto.
   reemplazar su texto anterior o persistirlas. La restauración valida el indicador
   de borrador confirmado y su revisión; un valor corrupto no autoriza descartarlo.
   El cambio/cierre de sesión elimina el estado privado visible y descarta callbacks
-  tardíos, conservando su respaldo bajo la cuenta original.
+  tardíos; también purga el respaldo si un harness lo configuró. Runtime no tiene
+  ese respaldo de navegador.
 - Las 13 entradas del catálogo se identifican como herramientas futuras;
   Secuencia didáctica se incluye dentro de Planeación de clase. Búsqueda,
   nueva conversación, ajustes y micrófono están pendientes. No hay generación

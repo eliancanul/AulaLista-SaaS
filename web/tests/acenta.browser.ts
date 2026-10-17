@@ -765,3 +765,38 @@ test("library failure is distinct from empty and retry clears the error", async 
   ).toBeVisible();
   await expect(page.getByRole("alert")).toHaveCount(0);
 });
+
+test("continuing to edit cancels logout while an older draft response is delayed", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 924 });
+  const server = await mount(page);
+  await edit(page);
+  await page.getByLabel("Texto", { exact: true }).fill("Primera edición antes de salir");
+  await page.goBack(); await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("button", { name: "Cerrar sesión", exact: true }).click();
+  const guard = page.getByRole("dialog", { name: "¿Salir con cambios?", exact: true });
+  await expect(guard).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  await page.screenshot({ path: `${evidence}/logout-draft-guard-1440.png` });
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  server.after = async (call, response) => {
+    if (call.method === "PUT" && call.path.includes("/drafts/")) await gate;
+    return response;
+  };
+  await guard.getByRole("button", { name: "Conservar borrador y salir", exact: true }).click();
+  await expect(guard.getByRole("button", { name: "Conservar borrador y salir", exact: true })).toBeDisabled();
+  await guard.getByRole("button", { name: "Seguir editando", exact: true }).click();
+  await page.getByLabel("Texto", { exact: true }).fill("Edición más reciente que debe permanecer");
+  release(); server.after = null;
+  await expect(page.getByRole("status")).toHaveText("Cambios sin guardar");
+  await expect(page.getByLabel("Texto", { exact: true })).toHaveValue("Edición más reciente que debe permanecer");
+  expect(server.drafts.size).toBe(1);
+  expect([...server.drafts.values()][0].request.text).toBe("Primera edición antes de salir");
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Conservar borrador", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(server.drafts.size).toBe(1);
+  expect([...server.drafts.values()][0].receipt.draft_revision).toBe(2);
+  expect([...server.drafts.values()][0].request.text).toBe("Edición más reciente que debe permanecer");
+  expect([...server.docs.values()][0].receipt.revision).toBe(1);
+});
