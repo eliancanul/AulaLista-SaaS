@@ -138,7 +138,7 @@ test("a fresh authenticated account discovers exact original versions without an
     async function openAndVerify(receipt: SourceReceipt, sample: typeof sourceSamples[number]) {
       const card = restored.getByRole("article", { name: `Recurso original · Versión ${receipt.number}`, exact: true });
       const trigger = card.getByRole("button", { name: "Abrir original", exact: true });
-      const response = restored.waitForResponse((r) => new URL(r.url()).pathname === versionPath(receipt.number));
+      const response = restored.waitForResponse((r) => r.request().method() === "GET" && new URL(r.url()).pathname === versionPath(receipt.number));
       await trigger.focus(); await trigger.press("Enter");
       const read = await response;
       expect(read.status()).toBe(200);
@@ -146,15 +146,22 @@ test("a fresh authenticated account discovers exact original versions without an
       expect(read.headers()["x-version"]).toBe(String(receipt.number));
       expect(read.headers()["x-source-id"]).toBe(receipt.source_id);
       expect(read.headers()["x-actor-id"]).toBe(account.principal_id);
-      const bytes = await read.body();
+      const viewer = restored.getByRole("dialog", { name: "Original de ejemplo" });
+      await expect(viewer.getByRole("status")).toContainText("bytes verificados");
+      expect(await viewer.getByLabel("Contenido original").textContent()).toBe(sample.bytes);
+      expect(read.url()).toBe(new URL(versionPath(receipt.number), origin).href);
+      // Chromium can discard CDP bodies for no-store streams after the page consumes them
+      // (microsoft/playwright#42742). Read binary evidence through the same real session.
+      const binary = await restored.request.get(read.url(), { maxRedirects: 0 });
+      expect(binary.status()).toBe(200);
+      for (const header of ["cache-control", "x-version", "x-source-id", "x-actor-id", "x-content-size", "x-content-sha256"])
+        expect(binary.headers()[header]).toBe(read.headers()[header]);
+      const bytes = await binary.body();
       expect(bytes).toEqual(Buffer.from(sample.bytes, "utf8"));
       expect(bytes.length).toBe(receipt.size);
       expect(read.headers()["x-content-size"]).toBe(String(receipt.size));
       expect(createHash("sha256").update(bytes).digest("hex")).toBe(receipt.sha256);
       expect(read.headers()["x-content-sha256"]).toBe(receipt.sha256);
-      const viewer = restored.getByRole("dialog", { name: "Original de ejemplo" });
-      await expect(viewer.getByRole("status")).toContainText("bytes verificados");
-      expect(await viewer.getByLabel("Contenido original").textContent()).toBe(sample.bytes);
       await restored.keyboard.press("Escape");
       await expect(viewer).toHaveCount(0); await expect(trigger).toBeFocused();
     }
