@@ -12,6 +12,7 @@ from aulalista_api.database import Readiness, make_engine
 from aulalista_api.material_routes import install_material_routes
 from aulalista_api.planning_edit_routes import install_planning_edit_routes
 from aulalista_api.planning_routes import install_planning_routes
+from aulalista_api.web import install_web
 
 
 def create_app() -> FastAPI:
@@ -50,4 +51,5 @@ def create_app() -> FastAPI:
     install_material_routes(app, engine)
     install_planning_routes(app, engine)
     install_planning_edit_routes(app, engine)
+    install_web(app)
     return app

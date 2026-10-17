@@ -1,0 +1,31 @@
+# Reference only. Do not connect/sync this file without deployment authorization.
+# No database, credentials, migration hook, paid plan, or automatic deploys.
+# autoDeployTrigger disables subsequent auto-deploys, not initial provisioning.
+services:
+  - type: web
+    name: acenta-demo
+    runtime: python
+    plan: free
+    buildCommand: bash scripts/build-render.sh
+    startCommand: .venv/bin/python -m uvicorn aulalista_api.app:create_app --factory --host 0.0.0.0 --port "$PORT" --no-access-log --no-proxy-headers
+    healthCheckPath: /health/ready
+    autoDeployTrigger: "off"
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.14"
+      - key: UV_VERSION
+        value: "0.12.23"
+      - key: NODE_VERSION
+        value: "24"
+      - key: AULALISTA_DOCS_ENABLED
+        value: "false"
+      - key: AULALISTA_DB_TIMEOUT_SECONDS
+        value: "3"
+      - key: AULALISTA_DATABASE_URL
+        sync: false
+      - key: AULALISTA_AUTH_ORIGIN
+        sync: false
+      - key: AULALISTA_AUTH_HMAC_KEY
+        sync: false
+      - key: AULALISTA_GOOGLE_CLIENT_ID
+        sync: false

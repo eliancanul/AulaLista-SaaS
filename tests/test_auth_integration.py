@@ -679,3 +679,48 @@ def test_failed_session_commit_rolls_back_identity_and_otp_consumption(
                 text("DROP TRIGGER synthetic_auth_commit_failure ON auth_session")
             )
         assert verify(client, headers, challenge, code).status_code == 200
+
+
+def test_public_auth_budget_commits_rejections_and_preserves_session_routes(
+    auth_factory, monkeypatch
+):
+    import aulalista_api.auth as auth_module
+
+    fixed_now = auth_module.now()
+    monkeypatch.setattr(auth_module, "now", lambda: fixed_now)
+    monkeypatch.setattr(auth_module, "PUBLIC_AUTH_LIMIT_PER_MINUTE", 3)
+    factory, _ = auth_factory
+    with factory() as client:
+        # Invalid CSRF still consumes the shared ceiling; no verifier is reached.
+        for _ in range(3):
+            assert client.post("/auth/google", json={}).status_code == 403
+        assert client.get("/auth/bootstrap").status_code == 429
+        assert client.get("/health/live").status_code == 200
+        assert client.get("/auth/session").status_code == 401
+        assert client.post("/auth/logout").status_code == 401
+    with factory() as restarted:
+        assert restarted.get("/auth/bootstrap").status_code == 429
+
+
+def test_global_budget_atomic_across_app_instances(auth_factory, monkeypatch):
+    import aulalista_api.auth as auth_module
+    from aulalista_api.auth import AuthError
+
+    fixed_now = auth_module.now()
+    monkeypatch.setattr(auth_module, "now", lambda: fixed_now)
+    monkeypatch.setattr(auth_module, "PUBLIC_AUTH_LIMIT_PER_MINUTE", 7)
+    factory, _ = auth_factory
+    with factory() as first, factory() as second:
+
+        def reserve(index):
+            app = first.app if index % 2 else second.app
+            try:
+                app.state.auth.reserve_public_budget()
+                return 200
+            except AuthError as error:
+                return error.status
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            statuses = list(executor.map(reserve, range(16)))
+        assert statuses.count(200) == 7
+        assert statuses.count(429) == 9

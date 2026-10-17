@@ -66,8 +66,8 @@ def test_uvicorn_does_not_trust_forwarded_identity_for_bootstrap_quota(
                 assert response.json() == {"detail": "rate_limited"}
             with migrated_database.connect() as connection:
                 assert connection.execute(
-                    text("SELECT count(*), max(count) FROM auth_rate")
-                ).one() == (1, 31)
+                    text("SELECT count(*), min(count), max(count) FROM auth_rate")
+                ).one() == (2, 31, 31)
         finally:
             server.should_exit = True
             worker.join(timeout=10)

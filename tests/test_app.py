@@ -29,7 +29,11 @@ def test_unavailable_endpoints_are_not_advertised(client, path):
 
 
 def test_health_and_fail_closed_material_routes_are_registered(client):
-    assert [(route.path, route.methods) for route in client.app.routes] == [
+    assert [
+        (route.path, route.methods)
+        for route in client.app.routes
+        if route.include_in_schema
+    ] == [
         ("/health/live", {"GET"}),
         ("/health/ready", {"GET"}),
         ("/auth/bootstrap", {"GET"}),

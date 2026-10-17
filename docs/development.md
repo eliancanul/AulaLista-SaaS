@@ -252,5 +252,7 @@ El arranque local desactiva también `ProxyHeadersMiddleware` con
 `--no-proxy-headers`: Uvicorn confía por defecto en cabeceras reenviadas desde
 loopback, lo que permitiría alterar la IP usada por los límites. Todos los
 launchers del repositorio fijan `proxy_headers=False` o su equivalente CLI.
-No habilitar proxy headers ni publicar detrás de un proxy antes de diseñar y
-probar una frontera de confianza explícita; este incremento sólo usa el peer TCP.
+No habilitar proxy headers sin diseñar y probar una frontera de confianza explícita.
+La adaptación [Render demo](render-demo.md) mantiene el peer TCP compartido, añade
+un presupuesto global PG y prepara UI/API same-origin; no acredita un despliegue
+ni confianza en cabeceras del edge.
