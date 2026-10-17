@@ -125,3 +125,51 @@ genérico; una afirmación insuficiente conserva su resultado junto al dato.
 Los archivos resultantes contienen datos privados igual que el replay de fuente.
 El workflow existente descubre automáticamente los nuevos tests de este directorio
 y los ejecuta normal y con `-O`; no cambia fixtures/scorer/manifiesto de `evaluation`.
+
+## Anclas y anexos (#44)
+
+`annex_replay` usa el [contrato de anclas](../docs/specs/0009-anclas-anexos.md).
+Es una ayuda interna: **cero preguntas, confirmaciones o aprobaciones nuevas**.
+Faltantes/ambigüedad conservan el resultado parcial y salen 0; no bloquean las
+sesiones independientes. Integridad rota/entrada inválida sale 2, sin pedir nada.
+
+Un manifiesto `aulalista-annex-replay.v1` describe una evaluación:
+
+- `source_manifest`, `document_index`, `owner_id`, `scope_id`, `snapshot_sha256`,
+  `original_response` y `stage=original|separate_check`, con el significado anterior.
+  Cada corrección/comprobación posterior usa su propio manifiesto/recibo.
+- `target`: `{id, representation_id, role:null, context_id:null}`, fijado por el
+  consumidor. Todas las pertenencias se recalculan desde esa fuente.
+- `selections`: spans Unicode exactos de respuesta `{start,end,quote,reference_id}`.
+  Cada ID propuesto debe tener procedencia en la respuesta. Los spans se comprueban
+  contra sus bytes; el CLI no interpreta su significado ni certifica el mapeo.
+- `proposals`: `{reference_id, session_id, activity_id, evidence}`. El adaptador
+  documenta qué páginas/rangos declaró realmente el original y cuáles localizó
+  después. No se atribuyen al original citas/offsets reconstruidos posteriormente.
+- `candidates`: lista opcional local del contrato, vacía si no hay archivos candidatos.
+  No inicia búsquedas, descargas, generaciones ni preguntas.
+- `expected`: inventarios independientes `sessions`, `mentions` (sólo la palabra
+  anexo/anexos) con `{page,start,end}`, y `numbered` con esos campos más `number`.
+  `relations` cubre exactamente cada posición numérica esperada con
+  `{position, state:evidenced|unknown, resource_state}`. Duplicados no reducen ni
+  inflan denominadores. Es adjudicación declarada por operador/agente, no aval docente.
+- `supporting_records`: lista opcional de archivos privados `{path,sha256}` que
+  conservan el inventario/revisión independiente. También se vuelven a verificar.
+
+El recibo distingue inventarios esperados/detectados/coincidentes/omitidos/extras,
+selección de respuesta, relaciones con evidencia, faltantes, ambiguas, duplicados
+y decisiones frente a la adjudicación. Menciones léxicas y números de listas tienen
+denominadores diferentes. Los casos no decidibles siguen visibles; disponibilidad
+no es corrección semántica. Ningún resultado significa precisión general.
+
+```sh
+PYTHONPATH=src:. python3 -B -m document_checks.annex_replay run /private/annexes.json --out /private/annex-run
+sha256sum /private/annex-run/receipt.json
+PYTHONPATH=src:. python3 -B -m document_checks.annex_replay verify /private/annexes.json --out /private/annex-run --receipt-sha256 DIGEST_RETENIDO
+```
+
+El destino nuevo queda fuera del repo. `result.json` contiene índice, relaciones y
+candidatos canónicos con texto privado; no publicarlo. La reapertura recalcula todo
+y rechaza cambios, incluso un `located` forjado. No agrega otra capa de batch ni
+un veredicto persistido con autoridad. Los nuevos tests se descubren en el workflow
+existente normal y `-O`, sin depender de proveedores ni archivos reales.
