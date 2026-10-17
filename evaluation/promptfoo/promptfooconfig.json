@@ -1,0 +1,10 @@
+{
+  "description": "Preparatory config; CLI blocked pending offline execution verification. Software fixtures only, no educational evidence",
+  "prompts": ["{{case}}"],
+  "providers": ["file://checks.py"],
+  "tests": "file://checks.py:get_tests",
+  "sharing": false,
+  "writeLatestResults": false,
+  "evaluateOptions": { "maxConcurrency": 1, "cache": false },
+  "tracing": { "enabled": false }
+}

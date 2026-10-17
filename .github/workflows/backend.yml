@@ -63,7 +63,7 @@ jobs:
           uv run --locked --no-editable alembic upgrade head
           uv run --locked --no-editable alembic current
       - name: Test installed API and configuration
-        run: uv run --locked --no-editable pytest tests/test_app.py tests/test_config.py tests/test_browser_runner.py tests/test_auth_unit.py tests/test_auth_google_signature.py tests/test_web.py tests/test_web_packaging.py
+        run: uv run --locked --no-editable pytest tests/test_app.py tests/test_config.py tests/test_browser_runner.py tests/test_auth_unit.py tests/test_auth_google_signature.py tests/test_web.py tests/test_web_packaging.py tests/test_planning_result.py tests/test_promptfoo.py
       - name: Required PostgreSQL integration tests (no skip or fallback)
         run: uv run --locked --no-editable pytest tests/test_postgres.py tests/test_materials.py tests/test_plannings.py tests/test_water_fixture.py tests/test_attachment_fixtures.py tests/test_planning_edits.py tests/test_auth_integration.py tests/test_auth_proxy.py
       - name: Verify PostgreSQL logs exclude private rows and parameters
