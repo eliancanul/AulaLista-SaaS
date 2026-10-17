@@ -1,6 +1,8 @@
 # T1: persistir identidad interna y ámbito personal en PostgreSQL
 
-Estado: integrado mediante [PR #2](https://github.com/eliancanul/AulaLista-SaaS/pull/2), main `a8dc576f041ca7cf6fd755a54a5027280c4e4f75`, con [CI postmerge success](https://github.com/eliancanul/AulaLista-SaaS/actions/runs/38688115249). Dependencia: T0 integrado en `11c8d4d3e41295dbf5d49023f36b78f4eff1d1e0`. Spec: [0001](../specs/0001-fundacion.md). ADR: [0001](../adr/0001-fundacion-personal.md).
+Referencia técnica e historial del corte. Consulta [Issues y fuentes de verdad](README.md) para elegir trabajo y consultar su estado actual.
+
+Integración histórica: integrado mediante [PR #2](https://github.com/eliancanul/AulaLista-SaaS/pull/2), main `a8dc576f041ca7cf6fd755a54a5027280c4e4f75`, con [CI postmerge success](https://github.com/eliancanul/AulaLista-SaaS/actions/runs/38688115249). Dependencia: T0 integrado en `11c8d4d3e41295dbf5d49023f36b78f4eff1d1e0`. Spec: [0001](../specs/0001-fundacion.md). ADR: [0001](../adr/0001-fundacion-personal.md).
 
 ## Resultado
 

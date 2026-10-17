@@ -1,6 +1,8 @@
 # T5: ejecutar el ensayo y decidir la estrategia
 
-Estado: pendiente; ensayo no ejecutado, sin ganador. Dependencia: [T4](T4-preparar-evaluacion.md), criterios/presupuestos fijados y autorización aplicable a cada ejecución y transmisión al destino concreto. Preparar el ensayo no concede esos permisos.
+Referencia técnica e historial del corte. Consulta [Issues y fuentes de verdad](README.md) para elegir trabajo y consultar su estado actual.
+
+Alcance: ensayo y decisión sujetos a evidencia; este documento no acredita ejecución ni ganador. Dependencia técnica: [T4](T4-preparar-evaluacion.md), criterios/presupuestos fijados y autorización aplicable a cada ejecución y transmisión al destino concreto. Preparar el ensayo no concede esos permisos.
 
 ## Resultado
 

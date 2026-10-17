@@ -1,6 +1,8 @@
 # T0: arrancar FastAPI y sus comprobaciones propias
 
-Estado: integrado mediante [PR #1](https://github.com/eliancanul/AulaLista-SaaS/pull/1) tras revisión independiente y CI correctas. Main `11c8d4d3e41295dbf5d49023f36b78f4eff1d1e0`; [CI postmerge success](https://github.com/eliancanul/AulaLista-SaaS/actions/runs/38686682062), con 21 tests y comprobaciones propias de T0. Escritor: `implementar_base_fastapi`. Dependencia: entorno y directorio del código confirmados. Spec: [0001](../specs/0001-fundacion.md).
+Referencia técnica e historial del corte. Consulta [Issues y fuentes de verdad](README.md) para elegir trabajo y consultar su estado actual.
+
+Integración histórica: integrado mediante [PR #1](https://github.com/eliancanul/AulaLista-SaaS/pull/1) tras revisión independiente y CI correctas. Main `11c8d4d3e41295dbf5d49023f36b78f4eff1d1e0`; [CI postmerge success](https://github.com/eliancanul/AulaLista-SaaS/actions/runs/38686682062), con 21 tests y comprobaciones propias de T0. Escritor: `implementar_base_fastapi`. Dependencia: entorno y directorio del código confirmados. Spec: [0001](../specs/0001-fundacion.md).
 
 ## Resultado
 

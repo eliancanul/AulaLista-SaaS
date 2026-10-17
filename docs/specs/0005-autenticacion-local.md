@@ -1,10 +1,17 @@
-# B1: autenticación preparatoria local
+# B1: autenticación y sesión personal
 
-Base: `1188050007df15ffac752f72b03915cc44112183`. Issue #13.
-Google Identity Services directo + código de un uso por correo. Este corte NO
-configura cuentas, cliente Google, credenciales ni envío real; NO completa #13.
+Base histórica: `1188050007df15ffac752f72b03915cc44112183`. Issue #13.
+Google Identity Services directo + código de un uso por correo. El incremento
+original no configuraba cuentas, cliente Google, credenciales ni envío real.
 EmailSender no tiene implementación runtime. No hay identidad de desarrollo
 seleccionable. Las pruebas sustituyen transporte/verificador, nunca actor.
+
+La [aceptación manual del 17 de octubre de 2026](https://github.com/eliancanul/AulaLista-SaaS/issues/13#issuecomment-6231320343)
+registra acceso Google, recarga y cierre/reentrada en el servicio de pruebas sobre
+`355399b6f01ea6985ebdb8389691fc532c993e5f`. Es confirmación humana, no una prueba
+instrumental de todos los criterios ni de despliegues posteriores. El usuario
+pospuso el proveedor/envío real de OTP; permanece deshabilitado. No se declara
+cierre integral de #13 ni vinculación de métodos.
 
 ## Contrato HTTP estable
 
@@ -70,9 +77,10 @@ buscar secretos. Ausencia total de auth mantiene privadas en401 y auth en503;
 config parcial/inválida falla al arrancar. Google no depende de sender correo.
 La clave de ejemplo es sólo marcador, nunca valor utilizable.
 
-Pendientes fuera del trazador: proveedor correo/configuración real autorizada,
-cliente Google/orígenes autorizados, prueba externa real, vinculación fresca de
-métodos y criterio completo de #13. Consentimiento marketing no existe ni se
+Pendientes: proveedor/envío real de correo expresamente pospuesto, vinculación
+fresca de métodos y criterios restantes de #13. La configuración Google y su
+prueba humana tienen el alcance y SHA registrados arriba; no certifican otra
+instalación. Consentimiento marketing no existe ni se
 infiere del login. No se envían campañas ni se piden scopes adicionales.
 
 
@@ -83,6 +91,10 @@ sólo al crear sesión en finish, sin backfill/default/índice ni UPDATE runtime
 usa la fila ya validada. El ID no es secreto ni autoridad, cookie, CSRF o selector.
 Sesiones legacy/null y clientes sin el campo conservan auth pero no respaldo.
 La recuperación local sólo admite misma sesión confirmada; no atraviesa401/relogin.
+La [decisión de fase 1](0003-edicion-durable.md#decisión-de-fase-1-recuperación-tras-sesión-inválida)
+acepta conservar la purga ante 401 ambiguo y recuperar sólo trabajo confirmado
+desde la biblioteca después del login. Los cambios nunca guardados pueden
+perderse; su recuperación se aplaza como mejora posterior, sin cambio de runtime.
 Ocultar la vista de acceso conserva formulario/desafío/OTP. Un login cuya respuesta
 cruzó esa ocultación sólo abre el espacio tras otro GET de sesión al activar, incluso
 si la respuesta llega después de volver; no repite login ni verifica otra vez el código.
