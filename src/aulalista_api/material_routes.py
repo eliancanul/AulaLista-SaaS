@@ -16,15 +16,20 @@ from aulalista_api.materials import MAX_CONTENT_BYTES, MaterialError, Materials
 
 def require_actor() -> UUID:
     # Only tests override this dependency; no runtime config/header grants identity.
-    raise HTTPException(401, "unauthorized")
+    raise HTTPException(401, "unauthorized", headers={"Cache-Control": "no-store"})
 
 
 Actor = Annotated[UUID, Depends(require_actor)]
 Operation = Annotated[UUID, Header(alias="Idempotency-Key")]
 
 
-async def bounded_content(request: Request) -> bytes:
-    if request.headers.get("content-type", "").lower() != "application/octet-stream":
+async def bounded_content(
+    request: Request,
+    *,
+    media_type: str = "application/octet-stream",
+    max_bytes: int = MAX_CONTENT_BYTES,
+) -> bytes:
+    if request.headers.get("content-type", "").lower() != media_type:
         raise MaterialError(415, "unsupported_media_type")
     declared = request.headers.get("content-length")
     if declared is not None:
@@ -32,12 +37,12 @@ async def bounded_content(request: Request) -> bytes:
             raise MaterialError(422, "invalid_request")
         # Compare text first so an untrusted integer cannot consume unbounded work.
         significant = declared.lstrip("0") or "0"
-        if len(significant) > 5 or int(significant) > MAX_CONTENT_BYTES:
+        if len(significant) > len(str(max_bytes)) or int(significant) > max_bytes:
             raise MaterialError(413, "content_too_large")
     content = bytearray()
     try:
         async for chunk in request.stream():
-            if len(chunk) > MAX_CONTENT_BYTES - len(content):
+            if len(chunk) > max_bytes - len(content):
                 raise MaterialError(413, "content_too_large")
             content.extend(chunk)
     except ClientDisconnect:
@@ -52,15 +57,27 @@ def install_material_routes(app: FastAPI, engine: Engine) -> None:
 
     @app.exception_handler(MaterialError)
     async def material_error(request, error):
-        return JSONResponse({"detail": error.detail}, status_code=error.status)
+        return JSONResponse(
+            {"detail": error.detail},
+            status_code=error.status,
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.exception_handler(SQLAlchemyError)
     async def persistence_error(request, error):
-        return JSONResponse({"detail": "unavailable"}, status_code=503)
+        return JSONResponse(
+            {"detail": "unavailable"},
+            status_code=503,
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request, error):
-        return JSONResponse({"detail": "invalid_request"}, status_code=422)
+        return JSONResponse(
+            {"detail": "invalid_request"},
+            status_code=422,
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.post("/scopes/{scope_id}/sources", status_code=201)
     async def create_source(

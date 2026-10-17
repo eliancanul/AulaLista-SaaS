@@ -36,6 +36,17 @@ def test_health_and_fail_closed_material_routes_are_registered(client):
         ("/scopes/{scope_id}/sources/{source_id}/versions", {"POST"}),
         ("/scopes/{scope_id}/sources/{source_id}/versions/{number}", {"GET"}),
         ("/scopes/{scope_id}/operations/{operation_id}", {"GET"}),
+        ("/scopes/{scope_id}/plannings", {"POST"}),
+        ("/scopes/{scope_id}/plannings/{planning_id}", {"GET"}),
+        ("/scopes/{scope_id}/planning-operations/{operation_id}", {"GET"}),
+        ("/scopes/{scope_id}/plannings/{planning_id}/revisions", {"POST"}),
+        ("/scopes/{scope_id}/plannings/{planning_id}/copies", {"POST"}),
+        ("/scopes/{scope_id}/plannings/{planning_id}/revisions/{number}", {"GET"}),
+        ("/scopes/{scope_id}/plannings/{planning_id}/drafts/{draft_id}", {"PUT"}),
+        ("/scopes/{scope_id}/planning-drafts/{draft_id}", {"GET"}),
+        ("/scopes/{scope_id}/planning-draft-operations/{operation_id}", {"GET"}),
+        ("/scopes/{scope_id}/plannings", {"GET"}),
+        ("/scopes/{scope_id}/planning-drafts", {"GET"}),
     ]
 
 

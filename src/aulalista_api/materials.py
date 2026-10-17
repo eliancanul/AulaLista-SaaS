@@ -51,6 +51,7 @@ class SourceVersion(Base):
             ["source.id", "source.scope_id"],
             name="fk_version_source_scope",
         ),
+        UniqueConstraint("id", "scope_id", name="uq_source_version_scope"),
         UniqueConstraint("source_id", "number", name="uq_source_version_number"),
         UniqueConstraint("scope_id", "operation_id", name="uq_scope_operation"),
         CheckConstraint("number > 0", name="ck_version_number"),

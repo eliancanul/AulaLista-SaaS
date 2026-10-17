@@ -22,9 +22,10 @@ Después de editar código local, repetir `uv sync --locked --no-editable
 --reinstall-package aulalista-api` para no probar una wheel anterior de la caché.
 
 Las migraciones requieren el rol dueño de esquema. No se ejecutan en el arranque
-ni desde endpoints. El head esperado es `0002_source_versions`. El downgrade de
-0002 elimina fuentes y versiones; usarlo sólo en esta DB desechable, nunca para
-restaurar datos. Las pruebas recrean el esquema desde ambas migraciones.
+ni desde endpoints. El head esperado es `0004_planning_edits`. El downgrade de
+0004 elimina borradores y origen de copias; el de 0003 elimina planeaciones y
+revisiones; el de 0002 elimina fuentes y versiones. Usarlo sólo en esta DB
+desechable, nunca para restaurar datos. Las pruebas recrean el esquema desde todas las migraciones.
 
 `.env.example` no se carga automáticamente. El DSN debe especificar driver
 `postgresql+psycopg`, usuario, host único y DB. Sólo se permite `sslmode` como
@@ -48,6 +49,10 @@ GRANT USAGE ON SCHEMA public TO aulalista_runtime;
 GRANT SELECT ON principal, personal_scope, alembic_version TO aulalista_runtime;
 GRANT SELECT, INSERT ON source, source_version TO aulalista_runtime;
 GRANT UPDATE (current_version) ON source TO aulalista_runtime;
+GRANT SELECT, INSERT ON planning, planning_revision TO aulalista_runtime;
+GRANT UPDATE (current_revision) ON planning TO aulalista_runtime;
+GRANT SELECT, INSERT ON planning_draft, planning_draft_revision TO aulalista_runtime;
+GRANT UPDATE (current_revision) ON planning_draft TO aulalista_runtime;
 SQL
 export AULALISTA_DATABASE_URL='postgresql+psycopg://aulalista_runtime@127.0.0.1:55432/aulalista_test'
 uv run --locked --no-editable uvicorn aulalista_api.app:create_app --factory --host 127.0.0.1 --port 8000 --no-access-log
@@ -76,7 +81,7 @@ cumplir controles equivalentes antes de usar cualquier dato privado.
 
 - `GET /health/live`: 200 `{"status":"ok"}`, independiente de DB.
 - `GET /health/ready`: 200 sólo con conexión y única revisión
-  `0002_source_versions`; fallo/timeout/revisión distinta: 503 sin detalle interno.
+  `0004_planning_edits`; fallo/timeout/revisión distinta: 503 sin detalle interno.
 - `AULALISTA_DB_TIMEOUT_SECONDS`: entero 2–30, predeterminado 3. Deadline HTTP de
   readiness completo, incluyendo espera, DNS, conexión y consulta; también fija
   timeouts de driver/servidor. Una sola sonda en vuelo evita acumular hilos.
@@ -105,7 +110,7 @@ export AULALISTA_TEST_ALLOW_RESET=1
 uv run --locked --no-editable ruff check .
 uv run --locked --no-editable ruff format --check .
 uv run --locked --no-editable pytest tests/test_app.py tests/test_config.py
-uv run --locked --no-editable pytest tests/test_postgres.py tests/test_materials.py
+uv run --locked --no-editable pytest tests/test_postgres.py tests/test_materials.py tests/test_plannings.py tests/test_water_fixture.py tests/test_planning_edits.py
 docker compose -f compose.test.yml logs --no-color postgres > /tmp/aulalista-postgres.log
 uv run --locked --no-editable python tests/check_postgres_log.py /tmp/aulalista-postgres.log
 uv pip check
@@ -145,3 +150,50 @@ No hay identidad real, RLS, autorización de documentos reales ni restore de
 producción. El runtime tiene permisos SQL amplios de lectura: el aislamiento de
 T2 está en el caso de uso, no protege contra compromiso de la app/rol. Las puertas
 del piloto exigen reforzarlo. Tampoco hay UI, parsing, OCR, IA, cobro o despliegue.
+
+## B2 preparatorio: resultado fixture durable
+
+[Contrato B2](tickets/B2-resultado-simulado.md): POST JSON acotado a 4096 bytes,
+fuente T2 fixture exacta y revisión esperada; respuesta/recibo tras commit.
+Lecturas de planeación y operación propias no ejecutan generador. Namespace
+`planning-v1` separado de recibos T2; misma UUID no mezcla operaciones.
+`planning_revision` es inmutable, protegida por FK de fuente/ámbito, trigger y
+permisos mínimos. B3 añade UPDATE sólo de current_revision sobre planeaciones y
+borradores, nunca sobre la historia.
+La migración explícita 0003 agrega las tablas y una clave compuesta de referencia
+a source_version, sin alterar sus bytes ni recibos. Downgrade destruye resultados: no
+es restauración de producción. Revisar y aplicar grants al provisionar tras migrar.
+
+Sólo tests inyectan actor. Identidad real #13 y UI Acenta conectada siguen pendientes;
+no es un recorrido usable, parser ni IA. Las pruebas B2 incluyen recuperación tras
+COMMIT con transporte fallido, CAS contra append T2, aislamiento y rollback diferido.
+
+
+## B3: edición, borradores y copias
+
+[Contrato B3](specs/0003-edicion-durable.md): edición de un enunciado permitido con
+CAS e idempotencia; borrador privado versionado con identidad y CAS propios; copia
+independiente desde una revisión exacta con origen y fuente conservados. La
+migración explícita 0004 conserva B2, agrega las tablas de borradores y protege
+la relación origen/fuente/ámbito con FKs compuestas. Requiere los grants arriba
+indicados, nunca permisos de UPDATE/DELETE/TRUNCATE sobre revisiones.
+
+El nuevo fixture `water-observation-v1` corresponde a Agua que cambia/30 minutos
+y Ficha de observación. No modifica el fixture original `timing-example-v1`.
+Ambos usan bytes sintéticos opacos exactos; no son PDF, parser ni IA.
+
+No hay endpoint de deshacer: sólo revierte texto local aún no guardado. Un recibo
+siempre representa su operación exacta; un GET de planeación representa current.
+Los borradores no avanzan esa revisión y pueden basarse en una revisión antigua.
+Los listados mínimos paginan por UUID para reabrir original/copia/borrador.
+
+Downgrade 0004 destruye borradores y metadatos de origen; no es restauración. Si
+una revisión B3 supera el límite antiguo de 4096 bytes de request, el downgrade
+rechaza la reducción y revierte su transacción. Usar migraciones hacia adelante
+para datos que deban conservarse; no se acredita backup/restore de producción.
+
+Pruebas B3 añaden dos conexiones runtime reales para CAS y replay, reinicio de app,
+fallo diferido de commit, pérdida de respuesta tras commit, recibo aún no visible,
+borradores ajenos y sobre base superada, copia idempotente tras conflicto,
+inmutabilidad y fuente/origen coherentes. Los tests frontend son un gate separado;
+identidad real #13 sigue pendiente y runtime permanece cerrado.

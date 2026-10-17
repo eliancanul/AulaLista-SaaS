@@ -9,6 +9,8 @@ from fastapi.responses import JSONResponse
 from aulalista_api.config import load_settings
 from aulalista_api.database import Readiness, make_engine
 from aulalista_api.material_routes import install_material_routes
+from aulalista_api.planning_edit_routes import install_planning_edit_routes
+from aulalista_api.planning_routes import install_planning_routes
 
 
 def create_app() -> FastAPI:
@@ -44,4 +46,6 @@ def create_app() -> FastAPI:
         )
 
     install_material_routes(app, engine)
+    install_planning_routes(app, engine)
+    install_planning_edit_routes(app, engine)
     return app

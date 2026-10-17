@@ -3,7 +3,6 @@ import hashlib
 import json
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import replace
 from uuid import UUID, uuid4
 
 import pytest
@@ -14,8 +13,6 @@ from sqlalchemy.orm import Session
 from starlette.requests import Request
 
 from aulalista_api.app import create_app
-from aulalista_api.config import load_settings
-from aulalista_api.database import PersonalScope, Principal, make_engine
 from aulalista_api.material_routes import bounded_content, require_actor
 from aulalista_api.materials import (
     MAX_CONTENT_BYTES,
@@ -23,82 +20,6 @@ from aulalista_api.materials import (
     Materials,
     SourceVersion,
 )
-
-
-@pytest.fixture
-def actors(migrated_database):
-    with Session(migrated_database) as session, session.begin():
-        ids = []
-        for _ in range(2):
-            actor = Principal()
-            session.add(actor)
-            session.flush()
-            scope = PersonalScope(owner_principal_id=actor.id)
-            session.add(scope)
-            session.flush()
-            ids.append((actor.id, scope.id))
-        return ids
-
-
-@pytest.fixture
-def runtime_database(migrated_database, actors, monkeypatch):
-    with migrated_database.begin() as connection:
-        connection.execute(
-            text("""
-            DO $$ BEGIN
-                IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'aulalista_runtime') THEN
-                    CREATE ROLE aulalista_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
-                        NOINHERIT NOREPLICATION NOBYPASSRLS;
-                END IF;
-            END $$
-        """)
-        )
-        connection.execute(text("GRANT USAGE ON SCHEMA public TO aulalista_runtime"))
-        connection.execute(
-            text("""
-            GRANT SELECT ON principal, personal_scope, alembic_version TO aulalista_runtime;
-            GRANT SELECT, INSERT ON source, source_version TO aulalista_runtime;
-            GRANT UPDATE (current_version) ON source TO aulalista_runtime
-        """)
-        )
-    settings = load_settings()
-    url = settings.database_url.set(username="aulalista_runtime", password=None)
-    monkeypatch.setenv(
-        "AULALISTA_DATABASE_URL", url.render_as_string(hide_password=False)
-    )
-    runtime = make_engine(replace(settings, database_url=url))
-    try:
-        with runtime.connect() as connection:
-            assert connection.execute(
-                text("SELECT current_user, session_user")
-            ).one() == ("aulalista_runtime", "aulalista_runtime")
-            assert connection.execute(
-                text("""
-                SELECT rolsuper, rolcreaterole, rolcreatedb, rolreplication, rolbypassrls
-                FROM pg_roles WHERE rolname = current_user
-            """)
-            ).one() == (False, False, False, False, False)
-            assert (
-                connection.execute(
-                    text("""
-                SELECT count(*) FROM pg_auth_members
-                WHERE member = (SELECT oid FROM pg_roles WHERE rolname = current_user)
-            """)
-                ).scalar_one()
-                == 0
-            )
-            assert (
-                connection.execute(
-                    text("""
-                SELECT pg_get_userbyid(relowner) <> current_user
-                FROM pg_class WHERE oid = 'source_version'::regclass
-            """)
-                ).scalar_one()
-                is True
-            )
-        yield runtime
-    finally:
-        runtime.dispose()
 
 
 def actor_app(actor_id):
@@ -340,6 +261,8 @@ def test_two_connections_contend_and_third_reads_exact_result(
         v1 = create(setup, scope).json()
     key1 = uuid4()
     keys = [key1, key1 if same_key else uuid4()]
+    # Build route schemas before racing requests on separate connections.
+    apps = [actor_app(actor) for _ in keys]
     barrier = threading.Barrier(2)
     pids = set()
     guard = threading.Lock()
@@ -356,12 +279,13 @@ def test_two_connections_contend_and_third_reads_exact_result(
     event.listen(Engine, "before_cursor_execute", synchronize)
     try:
 
-        def contender(key):
-            with TestClient(actor_app(actor)) as client:
+        def contender(job):
+            key, app = job
+            with TestClient(app) as client:
                 return append(client, scope, v1["source_id"], operation=key)
 
         with ThreadPoolExecutor(max_workers=2) as pool:
-            results = list(pool.map(contender, keys))
+            results = list(pool.map(contender, zip(keys, apps)))
     finally:
         event.remove(Engine, "before_cursor_execute", synchronize)
     assert len(pids) == 2
@@ -516,7 +440,7 @@ def test_single_huge_chunk_is_never_accumulated():
     [
         "UPDATE source_version SET number = 4",
         "DELETE FROM source_version",
-        "TRUNCATE source_version",
+        "TRUNCATE source_version, planning_revision, planning_draft_revision",
     ],
 )
 def test_runtime_cannot_mutate_history_and_trigger_is_defense_in_depth(
@@ -669,6 +593,8 @@ def test_concurrent_create_same_key_never_leaves_extra_source(
 ):
     actor, scope = actors[0]
     key = uuid4()
+    # Build route schemas before racing requests on separate connections.
+    apps = [actor_app(actor) for _ in range(2)]
     barrier = threading.Barrier(2)
     pids = set()
     guard = threading.Lock()
@@ -683,14 +609,16 @@ def test_concurrent_create_same_key_never_leaves_extra_source(
     event.listen(Engine, "before_cursor_execute", synchronize)
     try:
 
-        def contender(body):
-            with TestClient(actor_app(actor)) as client:
+        def contender(job):
+            body, app = job
+            with TestClient(app) as client:
                 return create(client, scope, content=body, operation=key)
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             results = list(
                 pool.map(
-                    contender, [b"first", b"other" if different_body else b"first"]
+                    contender,
+                    zip([b"first", b"other" if different_body else b"first"], apps),
                 )
             )
     finally:
