@@ -109,7 +109,7 @@ async function assertLoadedAssets(page: Page) {
     expect(box?.height).toBe(expected);
   }
 }
-async function mount(page: Page) {
+async function mount(page: Page, recovery = false) {
   const server = new FixtureServer();
   await page.route("**/scopes/**", async (route) => {
     const request = route.request();
@@ -131,7 +131,7 @@ async function mount(page: Page) {
       await route.abort("failed");
     }
   });
-  await page.goto("/tests/acenta.html");
+  await page.goto(`/tests/acenta.html${recovery ? "?recovery=1" : ""}`);
   await assertLoadedAssets(page);
   return server;
 }
@@ -799,4 +799,23 @@ test("continuing to edit cancels logout while an older draft response is delayed
   expect([...server.drafts.values()][0].receipt.draft_revision).toBe(2);
   expect([...server.drafts.values()][0].request.text).toBe("Edición más reciente que debe permanecer");
   expect([...server.docs.values()][0].receipt.revision).toBe(1);
+});
+
+
+for (const width of [1440, 390]) test(`synthetic same-session recovery notice and restored editor at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 924 });
+  const server = await mount(page, true);
+  await edit(page);
+  const text = "Edición sintética recuperable: observa el agua y describe sus cambios.";
+  await page.getByLabel("Texto", { exact: true }).fill(text);
+  await page.reload();
+  await expect(page.getByLabel("Texto", { exact: true })).toHaveValue(text);
+  const dialog = page.getByRole("dialog", { name: "Editar actividad", exact: true });
+  await expect(dialog.getByText(/El respaldo queda en claro/)).toBeVisible();
+  await expect(dialog.getByText(/Recuperamos el texto de esta pestaña/)).toBeVisible();
+  expect(server.calls.filter(call => call.method !== "GET" && call.path.includes("/revisions"))).toHaveLength(0);
+  await assertTypography(page);
+  await assertNoHorizontalOverflow(page);
+  await assertEditorActionsFit(page);
+  await page.screenshot({ path: `${evidence}/editor-recovery-${width}.png` });
 });

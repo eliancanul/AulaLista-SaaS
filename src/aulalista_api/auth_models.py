@@ -35,6 +35,7 @@ class AuthSession(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     idle_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revoked: Mapped[bool] = mapped_column(default=False)
+    recovery_context_id: Mapped[UUID | None] = mapped_column(nullable=True)
 
 
 class EmailChallenge(Base):

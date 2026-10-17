@@ -21,7 +21,7 @@ sus referencias privadas y las respuestas pendientes. El logout fallido oculta
 el espacio y exige reintentar antes de ofrecer cambio de cuenta. La sesión se
 revalida al volver a la pestaña y cada minuto visible, sin alargar su inactividad. Una caída de red, error de servicio o respuesta inválida de esa
 comprobación suspende el espacio y bloquea nuevas peticiones privadas, conservando
-el trabajo pendiente sólo en memoria. La interfaz advierte que no se recargue y
+el trabajo pendiente en memoria y el respaldo de edición acotado, si pudo escribirse. La interfaz advierte que no se recargue y
 permite reintentar. Sólo una sesión confirmada idéntica recupera ese buffer; una
 sesión caducada o distinta lo elimina. Nunca se trata un fallo de red como prueba
 de caducidad.
@@ -171,8 +171,8 @@ conserva la purga inmediata y el reintento de logout existentes; no intenta
 confirmar un borrador sin autoridad comprobada. No guarda automáticamente la
 petición ni un adjunto pendiente y no cambia su tratamiento. 401/403, caducidad, revocación y
 cambio de sesión/CSRF mantienen la purga actual: recuperar trabajo no confirmado
-tras esos casos sigue pendiente. No hay nuevo almacenamiento de navegador ni
-recuperación del trabajo no confirmado al recargar o cerrar el navegador. #15 y
+tras esos casos sigue pendiente. La recarga de la misma pestaña/sesión ahora admite
+el respaldo B3 mínimo descrito abajo; no garantiza recuperación al cerrar el navegador. #15 y
 #13 siguen abiertos; esto no habilita el proveedor de correo ni autentica con un
 servicio externo real.
 
@@ -221,8 +221,8 @@ ejecución: Chromium local sigue bloqueado y se requiere CI del candidato exacto
   reemplazar su texto anterior o persistirlas. La restauración valida el indicador
   de borrador confirmado y su revisión; un valor corrupto no autoriza descartarlo.
   El cambio/cierre de sesión elimina el estado privado visible y descarta callbacks
-  tardíos; también purga el respaldo si un harness lo configuró. Runtime no tiene
-  ese respaldo de navegador.
+  tardíos; también purga el respaldo si un harness lo configuró. El formato legacy
+  nunca se conecta al runtime; éste usa el envelope mínimo descrito abajo.
 - Las 13 entradas del catálogo se identifican como herramientas futuras;
   Secuencia didáctica se incluye dentro de Planeación de clase. Búsqueda,
   nueva conversación, ajustes y micrófono están pendientes. No hay generación
@@ -245,3 +245,77 @@ El gate de assets verifica raíz XML SVG, dimensiones, referencias externas, CRC
 y directorios/tablas TTF, además de sus hashes. El SVG Google aprobado utiliza
 foreignObject para su gradiente; su visualización completa requiere revisión en
 Chromium porque CairoSVG no admite ese contenido. No se sustituye por un dibujo.
+
+
+## Respaldo temporal de edición B3 (#15, corte parcial)
+
+Un único slot `acenta:editor-recovery:v1` de `sessionStorage`, máximo 16 KiB,
+con texto editado (hasta 1000 puntos de código), referencia a la revisión base exacta,
+identidad de sesión/workspace y el intent pendiente exacto, si existe. No incluye
+prompt, fuentes, resultados, catálogos, selección, email ni credenciales. Si se escribe
+texto posterior a un envío, conserva ambos textos con sus generaciones. El codec
+rechaza propiedades extra, Unicode inválido, CAS o generaciones incoherentes.
+No conecta `BackupStore` legacy. Un navegador sin contexto nuevo/null no recupera.
+
+`auth_session.recovery_context_id` es UUID nullable no secreto, generado una vez por
+login con la INSERT existente. Se devuelve desde la fila ya autorizada en login y
+GET de sesión. No autoriza, no cifra, no crea endpoint, índice, lookup ni grant de UPDATE.
+Migración `0006_editor_recovery`: sin backfill ni servicio contratado. Sesiones
+anteriores null siguen funcionando. Cliente nuevo acepta campo ausente; cliente
+anterior ignora el campo aditivo. Readiness exige revisión exacta: rollback de binario
+0005 necesita downgrade coordinado, sólo probado en DB desechable; se pierde únicamente
+el discriminante y no se purgan bytes de navegadores por una migración DB.
+
+La vista privada está cerrada hasta validar sesión. Rehidrata base por ID/revisión,
+verifica revision_id y elemento editable, lee latest y, si no hay pending durable,
+reconcilia draftId para advertir un posible residuo ya guardado. No hay mutación
+automática ni nueva key para sustituir una operación perdida. «Comprobar estado»
+conserva namespace, key, clase, destino, payload, draftId y CAS; 404 sólo permite
+replay idéntico. Recibo previo no sustituye texto posterior ni borra su respaldo.
+
+Hidden/pagehide/freeze cierran el gate e invalidan callbacks y checks en vuelo.
+Visible/pageshow/resume/focus revalidan y deduplican checks en vuelo; una respuesta
+o finally anterior no reabre ni desbloquea una comprobación nueva. El sondeo periódico
+visible es observacional: con el mismo contexto no desmonta el editor, pierde foco
+ni invalida un guardado en vuelo; ante fallo, caducidad o contexto distinto sí cierra
+el gate. No se garantiza
+revocación instantánea de otras pestañas visibles, snapshots del navegador/SO ni
+borrado físico de otra pestaña. Dos clones mantienen el pending exacto; CAS servidor
+protege divergencias posteriores. No hay índice multicuentas ni sincronización nueva.
+
+TTL fijo de hasta 24 h desde el episodio, sin extensión al editar o recargar.
+La misma sesión debe seguir vigente (absoluta 24 h, idle 2 h); no hay recuperación
+tras 401/403, logout, cambio de contexto/cuenta o nuevo login. Esto limita admisión
+de recuperación, no conservación por 24 h ni borrado físico puntual: navegador
+cerrado/congelado no ejecuta limpieza. Se reintenta al siguiente acceso aplicable.
+Los datos quedan en claro: el perfil del navegador o JavaScript del mismo origen
+puede leerlos. UUID no es cifrado, ACL ni protección contra ese adversario.
+
+Cuota/lectura/limpieza fallidas son visibles. El intento local se escribe antes
+de enviar; si falla, memoria y guardado servidor pueden continuar, sin afirmar
+cobertura de recarga y sin bucle de retry por tecla. Si remove falla se intenta
+un tombstone constante sin contenido; no demuestra borrado físico. Si también
+falla, puede quedar un snapshot anterior sin key durable: en próxima recuperación
+se reconcilia el estado guardado, nunca se fabrica un retry. Logout no confirmado
+más remove/set fallidos tiene un límite inevitable: tras recarga la sesión aún
+viva podría admitir aquel respaldo, porque no quedó evidencia durable del cierre.
+La UI anuncia cierre/limpieza sin confirmar y recomienda limpiar datos del sitio
+si el navegador es compartido. No se promete resolver ese contraejemplo.
+
+Costo marginal observado en el diseño/código, sin benchmark ni factura:
+- Tecla: 0 HTTP, 0 writes DB; serialización y escritura local acotada.
+- Login: misma INSERT de sesión con 16 bytes UUID de valor más overhead DB.
+- GET auth existente: mismo acceso autorizado, campo JSON aditivo; no renueva idle.
+- Activación: hasta 1 GET auth por comprobación en vuelo deduplicada; eventos posteriores
+  pueden volver a comprobar. No se añade polling al minuto existente.
+- Recarga con respaldo: 2 GET privados (base y latest), más 1 GET draft si no hay pending.
+  Estas lecturas privadas sí pueden escribir idle_expires_at; no se afirma cero DB total.
+- Comprobar pendiente: 1 GET recibo y, sólo ante404, el write B3 existente idéntico.
+- Guardado/logout: limpieza local best effort; mutaciones servidor preexistentes.
+
+Unitarias públicas cubren parser/TTL/sesión/operaciones/races/storage y contraejemplo
+de logout fallido. Pruebas PostgreSQL cubren migración, legacy, estabilidad/autoridad
+y grants; E2E auth añade recarga, respuesta perdida, texto posterior y lifecycle.
+Recogida/build locales no acreditan PostgreSQL o navegador real. Esos gates deben
+pasar en CI del commit exacto junto con guardia de logout y catálogo de originales.
+Auth E2E mantiene screenshot, trace y video desactivados. #15 continúa abierto.

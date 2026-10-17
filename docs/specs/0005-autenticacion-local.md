@@ -30,7 +30,7 @@ cookies Secure en localhost; no se rebaja Secure mediante configuración.
 - POST /auth/email/verify `{challenge_id: string, code: string}` →200 sesión.
   Código exactamente8dígitos, desafío ligado a pre-sesión,10min y5intentos.
   Incorrecto/expirado/consumido:400 invalid_code; límite global:429.
-- GET /auth/session →200 `{principal_id: UUID, scope_id: UUID, csrf_token: string}`;
+- GET /auth/session →200 `{principal_id: UUID, scope_id: UUID, csrf_token: string, recovery_context_id: UUID | null}`;
   ausente/expirada/revocada:401. No incluye email ni token de sesión.
   Consultar estado no renueva inactividad; sólo operaciones privadas admitidas.
 - POST /auth/logout (sin body) →204; exige sesión, Origin exacto y CSRF de sesión.
@@ -74,3 +74,16 @@ Pendientes fuera del trazador: proveedor correo/configuración real autorizada,
 cliente Google/orígenes autorizados, prueba externa real, vinculación fresca de
 métodos y criterio completo de #13. Consentimiento marketing no existe ni se
 infiere del login. No se envían campañas ni se piden scopes adicionales.
+
+
+### Campo aditivo de recuperación B3
+
+Migración0006 añade `auth_session.recovery_context_id UUID NULL`, UUIDv4 generado
+sólo al crear sesión en finish, sin backfill/default/índice ni UPDATE runtime. GET
+usa la fila ya validada. El ID no es secreto ni autoridad, cookie, CSRF o selector.
+Sesiones legacy/null y clientes sin el campo conservan auth pero no respaldo.
+La recuperación local sólo admite misma sesión confirmada; no atraviesa401/relogin.
+Ocultar la vista de acceso conserva formulario/desafío/OTP. Un login cuya respuesta
+cruzó esa ocultación sólo abre el espacio tras otro GET de sesión al activar, incluso
+si la respuesta llega después de volver; no repite login ni verifica otra vez el código.
+Contrato de contenido/límites: [web/README](../../web/README.md#respaldo-temporal-de-edición-b3-15-corte-parcial).

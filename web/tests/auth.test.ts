@@ -499,3 +499,94 @@ describe("real session boundary", () => {
   });
 
 });
+
+
+it("parses optional recovery context without granting it authority", () => {
+ expect(parseSession(session).recovery_context_id).toBeNull();
+ expect(parseSession({...session,recovery_context_id:null}).recovery_context_id).toBeNull();
+ const id=crypto.randomUUID(); expect(parseSession({...session,recovery_context_id:id}).recovery_context_id).toBe(id);
+ expect(()=>parseSession({...session,recovery_context_id:"token"})).toThrow();
+});
+it("hidden invalidates an old check and its finally cannot reopen or unlock the new check", async () => {
+ const s=setup(); s.setSession(session); await s.auth.start();
+ let old!: (value:Response)=>void, current!: (value:Response)=>void;
+ s.transport.mockImplementationOnce(()=>new Promise(r=>old=r));
+ const oldCheck=s.auth.revalidate(); s.auth.suspend();
+ expect(s.auth.snapshot().phase).toBe("suspended");
+ s.transport.mockImplementationOnce(()=>new Promise(r=>current=r));
+ const newCheck=s.auth.revalidate();
+ old(json(session)); await oldCheck; expect(s.auth.snapshot().phase).toBe("suspended");
+ const count=s.transport.mock.calls.length; void s.auth.revalidate(); expect(s.transport).toHaveBeenCalledTimes(count);
+ current(json(session)); await newCheck; expect(s.auth.snapshot().phase).toBe("ready");
+});
+
+
+it("periodic observational checks keep the workspace mounted while same-session authority is checked",async()=>{
+ const s=setup();s.setSession(session);await s.auth.start();const c=s.auth.snapshot().controller!;
+ let release!:(r:Response)=>void;s.transport.mockImplementationOnce(()=>new Promise(r=>release=r));
+ const states:string[]=[];const unsubscribe=s.auth.subscribe(()=>states.push(s.auth.snapshot().phase));
+ const checking=s.auth.revalidate();expect(s.auth.snapshot().phase).toBe("ready");
+ expect(s.auth.snapshot().controller).toBe(c);release(json(session));await checking;
+ expect(states).not.toContain("suspended");unsubscribe();
+});
+
+for (const method of ["google", "code"] as const) {
+  for (const activatedBeforeReply of [false, true]) {
+    it(`${method} login crossing pagehide requires a fresh session check ${activatedBeforeReply ? "after" : "before"} activation`, async () => {
+      const s = setup();
+      await s.auth.start();
+      if (method === "code") await s.auth.requestCode("fixture@example.test");
+      const access = s.auth.snapshot();
+      let release!: (response: Response) => void;
+      s.transport.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+      const login = s.auth.login(method, "synthetic");
+      s.auth.suspend();
+      expect(s.auth.snapshot()).toMatchObject({ phase: "access", busy: true, bootstrap: access.bootstrap, challenge: access.challenge });
+      if (activatedBeforeReply) await s.auth.revalidate(true);
+      const checks = () => s.transport.mock.calls.filter(([path]) => path === "/auth/session").length;
+      expect(checks()).toBe(1);
+      const phases: string[] = [];
+      const unsubscribe = s.auth.subscribe(() => phases.push(s.auth.snapshot().phase));
+      s.setSession(session); release(json(session)); await login;
+      if (!activatedBeforeReply) {
+        expect(s.auth.snapshot()).toMatchObject({ phase: "suspended", controller: null });
+        expect(checks()).toBe(1);
+        await s.auth.revalidate(true);
+      }
+      expect(phases).toContain("suspended");
+      expect(s.auth.snapshot().phase).toBe("ready");
+      expect(s.auth.snapshot().controller).not.toBeNull();
+      expect(checks()).toBe(2);
+      expect(s.transport.mock.calls.filter(([path]) => path === (method === "code" ? "/auth/email/verify" : "/auth/google"))).toHaveLength(1);
+      unsubscribe();
+    });
+  }
+}
+it("hiding access preserves a pending email challenge without rechecking an anonymous session", async () => {
+  const s = setup(); await s.auth.start();
+  let release!: (response: Response) => void;
+  s.transport.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+  const requesting = s.auth.requestCode("fixture@example.test"); s.auth.suspend();
+  release(json({ challenge_id: "pending-challenge", message: "Mensaje sintético" }, 202)); await requesting;
+  expect(s.auth.snapshot()).toMatchObject({ phase: "access", busy: false, bootstrap, challenge: { challenge_id: "pending-challenge" } });
+  await s.auth.revalidate(true);
+  expect(s.auth.snapshot().challenge!.challenge_id).toBe("pending-challenge");
+  expect(s.transport.mock.calls.filter(([path]) => path === "/auth/session")).toHaveLength(1);
+});
+for (const activatedBeforeReply of [false, true]) {
+  it(`a reconciled lost login response crossing hidden still rechecks on activation (${activatedBeforeReply})`, async () => {
+    const s = setup(); await s.auth.start();
+    let reject!: (error: Error) => void;
+    s.transport.mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail; }));
+    const login = s.auth.login("google", "synthetic"); s.auth.suspend();
+    if (activatedBeforeReply) await s.auth.revalidate(true);
+    s.setSession(session); reject(new Error("lost response")); await login;
+    if (!activatedBeforeReply) {
+      expect(s.auth.snapshot()).toMatchObject({ phase: "suspended", controller: null });
+      await s.auth.revalidate(true);
+    }
+    expect(s.auth.snapshot().phase).toBe("ready");
+    expect(s.transport.mock.calls.filter(([path]) => path === "/auth/session")).toHaveLength(3);
+    expect(s.transport.mock.calls.filter(([path]) => path === "/auth/google")).toHaveLength(1);
+  });
+}

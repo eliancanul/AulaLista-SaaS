@@ -11,7 +11,7 @@ from sqlalchemy.pool import NullPool
 
 from aulalista_api.config import Settings
 
-SCHEMA_REVISION = "0005_auth"
+SCHEMA_REVISION = "0006_editor_recovery"
 
 
 class Base(DeclarativeBase):

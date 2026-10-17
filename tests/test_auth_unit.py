@@ -136,3 +136,43 @@ def test_google_signature_library_failure_closed(monkeypatch):
     )
     with pytest.raises(ValueError, match="Invalid Google"):
         GoogleVerifier("test.apps.googleusercontent.com").verify("forged", "nonce")
+
+
+def test_recovery_context_column_is_nullable_uuid_without_index_or_default():
+    from sqlalchemy import Uuid
+
+    from aulalista_api.auth_models import AuthSession
+
+    column = AuthSession.__table__.columns.get("recovery_context_id")
+    assert column is not None
+    assert isinstance(column.type, Uuid)
+    assert column.nullable
+    assert column.default is None
+    assert not column.index
+
+
+def test_recovery_context_is_generated_once_in_the_existing_login_insert():
+    from types import SimpleNamespace
+    from uuid import UUID, uuid4
+
+    from aulalista_api.auth import Auth
+
+    auth = Auth(None, SimpleNamespace(hmac_key=b"synthetic-only"))
+    owner, scope = uuid4(), uuid4()
+    contexts = []
+    for _ in range(2):
+        db = Mock()
+        db.scalar.return_value = scope
+        _, document = auth.finish(db, SimpleNamespace(consumed=False), owner, None)
+        row = db.add.call_args.args[0]
+        assert UUID(document["recovery_context_id"]).version == 4
+        assert row.recovery_context_id == UUID(document["recovery_context_id"])
+        assert row.principal_id == owner
+        db.add.assert_called_once()
+        contexts.append(row.recovery_context_id)
+        assert (
+            auth.document(db, row, "synthetic-token")["recovery_context_id"]
+            == document["recovery_context_id"]
+        )
+        assert row.recovery_context_id == contexts[-1]
+    assert contexts[0] != contexts[1]

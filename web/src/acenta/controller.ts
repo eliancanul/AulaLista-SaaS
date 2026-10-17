@@ -1,3 +1,4 @@
+import { EditorRecovery } from "./editor-recovery";
 import {
   AcentaApi,
   ApiError,
@@ -52,7 +53,7 @@ type DraftIntent = {
   payload: DraftRequest;
   generation: number;
 };
-type EditorIntent = EditIntent | DraftIntent;
+export type EditorIntent = EditIntent | DraftIntent;
 function rejectedReplay(
   error: unknown,
   kind: "source" | "create" | EditorIntent["kind"],
@@ -109,6 +110,9 @@ export interface State {
   sourceCursor: string | null;
   pending: CreateIntent | null;
   backupError: boolean;
+  recoveryWarning: string;
+  recoveryEnabled: boolean;
+  recoveryAvailable: boolean;
   closed: boolean;
 }
 export interface BackupStore {
@@ -137,6 +141,9 @@ const fresh = (): State => ({
   sourceCursor: null,
   pending: null,
   backupError: false,
+  recoveryWarning: "",
+  recoveryEnabled: false,
+  recoveryAvailable: false,
   closed: false,
 });
 export function editableResource(
@@ -163,14 +170,19 @@ export class AcentaController {
     cancelled?: boolean;
   } | null = null;
   private readonly backupKey: string;
+  private epoch = 0;
+  private suspended = false;
+  private restoring = false;
   constructor(
     readonly api: AcentaApi,
     private storage: BackupStore | null = null,
     workspaceId: string = crypto.randomUUID(),
+    private recovery: EditorRecovery | null = null,
   ) {
     if (!isUuid(workspaceId)) throw Error("Invalid workspace identity");
     this.backupKey = `acenta:work:v1:${api.session.actorId}:${api.session.scopeId}:${workspaceId}`;
     this.restore();
+    this.state = {...this.state, recoveryWarning:this.recovery?.warning ?? "", recoveryEnabled:!!this.recovery?.enabled, recoveryAvailable:!!this.recovery?.candidate};
   }
   subscribe = (fn: () => void) => {
     this.listeners.add(fn);
@@ -180,8 +192,11 @@ export class AcentaController {
   };
   snapshot = () => this.state;
   private emit(patch: Partial<State> = {}) {
+    const previous = this.state.editor;
     this.state = { ...this.state, ...patch };
     this.persist();
+    if (previous !== this.state.editor && !this.restoring && !this.suspended && !this.state.closed) this.recovery?.save(this.state.editor);
+    this.state = {...this.state, recoveryWarning: this.recovery?.warning ?? "", recoveryAvailable: !!this.recovery?.candidate};
     for (const fn of this.listeners) fn();
   }
   private persist() {
@@ -362,6 +377,60 @@ export class AcentaController {
       this.storage = null;
     }
   }
+  /** Suspend callback admission without deleting the in-memory buffer or its pending key. */
+  suspend() {
+    this.suspended = true;
+    this.epoch++;
+    this.navigation++;
+    this.listGeneration++;
+    this.originalGeneration++;
+    this.busy = false;
+    this.restoring = false;
+    if (this.state.attaching || this.state.listState === "loading" || this.state.submit === "sending" || this.state.editor?.save === "saving") this.state = {...this.state, attaching:false,
+      listState:this.state.listState === "loading" ? "idle" : this.state.listState,
+      submit:this.state.pending ? "unknown" : this.state.submit,
+      editor:this.state.editor?.pending ? {...this.state.editor,save:"unknown"} : this.state.editor};
+  }
+  resume() { this.suspended = false; }
+  discardRecovery() {
+    this.restoring = false;
+    this.recovery?.purge();
+    this.emit();
+  }
+  async restoreRecovery() {
+    const envelope = this.recovery?.candidate;
+    if (!envelope || this.restoring || this.state.closed || this.suspended) return;
+    const epoch=this.epoch;
+    this.restoring=true;
+    try {
+      const base=await this.api.read(envelope.base.planning_id,envelope.base.revision);
+      const latest=await this.api.read(envelope.base.planning_id);
+      let draft: DraftDocument | null=null;
+      // A durable intent might be absent after a write failure. A residue is not proof
+      // of unsaved work: reconcile current draft too, never invent a lost operation key.
+      if (!envelope.pending) {
+        try { draft=await this.api.readDraft(envelope.buffer.draft_id); }
+        catch(error) { if (!(error instanceof ApiError) || error.status !== 404) throw error; }
+      }
+      if (this.state.closed || epoch !== this.epoch || this.suspended || this.recovery?.candidate !== envelope) return;
+      if (!this.recovery!.valid(envelope)) {
+        this.recovery!.expire();
+        this.emit();
+        return;
+      }
+      const element=editableResource(base,envelope.base.resource_key)?.elements.find(e=>e.key===envelope.base.element_key && e.editable);
+      if (!element || base.receipt.revision_id !== envelope.base.revision_id || (draft && (draft.receipt.planning_id !== envelope.base.planning_id))) throw new ApiError(0,"invalid_response");
+      const changed=latest.receipt.revision_id !== base.receipt.revision_id || (!!draft && (draft.receipt.draft_revision !== envelope.buffer.draft_revision || draft.receipt.base_revision_id !== envelope.base.revision_id || draft.request.resource_key !== envelope.base.resource_key || draft.request.element_key !== envelope.base.element_key));
+      this.recovery!.adopted();
+      this.emit({view:"result",result:base,editor:{document:base,resourceKey:envelope.base.resource_key,elementKey:envelope.base.element_key,
+        text:envelope.buffer.text,baseline:element.text,generation:envelope.buffer.generation,
+        draftId:envelope.buffer.draft_id,draftRevision:envelope.buffer.draft_revision,
+        pending:envelope.pending,save:envelope.pending ? "unknown":changed ? "conflict":"dirty",latest:changed?latest:null,draftSaved:false,
+        error:envelope.pending ? "Hay un guardado sin confirmar. Comprueba su estado antes de continuar." : changed ? "El estado guardado cambió. El respaldo puede ser un residuo de una operación completada; revisa la biblioteca antes de guardar como una acción nueva." : "Recuperamos el texto de esta pestaña; aún no confirma un guardado."},error:""});
+    } catch(error) {
+      if (!this.state.closed && epoch===this.epoch && !this.suspended && this.recovery?.candidate === envelope) this.emit({error: "No pudimos recuperar la edición. El respaldo no se ha enviado ni reemplazado. Comprueba tu sesión y vuelve a intentarlo."});
+    } finally { if(epoch===this.epoch) this.restoring=false; }
+  }
   async init() {
     if (this.state.view === "resources") void this.loadResources();
     const e = this.state.editor;
@@ -446,7 +515,8 @@ export class AcentaController {
     return this.sourceIntent ? this.attach(this.sourceIntent.bytes) : false;
   }
   async attach(bytes: string): Promise<boolean> {
-    if (this.state.closed || this.state.attaching) return false;
+    const epoch = this.epoch;
+    if (this.suspended || this.state.closed || this.state.attaching) return false;
     const sample = sourceSamples.find((sample) => sample.bytes === bytes);
     if (!sample) {
       this.emit({
@@ -499,14 +569,14 @@ export class AcentaController {
             )
           : await this.api.createSource(intent.bytes, intent.key);
       }
-      if (this.state.closed) return false;
+      if (epoch !== this.epoch || this.suspended || this.state.closed) return false;
       const content = new TextEncoder().encode(intent.bytes);
       const digest = Array.from(
         new Uint8Array(await crypto.subtle.digest("SHA-256", content)),
       )
         .map((byte) => byte.toString(16).padStart(2, "0"))
         .join("");
-      if (this.state.closed) return false;
+      if (epoch !== this.epoch || this.suspended || this.state.closed) return false;
       if (
         source.operation_id !== intent.key ||
         source.actor_id !== this.api.session.actorId ||
@@ -536,7 +606,7 @@ export class AcentaController {
       if (!intent.base && this.state.view === "resources") void this.loadResources();
       return selected;
     } catch (e) {
-      if (!this.state.closed) {
+      if (epoch === this.epoch && !this.suspended && !this.state.closed) {
         if (
           (!recovering && e instanceof ApiError && !e.uncertain) ||
           (replayed && rejectedReplay(e, "source"))
@@ -609,6 +679,7 @@ export class AcentaController {
     await this.runCreate(intent, false);
   }
   private async runCreate(intent: CreateIntent, recover: boolean) {
+    const epoch = this.epoch;
     this.busy = true;
     let replayed = false;
     try {
@@ -622,7 +693,7 @@ export class AcentaController {
           doc = await this.api.create(intent.payload, intent.key);
         }
       } else doc = await this.api.create(intent.payload, intent.key);
-      if (this.state.closed || this.state.pending?.key !== intent.key) return;
+      if (epoch !== this.epoch || this.suspended || this.state.closed || this.state.pending?.key !== intent.key) return;
       if (
         doc.receipt.operation_id !== intent.key ||
         Object.entries(intent.payload).some(
@@ -640,7 +711,7 @@ export class AcentaController {
         items: this.upsert(doc),
       });
     } catch (e) {
-      if (this.state.closed) return;
+      if (epoch !== this.epoch || this.suspended || this.state.closed) return;
       const certain =
         (!recover && e instanceof ApiError && !e.uncertain) ||
         (replayed && rejectedReplay(e, "create"));
@@ -650,12 +721,12 @@ export class AcentaController {
         pending: certain ? null : intent,
       });
     } finally {
-      this.busy = false;
+      if (epoch === this.epoch) this.busy = false;
     }
   }
   async recoverCreate() {
     const i = this.state.pending;
-    if (!this.state.closed && !this.busy && i) {
+    if (!this.state.closed && !this.suspended && !this.busy && i) {
       this.emit({ submit: "sending", error: "" });
       await this.runCreate(i, true);
     }
@@ -669,7 +740,8 @@ export class AcentaController {
     ];
   }
   openEditor(doc = this.state.result, resourceKey?: string) {
-    if (this.state.closed || !doc) return;
+    if (this.state.closed || this.suspended || !doc) return;
+    if (this.recovery?.candidate) { this.emit({error:"Recupera o descarta primero el respaldo pendiente."}); return; }
     this.navigation++;
     const resource = editableResource(doc, resourceKey),
       element = resource?.elements.find((e) => e.editable);
@@ -718,7 +790,7 @@ export class AcentaController {
   }
   edit(text: string) {
     const e = this.state.editor;
-    if (!e || this.state.closed) return;
+    if (!e || this.state.closed || this.suspended) return;
     this.navigation++;
     if ([...text].length > 1000) {
       this.emit({
@@ -743,7 +815,7 @@ export class AcentaController {
   }
   undo() {
     const e = this.state.editor;
-    if (!e || e.pending || this.state.closed) return;
+    if (!e || e.pending || this.state.closed || this.suspended) return;
     this.emit({
       editor: {
         ...e,
@@ -764,7 +836,7 @@ export class AcentaController {
   }
   async save(copy = false) {
     const e = this.state.editor;
-    if (!e || this.state.closed || this.busy) return;
+    if (!e || this.state.closed || this.suspended || this.busy) return;
     if (e.pending) {
       await this.recoverEditor();
       return;
@@ -799,7 +871,7 @@ export class AcentaController {
   }
   async preserveDraft() {
     const e = this.state.editor;
-    if (!e || this.state.closed || this.busy) return;
+    if (!e || this.state.closed || this.suspended || this.busy) return;
     if (e.pending) {
       await this.recoverEditor();
       return;
@@ -832,6 +904,7 @@ export class AcentaController {
     await this.runEditor(intent, false);
   }
   private async runEditor(intent: EditorIntent, recover: boolean) {
+    const epoch = this.epoch;
     this.busy = true;
     let replayed = false;
     try {
@@ -867,7 +940,7 @@ export class AcentaController {
         }
       } else raw = await write();
       const current = this.state.editor;
-      if (this.state.closed || current?.pending?.key !== intent.key) return;
+      if (epoch !== this.epoch || this.suspended || this.state.closed || current?.pending?.key !== intent.key) return;
       const changed = current.generation !== intent.generation;
       if (intent.kind === "draft") {
         const d = parseDraft(raw);
@@ -960,7 +1033,7 @@ export class AcentaController {
       });
     } catch (error) {
       const current = this.state.editor;
-      if (this.state.closed || !current || current.pending?.key !== intent.key)
+      if (epoch !== this.epoch || this.suspended || this.state.closed || !current || current.pending?.key !== intent.key)
         return;
       const conflict = error instanceof ApiError && error.status === 409,
         certain =
@@ -979,7 +1052,7 @@ export class AcentaController {
           const latest = await this.api.read(intent.planningId),
             now = this.state.editor;
           if (
-            !this.state.closed &&
+            epoch === this.epoch && !this.suspended && !this.state.closed &&
             now?.document.receipt.planning_id === intent.planningId
           )
             this.emit({ editor: { ...now, latest } });
@@ -988,12 +1061,12 @@ export class AcentaController {
         }
       }
     } finally {
-      this.busy = false;
+      if (epoch === this.epoch) this.busy = false;
     }
   }
   async recoverEditor() {
     const i = this.state.editor?.pending;
-    if (!this.state.closed && !this.busy && i) {
+    if (!this.state.closed && !this.suspended && !this.busy && i) {
       this.emit({
         editor: { ...this.state.editor!, save: "saving", error: "" },
       });
@@ -1116,13 +1189,15 @@ export class AcentaController {
     }
   }
   closeSession() {
+    this.epoch++;
     this.navigation++;
     this.listGeneration++;
     this.originalGeneration++;
     this.sourceIntent = null;
     this.selections = {};
     this.listLoaded = false;
-    // Runtime has no browser backup store; test/legacy stores are also purged.
+    // The narrow runtime recovery slot and any test/legacy store are purged.
+    this.recovery?.purge();
     try { this.storage?.removeItem(this.backupKey); } catch { /* Never retain visible private state if browser storage fails. */ }
     this.storage = null;
     this.state = { ...fresh(), closed: true };

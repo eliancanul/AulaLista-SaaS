@@ -160,6 +160,7 @@ export function AuthAccessView({ auth }: { auth: AuthController }) {
               <p role="status">Comprobando sesión…</p>
             )}
             {state.error && <p role="alert">{state.error}</p>}
+            {state.recoveryWarning && <p role="alert">{state.recoveryWarning}</p>}
             {state.phase === "suspended" ? (
               <>
                 <button onClick={() => void auth.revalidate()}>

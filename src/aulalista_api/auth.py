@@ -231,29 +231,32 @@ class Auth:
         pre.consumed = True
         token = secrets.token_urlsafe(32)
         instant = now()
-        db.add(
-            AuthSession(
-                token_hash=token_hash(token),
-                principal_id=principal_id,
-                expires_at=instant + timedelta(hours=24),
-                idle_expires_at=instant + timedelta(hours=2),
-                revoked=False,
-            )
+        row = AuthSession(
+            token_hash=token_hash(token),
+            principal_id=principal_id,
+            expires_at=instant + timedelta(hours=24),
+            idle_expires_at=instant + timedelta(hours=2),
+            revoked=False,
+            recovery_context_id=uuid4(),
         )
-        return token, self.document(db, principal_id, token)
+        db.add(row)
+        return token, self.document(db, row, token)
 
-    def document(self, db, principal_id, token):
+    def document(self, db, row, token):
         scope_id = db.scalar(
             select(PersonalScope.id).where(
-                PersonalScope.owner_principal_id == principal_id
+                PersonalScope.owner_principal_id == row.principal_id
             )
         )
         if scope_id is None:
             raise AuthError(401, "unauthorized")
         return {
-            "principal_id": str(principal_id),
+            "principal_id": str(row.principal_id),
             "scope_id": str(scope_id),
             "csrf_token": self.csrf(token),
+            "recovery_context_id": str(row.recovery_context_id)
+            if row.recovery_context_id
+            else None,
         }
 
     def google_login(self, pre_token, credential, ip, old_token):
@@ -396,7 +399,7 @@ class Auth:
         with Session(self.engine) as db, db.begin():
             row = live_session(db, token_hash(token), lock=True)
             # Status polling is observational; only private work renews idle time.
-            return self.document(db, row.principal_id, token)
+            return self.document(db, row, token)
 
     def logout(self, token):
         self.actor(token)

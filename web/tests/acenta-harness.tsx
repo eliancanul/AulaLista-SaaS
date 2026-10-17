@@ -3,6 +3,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { AcentaApp } from "../src/acenta/App";
 import { AcentaApi } from "../src/acenta/api";
+import { EditorRecovery } from "../src/acenta/editor-recovery";
 import { AcentaController } from "../src/acenta/controller";
 import { session } from "./acenta-fixtures";
 import "../src/acenta/style.css";
@@ -11,10 +12,13 @@ if (!slot) {
   slot = crypto.randomUUID();
   sessionStorage.setItem("acenta-test-workspace", slot);
 }
-createRoot(document.getElementById("root")!).render(
-  <AcentaApp
-    controller={
-      new AcentaController(new AcentaApi(session), localStorage, slot)
-    }
-  />,
-);
+const recovery = new URLSearchParams(location.search).has("recovery")
+  ? new EditorRecovery(() => sessionStorage) : null;
+if (recovery) recovery.admit({
+  principal_id: session.actorId,
+  scope_id: session.scopeId,
+  recovery_context_id: "70000000-0000-4000-8000-000000000007",
+});
+const controller = new AcentaController(new AcentaApi(session), recovery ? null : localStorage, slot, recovery);
+await controller.restoreRecovery();
+createRoot(document.getElementById("root")!).render(<AcentaApp controller={controller} />);

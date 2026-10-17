@@ -22,7 +22,10 @@ Después de editar código local, repetir `uv sync --locked --no-editable
 --reinstall-package aulalista-api` para no probar una wheel anterior de la caché.
 
 Las migraciones requieren el rol dueño de esquema. No se ejecutan en el arranque
-ni desde endpoints. El head esperado es `0005_auth`. El downgrade de 0005 elimina identidades,
+ni desde endpoints. El head esperado es `0006_editor_recovery`. Su downgrade elimina sólo el UUID
+de recuperación: no revoca sesiones ni borra respaldos de navegadores. El binario
+0005 no acepta readiness0006; cualquier rollback requiere coordinación explícita.
+El downgrade de 0005 elimina identidades,
 sesiones, desafíos y contadores; los ámbitos/materiales quedan sin método de
 acceso. No es un mecanismo de recuperación. El downgrade de
 0004 elimina borradores y origen de copias; el de 0003 elimina planeaciones y
@@ -90,7 +93,7 @@ cumplir controles equivalentes antes de usar cualquier dato privado.
 
 - `GET /health/live`: 200 `{"status":"ok"}`, independiente de DB.
 - `GET /health/ready`: 200 sólo con conexión y única revisión
-  `0005_auth`; fallo/timeout/revisión distinta: 503 sin detalle interno.
+  `0006_editor_recovery`; fallo/timeout/revisión distinta: 503 sin detalle interno.
 - `AULALISTA_DB_TIMEOUT_SECONDS`: entero 2–30, predeterminado 3. Deadline HTTP de
   readiness completo, incluyendo espera, DNS, conexión y consulta; también fija
   timeouts de driver/servidor. Una sola sonda en vuelo evita acumular hilos.

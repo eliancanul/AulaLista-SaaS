@@ -9,13 +9,17 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import text
+from sqlalchemy import inspect, text
+from sqlalchemy.exc import DBAPIError
 
 from aulalista_api.app import create_app
+from aulalista_api.database import SCHEMA_REVISION, schema_is_ready
 from aulalista_api.water_fixture import FIXTURE_SOURCE
 
 ORIGIN = "https://testserver"
@@ -178,6 +182,7 @@ def test_source_catalog_new_session_discovers_exact_original_without_planning(
         session = login(fresh, sender)
         assert session["principal_id"] == original_session["principal_id"]
         assert session["scope_id"] == original_session["scope_id"]
+        assert session["recovery_context_id"] != original_session["recovery_context_id"]
         listed = fresh.get(f"/scopes/{session['scope_id']}/sources")
         assert listed.status_code == 200
         assert listed.headers["cache-control"] == "no-store"
@@ -833,3 +838,222 @@ def test_global_budget_atomic_across_app_instances(auth_factory, monkeypatch):
             statuses = list(executor.map(reserve, range(16)))
         assert statuses.count(200) == 7
         assert statuses.count(429) == 9
+
+
+def test_recovery_context_is_stable_per_login_nullable_and_not_authority(
+    auth_factory, runtime_database
+):
+    from uuid import UUID
+
+    factory, sender = auth_factory
+    with factory() as client:
+        first = login(client, sender, "recovery-a@example.test")
+        context = first["recovery_context_id"]
+        assert str(UUID(context)) == context
+        assert client.get("/auth/session").json()["recovery_context_id"] == context
+        assert client.get("/auth/session").json()["recovery_context_id"] == context
+        with factory() as anonymous:
+            assert (
+                anonymous.get(
+                    "/auth/session", headers={"X-Recovery-Context": context}
+                ).status_code
+                == 401
+            )
+            assert (
+                anonymous.get(
+                    "/auth/session", params={"recovery_context_id": context}
+                ).status_code
+                == 401
+            )
+            assert (
+                anonymous.get(
+                    f"/scopes/{first['scope_id']}/plannings",
+                    headers={"Authorization": f"Bearer {context}"},
+                ).status_code
+                == 401
+            )
+        with factory() as other:
+            second = login(other, sender, "recovery-b@example.test")
+            assert second["recovery_context_id"] != context
+            assert (
+                other.get(
+                    "/auth/session", headers={"X-Recovery-Context": context}
+                ).json()["principal_id"]
+                == second["principal_id"]
+            )
+        with runtime_database.connect() as connection:
+            assert (
+                connection.execute(
+                    text(
+                        "SELECT has_column_privilege(current_user, 'auth_session', 'recovery_context_id', 'UPDATE')"
+                    )
+                ).scalar_one()
+                is False
+            )
+
+
+def test_independent_recovery_migration_preserves_legacy_session(empty_database):
+    """An older application can keep inserting sessions without the new field."""
+    config = Config("alembic.ini")
+    command.upgrade(config, "0005_auth")
+    principal_id, scope_id = uuid4(), uuid4()
+    with empty_database.begin() as connection:
+        connection.execute(
+            text("INSERT INTO principal (id) VALUES (:id)"), {"id": principal_id}
+        )
+        connection.execute(
+            text(
+                "INSERT INTO personal_scope (id, owner_principal_id) "
+                "VALUES (:id, :owner)"
+            ),
+            {"id": scope_id, "owner": principal_id},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO auth_session "
+                "(token_hash, principal_id, expires_at, idle_expires_at, revoked) "
+                "VALUES (:hash, :principal, now() + interval '24 hours', "
+                "now() + interval '2 hours', false)"
+            ),
+            {"hash": "1" * 64, "principal": principal_id},
+        )
+    command.upgrade(config, "head")
+    command.upgrade(config, "head")
+    columns = {
+        c["name"]: c for c in inspect(empty_database).get_columns("auth_session")
+    }
+    assert columns["recovery_context_id"]["nullable"]
+    assert columns["recovery_context_id"]["default"] is None
+    assert not any(
+        "recovery_context_id" in index["column_names"]
+        for index in inspect(empty_database).get_indexes("auth_session")
+    )
+    with empty_database.connect() as connection:
+        assert (
+            connection.execute(
+                text("SELECT recovery_context_id FROM auth_session")
+            ).scalar_one()
+            is None
+        )
+    assert schema_is_ready(empty_database)
+    command.downgrade(config, "0005_auth")
+    assert not schema_is_ready(empty_database)
+    with empty_database.connect() as connection:
+        assert (
+            connection.execute(text("SELECT count(*) FROM auth_session")).scalar_one()
+            == 1
+        )
+        assert (
+            connection.execute(text("SELECT id FROM principal")).scalar_one()
+            == principal_id
+        )
+        assert (
+            connection.execute(text("SELECT id FROM personal_scope")).scalar_one()
+            == scope_id
+        )
+    command.upgrade(config, "head")
+    with empty_database.connect() as connection:
+        assert (
+            connection.execute(
+                text("SELECT version_num FROM alembic_version")
+            ).scalar_one()
+            == SCHEMA_REVISION
+        )
+        assert (
+            connection.execute(
+                text("SELECT recovery_context_id FROM auth_session")
+            ).scalar_one()
+            is None
+        )
+
+
+def test_independent_context_is_neither_cookie_nor_csrf_nor_scope_authority(
+    auth_factory,
+):
+    factory, sender = auth_factory
+    with factory() as owner, factory() as other, factory() as anonymous:
+        session = login(owner, sender, "recovery-owner@example.test")
+        other_session = login(other, sender, "recovery-other@example.test")
+        context = session["recovery_context_id"]
+        assert UUID(context).version == 4
+        assert context != other_session["recovery_context_id"]
+        saved = write(owner, session)
+        assert saved.status_code == 201
+        path = f"/scopes/{session['scope_id']}/sources/{saved.json()['source_id']}/versions/1"
+        assert (
+            anonymous.get(
+                path,
+                headers={
+                    "Authorization": f"Bearer {context}",
+                    "X-Recovery-Context-Id": context,
+                },
+            ).status_code
+            == 401
+        )
+        anonymous.cookies.set("__Host-acenta-session", context)
+        assert anonymous.get("/auth/session").status_code == 401
+        assert anonymous.get(path).status_code == 401
+        assert (
+            other.get(
+                path,
+                params={"recovery_context_id": context},
+                headers={"X-Recovery-Context-Id": context},
+            ).status_code
+            == 404
+        )
+        assert (
+            write(
+                owner, session, headers={"Origin": ORIGIN, "X-CSRF-Token": context}
+            ).status_code
+            == 403
+        )
+        assert owner.get(path).status_code == 200
+
+
+def test_independent_context_stays_stable_without_idle_write_and_runtime_cannot_update(
+    auth_factory, migrated_database, runtime_database, monkeypatch
+):
+    import aulalista_api.auth as authentication
+
+    factory, sender = auth_factory
+    instant = authentication.now()
+    monkeypatch.setattr(authentication, "now", lambda: instant)
+    with factory() as client:
+        session = login(client, sender, "context-stability@example.test")
+        with migrated_database.connect() as connection:
+            before = connection.execute(
+                text(
+                    "SELECT recovery_context_id, expires_at, idle_expires_at FROM auth_session"
+                )
+            ).one()
+        instant += timedelta(minutes=20)
+        for _ in range(3):
+            response = client.get("/auth/session")
+            assert response.status_code == 200
+            assert (
+                response.json()["recovery_context_id"] == session["recovery_context_id"]
+            )
+        with migrated_database.connect() as connection:
+            after = connection.execute(
+                text(
+                    "SELECT recovery_context_id, expires_at, idle_expires_at FROM auth_session"
+                )
+            ).one()
+        assert before == after
+        with (
+            pytest.raises(DBAPIError) as failure,
+            runtime_database.begin() as connection,
+        ):
+            connection.execute(
+                text("UPDATE auth_session SET recovery_context_id = :id"),
+                {"id": uuid4()},
+            )
+        assert failure.value.orig.sqlstate == "42501"
+        with migrated_database.begin() as connection:
+            connection.execute(
+                text("UPDATE auth_session SET recovery_context_id = NULL")
+            )
+        response = client.get("/auth/session")
+        assert response.status_code == 200
+        assert response.json()["recovery_context_id"] is None
+        assert write(client, response.json()).status_code == 201

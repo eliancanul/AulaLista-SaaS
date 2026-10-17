@@ -304,3 +304,95 @@ test("voluntary logout preserves an explicit server draft before revocation and 
     await fresh.close();
   }
 });
+
+test("same-tab reload restores only editor text and exact pending after a real PostgreSQL commit", async ({ page, context }) => {
+  // Real auth/CSRF/DB and production entrypoint; only the email transport is synthetic.
+  // This config disables screenshots, trace and video, including failures.
+  await page.goto("/");
+  const account = await login(page, "reload-recovery@example.test");
+  // Clean suspension must gate private UI without creating an unsaved-work prompt.
+  await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+  await expect(page.getByRole("button", { name: "Reintentar sesión", exact: true })).toBeVisible();
+  expect(await page.evaluate(() => {
+    const event = new Event("beforeunload", {cancelable:true});
+    window.dispatchEvent(event); return event.defaultPrevented;
+  })).toBe(false);
+  await page.evaluate(() => window.dispatchEvent(new Event("pageshow")));
+  await expect(page.getByRole("button", { name: "Cerrar sesión", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Ajustar planeación", exact: true }).click();
+  await page.getByRole("button", { name: "Adjuntar referencia", exact: true }).click();
+  await page.getByRole("button", { name: /^Planeación de ciencias · ejemplo/ }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  const creating = page.waitForResponse(r => r.request().method() === "POST" && new URL(r.url()).pathname.endsWith("/plannings"));
+  await page.getByRole("button", { name: "Enviar petición", exact: true }).click();
+  const creation = await creating; expect(creation.status()).toBe(201);
+  const base: PlanningDocument = await creation.json();
+  await page.getByRole("button", { name: "Abrir resultado editable", exact: true }).click();
+  const firstText = "Texto exacto tras recarga 😀";
+  await page.getByLabel("Texto", { exact: true }).fill(firstText);
+  await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+  await expect(page.getByRole("button", { name: "Reintentar sesión", exact: true })).toBeVisible();
+  expect(await page.evaluate(() => {
+    const event = new Event("beforeunload", {cancelable:true});
+    window.dispatchEvent(event); return event.defaultPrevented;
+  })).toBe(true);
+  await page.evaluate(() => window.dispatchEvent(new Event("pageshow")));
+  await expect(page.getByLabel("Texto", { exact: true })).toHaveValue(firstText);
+  const slot = "acenta:editor-recovery:v1";
+  const before = await page.evaluate(key => JSON.parse(sessionStorage.getItem(key)!), slot);
+  expect(before.buffer.text).toBe(firstText);
+  expect(before.base).toMatchObject({ planning_id: base.receipt.planning_id, revision_id: base.receipt.revision_id, revision: 1 });
+  expect(Object.keys(before).sort()).toEqual(["schema", "principal_id", "scope_id", "recovery_context_id", "workspace_id", "created_at_ms", "expires_at_ms", "base", "buffer", "pending"].sort());
+  const leakedCsrf = JSON.stringify(before).includes(account.csrf_token);
+  expect(leakedCsrf).toBe(false);
+  await page.reload();
+  await expect(page.getByLabel("Texto", { exact: true })).toHaveValue(firstText);
+  const writes: string[] = [];
+  page.on("request", request => {if (["POST", "PUT"].includes(request.method()) && new URL(request.url()).pathname.startsWith("/scopes/")) writes.push(request.url());});
+  let committed: PlanningDocument | undefined;
+  await page.route("**/scopes/*/plannings/*/revisions", async route => {
+    const response = await route.fetch(); expect(response.status()).toBe(201);
+    committed = await response.json();
+    await route.abort("failed");
+  }, {times: 1});
+  await page.getByRole("button", { name: "Guardar", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Comprobar estado", exact: true })).toBeVisible();
+  const laterText = "La edición posterior permanece después del recibo.";
+  await page.getByLabel("Texto", { exact: true }).fill(laterText);
+  const pending = await page.evaluate(key => JSON.parse(sessionStorage.getItem(key)!), slot);
+  expect(pending.pending.key).toBe(committed!.receipt.operation_id);
+  expect(pending.pending.payload.text).toBe(firstText);
+  expect(pending.buffer.text).toBe(laterText);
+  const count = writes.length;
+  await page.reload();
+  await expect(page.getByLabel("Texto", { exact: true })).toHaveValue(laterText);
+  expect(writes.length).toBe(count);
+  const checked = page.waitForResponse(r => new URL(r.url()).pathname.endsWith(`/planning-operations/${pending.pending.key}`));
+  await page.getByRole("button", { name: "Comprobar estado", exact: true }).click();
+  expect((await checked).status()).toBe(200);
+  await expect(page.getByLabel("Texto", { exact: true })).toHaveValue(laterText);
+  const after = await page.evaluate(key => JSON.parse(sessionStorage.getItem(key)!), slot);
+  expect(after.pending).toBeNull(); expect(after.expires_at_ms).toBe(before.expires_at_ms);
+  expect(writes.length).toBe(count);
+  // Explicit save confirms the later buffer; successful cleanup removes the slot.
+  const saved = page.waitForResponse(r => r.request().method() === "POST" && new URL(r.url()).pathname.endsWith("/revisions"));
+  await page.getByRole("button", { name: "Guardar", exact: true }).click(); expect((await saved).status()).toBe(201);
+  await expect.poll(() => page.evaluate(key => sessionStorage.getItem(key), slot)).toBeNull();
+  await page.getByLabel("Texto", { exact: true }).fill("No recuperar tras logout");
+  // Another real page shares only the browser's actual HttpOnly cookie. No new OTP,
+  // injected actor/cookie, auth screenshot, trace or video is introduced.
+  const otherTab = await context.newPage();
+  await otherTab.goto("/");
+  await expect(otherTab.getByRole("button", { name: "Cerrar sesión", exact: true })).toBeVisible();
+  const shared = await otherTab.request.get("/auth/session");
+  expect((await shared.json()).principal_id).toBe(account.principal_id);
+  await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+  await otherTab.bringToFront();
+  await otherTab.getByRole("button", { name: "Cerrar sesión", exact: true }).click();
+  await expect(otherTab.getByRole("button", { name: "Continuar con correo", exact: true })).toBeVisible();
+  await page.bringToFront();
+  await page.evaluate(() => window.dispatchEvent(new Event("pageshow")));
+  await expect(page.getByRole("button", { name: "Continuar con correo", exact: true })).toBeVisible();
+  expect(await page.evaluate(key => sessionStorage.getItem(key), slot)).toBeNull();
+  await otherTab.close();
+});
