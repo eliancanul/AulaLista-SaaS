@@ -14,6 +14,13 @@ El [plan Acenta #12](https://github.com/eliancanul/AulaLista-SaaS/issues/12) es 
 - [P1 #18: herramientas y contexto curricular](https://github.com/eliancanul/AulaLista-SaaS/issues/18)
 - [P2 #19: puertas para archivos reales e IA](https://github.com/eliancanul/AulaLista-SaaS/issues/19), que referencia T4/T5 sin duplicar el contrato de evaluación
 
+#18 y #19 son posteriores al recorrido simulado B1–B5; no son requisitos nuevos
+para cerrar fase 1. La [matriz de evidencia de #12](../reviews/0001-matriz-fase1.md)
+conserva 38 asignaciones, sus pruebas y pendientes sobre un SHA explícito; no es
+un segundo backlog ni una aceptación visual de todos los estados. El
+[README](../../README.md#acenta-capacidades-verificadas-y-límites) registra los
+incrementos integrados sin cerrar por inferencia #12, #13 o #15.
+
 ## Referencias técnicas conservadas
 
 | Corte | Contrato o evidencia histórica |
@@ -27,6 +34,11 @@ El [plan Acenta #12](https://github.com/eliancanul/AulaLista-SaaS/issues/12) es 
 | [T4: puntuación](T4-scoring-duplicados.md) | Afirmaciones duplicadas y contradictorias; issue #7 y PR #8 |
 | [T4: deduplicación](T4-dedup-dependencias.md) | Conservación de dependencias y metadata; issue #9 y PR #10 |
 | [T5](T5-ensayo-interpretacion.md) | Contrato de ensayo autorizado y decisión basada en evidencia |
+| [B2](B2-resultado-simulado.md) | Contrato histórico de resultado fixture; integración backend/UI en PR #21/#22 |
+| [B3](../specs/0003-edicion-durable.md) | Edición, borrador y copia; guardia de logout y respaldo acotado de la misma sesión |
+| [B1](../specs/0005-autenticacion-local.md) | Sesión y métodos de acceso; aceptación Google y correo pospuesto se registran en #13 |
+| [Originales](../specs/0006-catalogo-fuentes.md) | Catálogo paginado independiente de planeaciones y borradores |
+| [Integridad](../specs/0007-integridad-fuente.md), [evidencia literal](../specs/0008-evidencia-literal.md), [anclas/anexos](../specs/0009-anclas-anexos.md) | Contratos offline integrados en PR #45–#47; no activan runtime de documentos reales |
 
 Las integraciones históricas se acreditan en cada PR y en los recibos enlazados desde estas referencias. Conservar un contrato o integrar una reparación del instrumento no acredita T4/T5 completos, H2, un benchmark real ni validación docente. Las nuevas decisiones técnicas se registran en specs/ADR, con enlaces desde el issue correspondiente.
 

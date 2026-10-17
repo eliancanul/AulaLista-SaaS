@@ -17,7 +17,7 @@ Resuelve el comportamiento completo con el menor cambio claro. Reutiliza código
 - FastAPI y PostgreSQL; recursos privados con ámbito personal obligatorio y propietario explícito.
 - Identidad del actor, propiedad del material y eventual pagador son conceptos distintos.
 - Comienza con código y datos sintéticos nuevos. El repositorio anterior sólo aporta contratos de producto revisados; sus checks no certifican éste.
-- Hasta completar identidad real, las operaciones privadas del servidor normal deniegan acceso. Los actores de test viven exclusivamente en fixtures/overrides de test.
+- Las operaciones privadas exigen una sesión válida y autorización del ámbito; sin configuración auth el servidor falla cerrado. Los actores de test viven exclusivamente en fixtures/overrides de test. Consulta el [contrato B1](docs/specs/0005-autenticacion-local.md) y los límites vigentes del [recorrido Acenta](web/README.md).
 - Consulta [especificación](docs/specs/0001-fundacion.md) al tocar autorización, persistencia, versiones o reintentos. PostgreSQL real verifica restricciones y carreras.
 - Consulta [revisiones por hitos](docs/reviews/README.md) al completar dos tickets, cambiar una decisión de producto o cruzar un hito. Los roles son perspectivas de análisis asistidas por IA, no personas contratadas.
 - Consulta [workflow](docs/workflow.md) antes de publicar: permisos vigentes, diff completo, ausencia de secretos/datos privados y evidencia exacta. Este archivo no concede autorización para publicar, hacer merge, desplegar, contratar ni ampliar accesos.
@@ -26,6 +26,6 @@ Resuelve el comportamiento completo con el menor cambio claro. Reutiliza código
 
 Consultores, implementadores y revisores pueden hablar directamente. Toda decisión que cambie alcance, contrato, pruebas o riesgo queda en el issue, spec/ADR o PR correspondiente y se comunica al coordinador. El implementador no sustituye al revisor independiente ni resuelve hallazgos únicamente por acuerdo verbal.
 
-## Fuera del primer corte
+## Límites de los cortes
 
-Precios, cobro, UI, autenticación de producción, documentos reales, parsing, IA, infraestructura contratada y migración de datos tienen puertas posteriores. No los declares listos por completar la fundación.
+La fundación T0–T2 no acreditaba UI ni autenticación. Acenta B1–B5 incorpora el recorrido conectado con ejemplos y sesión, con pendientes explícitos en [#12](https://github.com/eliancanul/AulaLista-SaaS/issues/12). Precios, cobro, documentos reales, parsing, IA y migración de datos conservan sus puertas posteriores. No declares completa la fase 1, producción o un piloto por integrar un incremento o por superar CI.

@@ -55,8 +55,17 @@ def test_empty_database_migrates_and_upgrade_is_repeatable(empty_database):
         "principal",
         "personal_scope",
         "alembic_version",
+        "auth_identity",
+        "auth_pre_session",
+        "auth_session",
+        "auth_email_challenge",
+        "auth_rate",
         "source",
         "source_version",
+        "planning",
+        "planning_revision",
+        "planning_draft",
+        "planning_draft_revision",
     }
     command.check(Config("alembic.ini"))
 

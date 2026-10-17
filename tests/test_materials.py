@@ -3,19 +3,17 @@ import hashlib
 import json
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import replace
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import event, select, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 from starlette.requests import Request
 
 from aulalista_api.app import create_app
-from aulalista_api.config import load_settings
-from aulalista_api.database import PersonalScope, Principal, make_engine
 from aulalista_api.material_routes import bounded_content, require_actor
 from aulalista_api.materials import (
     MAX_CONTENT_BYTES,
@@ -23,82 +21,6 @@ from aulalista_api.materials import (
     Materials,
     SourceVersion,
 )
-
-
-@pytest.fixture
-def actors(migrated_database):
-    with Session(migrated_database) as session, session.begin():
-        ids = []
-        for _ in range(2):
-            actor = Principal()
-            session.add(actor)
-            session.flush()
-            scope = PersonalScope(owner_principal_id=actor.id)
-            session.add(scope)
-            session.flush()
-            ids.append((actor.id, scope.id))
-        return ids
-
-
-@pytest.fixture
-def runtime_database(migrated_database, actors, monkeypatch):
-    with migrated_database.begin() as connection:
-        connection.execute(
-            text("""
-            DO $$ BEGIN
-                IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'aulalista_runtime') THEN
-                    CREATE ROLE aulalista_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
-                        NOINHERIT NOREPLICATION NOBYPASSRLS;
-                END IF;
-            END $$
-        """)
-        )
-        connection.execute(text("GRANT USAGE ON SCHEMA public TO aulalista_runtime"))
-        connection.execute(
-            text("""
-            GRANT SELECT ON principal, personal_scope, alembic_version TO aulalista_runtime;
-            GRANT SELECT, INSERT ON source, source_version TO aulalista_runtime;
-            GRANT UPDATE (current_version) ON source TO aulalista_runtime
-        """)
-        )
-    settings = load_settings()
-    url = settings.database_url.set(username="aulalista_runtime", password=None)
-    monkeypatch.setenv(
-        "AULALISTA_DATABASE_URL", url.render_as_string(hide_password=False)
-    )
-    runtime = make_engine(replace(settings, database_url=url))
-    try:
-        with runtime.connect() as connection:
-            assert connection.execute(
-                text("SELECT current_user, session_user")
-            ).one() == ("aulalista_runtime", "aulalista_runtime")
-            assert connection.execute(
-                text("""
-                SELECT rolsuper, rolcreaterole, rolcreatedb, rolreplication, rolbypassrls
-                FROM pg_roles WHERE rolname = current_user
-            """)
-            ).one() == (False, False, False, False, False)
-            assert (
-                connection.execute(
-                    text("""
-                SELECT count(*) FROM pg_auth_members
-                WHERE member = (SELECT oid FROM pg_roles WHERE rolname = current_user)
-            """)
-                ).scalar_one()
-                == 0
-            )
-            assert (
-                connection.execute(
-                    text("""
-                SELECT pg_get_userbyid(relowner) <> current_user
-                FROM pg_class WHERE oid = 'source_version'::regclass
-            """)
-                ).scalar_one()
-                is True
-            )
-        yield runtime
-    finally:
-        runtime.dispose()
 
 
 def actor_app(actor_id):
@@ -145,6 +67,184 @@ def state(engine):
             ).all(),
             connection.execute(text("SELECT * FROM source_version ORDER BY id")).all(),
         )
+
+
+def test_source_catalog_without_planning_restarts_and_pins_exact_version(
+    runtime_database, actors
+):
+    actor, scope = actors[0]
+    content = bytes(range(256)) + b"\x00 synthetic catalog original"
+    path = f"/scopes/{scope}/sources"
+    with TestClient(actor_app(actor)) as client:
+        empty = client.get(path)
+        assert empty.status_code == 200
+        assert empty.json() == {"items": [], "next_cursor": None}
+        assert empty.headers["cache-control"] == "no-store"
+        saved = create(client, scope, content).json()
+    with TestClient(actor_app(actor)) as restarted:
+        listed = restarted.get(path)
+        assert listed.status_code == 200
+        assert listed.headers["cache-control"] == "no-store"
+        assert listed.json() == {"items": [saved], "next_cursor": None}
+        pinned = listed.json()["items"][0]
+        v2 = append(restarted, scope, pinned["source_id"], content=b"second").json()
+        read = exact(restarted, scope, pinned["source_id"], pinned["number"])
+        assert read.content == content
+        assert len(read.content) == pinned["size"]
+        assert hashlib.sha256(read.content).hexdigest() == pinned["sha256"]
+        assert read.headers["x-version"] == str(pinned["number"])
+        assert read.headers["x-source-id"] == pinned["source_id"]
+        assert restarted.get(path).json() == {"items": [v2], "next_cursor": None}
+    with runtime_database.connect() as connection:
+        assert connection.execute(text("SELECT count(*) FROM planning")).scalar() == 0
+        assert (
+            connection.execute(text("SELECT count(*) FROM planning_draft")).scalar()
+            == 0
+        )
+
+
+def test_source_catalog_paginates_once_per_source_and_never_fetches_content(
+    runtime_database, actors
+):
+    actor, scope = actors[0]
+    other, other_scope = actors[1]
+    service = Materials(runtime_database)
+    saved = [service.write(actor, scope, uuid4(), b"synthetic") for _ in range(7)]
+    service.write(other, other_scope, uuid4(), b"other private synthetic")
+    saved[0] = service.write(
+        actor,
+        scope,
+        uuid4(),
+        b"synthetic v2",
+        source_id=UUID(saved[0]["source_id"]),
+        expected_version=1,
+    )
+    queries = []
+
+    def capture(connection, cursor, statement, parameters, context, executemany):
+        if "source_version" in statement:
+            queries.append(statement)
+
+    event.listen(Engine, "before_cursor_execute", capture)
+    try:
+        with TestClient(actor_app(actor)) as client:
+            after, received = None, []
+            for _ in range(4):
+                response = client.get(
+                    f"/scopes/{scope}/sources",
+                    params={"limit": 2, **({"after": after} if after else {})},
+                )
+                assert response.status_code == 200
+                assert response.headers["cache-control"] == "no-store"
+                page = response.json()
+                assert 1 <= len(page["items"]) <= 2
+                received.extend(page["items"])
+                after = page["next_cursor"]
+                if after:
+                    assert after == page["items"][-1]["source_id"]
+            assert after is None
+            assert received == sorted(saved, key=lambda item: item["source_id"])
+            assert len({item["source_id"] for item in received}) == 7
+            tail = client.get(
+                f"/scopes/{scope}/sources",
+                params={"after": received[-1]["source_id"]},
+            )
+            assert tail.json() == {"items": [], "next_cursor": None}
+    finally:
+        event.remove(Engine, "before_cursor_execute", capture)
+    assert queries
+    # Guard both the API payload and the DB read: no BYTEA or fingerprint load.
+    for query in queries:
+        columns = query.split("FROM", 1)[0]
+        assert "source_version.content," not in columns
+        assert "source_version.content " not in columns
+        assert "source_version.request_fingerprint" not in columns
+
+
+def test_source_catalog_page_limit_default_and_maximum(runtime_database, actors):
+    actor, scope = actors[0]
+    service = Materials(runtime_database)
+    for _ in range(101):
+        service.write(actor, scope, uuid4(), b"synthetic page boundary")
+    with TestClient(actor_app(actor)) as client:
+        path = f"/scopes/{scope}/sources"
+        default = client.get(path).json()
+        maximum = client.get(path, params={"limit": 100}).json()
+        assert len(default["items"]) == 50
+        assert default["next_cursor"] == default["items"][-1]["source_id"]
+        assert len(maximum["items"]) == 100
+        assert maximum["next_cursor"] == maximum["items"][-1]["source_id"]
+        final = client.get(
+            path, params={"limit": 100, "after": maximum["next_cursor"]}
+        ).json()
+        assert len(final["items"]) == 1
+        assert final["next_cursor"] is None
+
+
+def test_source_catalog_invalid_and_foreign_cursors_are_controlled(
+    runtime_database, actors
+):
+    actor, scope = actors[0]
+    other, other_scope = actors[1]
+    foreign = Materials(runtime_database).write(
+        other, other_scope, uuid4(), b"other synthetic"
+    )
+    with TestClient(actor_app(actor)) as client:
+        for after in ("", "invalid", "a" * 5000, str(uuid4()), foreign["source_id"]):
+            response = client.get(f"/scopes/{scope}/sources", params={"after": after})
+            assert response.status_code == 422
+            assert response.json() == {"detail": "invalid_request"}
+            assert response.headers["cache-control"] == "no-store"
+        for limit in (0, -1, 101, "invalid", "9" * 5000):
+            response = client.get(f"/scopes/{scope}/sources", params={"limit": limit})
+            assert response.status_code == 422
+            assert response.json() == {"detail": "invalid_request"}
+            assert response.headers["cache-control"] == "no-store"
+        # Authorize the scope first; valid UUID cursors must not be an oracle.
+        for target in (other_scope, uuid4()):
+            for after in (str(uuid4()), foreign["source_id"]):
+                response = client.get(
+                    f"/scopes/{target}/sources", params={"after": after}
+                )
+                assert response.status_code == 404
+                assert response.json() == {"detail": "not_found"}
+                assert response.headers["cache-control"] == "no-store"
+            # HTTP syntax checks do not query scope/cursor existence. Both an
+            # existing foreign scope and a nonexistent one get the same 422.
+            for params in ({"after": "invalid"}, {"limit": 0}):
+                response = client.get(f"/scopes/{target}/sources", params=params)
+                assert response.status_code == 422
+                assert response.json() == {"detail": "invalid_request"}
+                assert response.headers["cache-control"] == "no-store"
+        assert client.get(f"/scopes/{scope}/sources").json() == {
+            "items": [],
+            "next_cursor": None,
+        }
+
+
+def test_source_catalog_revalidates_scope_and_bounds_at_service_boundary(
+    runtime_database, actors
+):
+    actor, scope = actors[0]
+    other, other_scope = actors[1]
+    service = Materials(runtime_database)
+    saved = service.write(actor, scope, uuid4(), b"synthetic")
+    for call, status in [
+        (lambda: service.list_sources(other, scope), 404),
+        (
+            lambda: service.list_sources(
+                other, other_scope, after=UUID(saved["source_id"])
+            ),
+            422,
+        ),
+        (lambda: service.list_sources(actor, scope, limit=0), 422),
+        (lambda: service.list_sources(actor, scope, limit=101), 422),
+        (lambda: service.list_sources(actor, scope, limit=True), 422),
+        (lambda: service.list_sources(actor, scope, after="invalid"), 422),
+    ]:
+        with pytest.raises(MaterialError) as error:
+            call()
+        assert error.value.status == status
 
 
 def test_http_restarts_preserve_bytes_metadata_and_immutable_history(
@@ -304,6 +404,9 @@ def test_new_app_never_accepts_client_identity(runtime_database, actors, monkeyp
         )
         responses = [
             create(client, scope),
+            client.get(f"/scopes/{scope}/sources"),
+            client.get(f"/scopes/{scope}/sources", params={"after": "invalid"}),
+            client.get(f"/scopes/{scope}/sources", params={"limit": 0}),
             append(client, scope, saved["source_id"]),
             exact(client, scope, saved["source_id"]),
             operation(client, scope, saved["operation_id"]),
@@ -340,6 +443,8 @@ def test_two_connections_contend_and_third_reads_exact_result(
         v1 = create(setup, scope).json()
     key1 = uuid4()
     keys = [key1, key1 if same_key else uuid4()]
+    # Build route schemas before racing requests on separate connections.
+    apps = [actor_app(actor) for _ in keys]
     barrier = threading.Barrier(2)
     pids = set()
     guard = threading.Lock()
@@ -356,12 +461,13 @@ def test_two_connections_contend_and_third_reads_exact_result(
     event.listen(Engine, "before_cursor_execute", synchronize)
     try:
 
-        def contender(key):
-            with TestClient(actor_app(actor)) as client:
+        def contender(job):
+            key, app = job
+            with TestClient(app) as client:
                 return append(client, scope, v1["source_id"], operation=key)
 
         with ThreadPoolExecutor(max_workers=2) as pool:
-            results = list(pool.map(contender, keys))
+            results = list(pool.map(contender, zip(keys, apps)))
     finally:
         event.remove(Engine, "before_cursor_execute", synchronize)
     assert len(pids) == 2
@@ -516,7 +622,7 @@ def test_single_huge_chunk_is_never_accumulated():
     [
         "UPDATE source_version SET number = 4",
         "DELETE FROM source_version",
-        "TRUNCATE source_version",
+        "TRUNCATE source_version, planning_revision, planning_draft_revision",
     ],
 )
 def test_runtime_cannot_mutate_history_and_trigger_is_defense_in_depth(
@@ -669,6 +775,8 @@ def test_concurrent_create_same_key_never_leaves_extra_source(
 ):
     actor, scope = actors[0]
     key = uuid4()
+    # Build route schemas before racing requests on separate connections.
+    apps = [actor_app(actor) for _ in range(2)]
     barrier = threading.Barrier(2)
     pids = set()
     guard = threading.Lock()
@@ -683,14 +791,16 @@ def test_concurrent_create_same_key_never_leaves_extra_source(
     event.listen(Engine, "before_cursor_execute", synchronize)
     try:
 
-        def contender(body):
-            with TestClient(actor_app(actor)) as client:
+        def contender(job):
+            body, app = job
+            with TestClient(app) as client:
                 return create(client, scope, content=body, operation=key)
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             results = list(
                 pool.map(
-                    contender, [b"first", b"other" if different_body else b"first"]
+                    contender,
+                    zip([b"first", b"other" if different_body else b"first"], apps),
                 )
             )
     finally:
@@ -798,6 +908,7 @@ def test_documented_server_launch_keeps_secrets_out_of_access_logs(
                 sys.executable,
                 "-m",
                 "uvicorn",
+                "--no-proxy-headers",
                 "aulalista_api.app:create_app",
                 "--factory",
                 "--host",

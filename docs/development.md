@@ -22,9 +22,15 @@ Después de editar código local, repetir `uv sync --locked --no-editable
 --reinstall-package aulalista-api` para no probar una wheel anterior de la caché.
 
 Las migraciones requieren el rol dueño de esquema. No se ejecutan en el arranque
-ni desde endpoints. El head esperado es `0002_source_versions`. El downgrade de
-0002 elimina fuentes y versiones; usarlo sólo en esta DB desechable, nunca para
-restaurar datos. Las pruebas recrean el esquema desde ambas migraciones.
+ni desde endpoints. El head esperado es `0006_editor_recovery`. Su downgrade elimina sólo el UUID
+de recuperación: no revoca sesiones ni borra respaldos de navegadores. El binario
+0005 no acepta readiness0006; cualquier rollback requiere coordinación explícita.
+El downgrade de 0005 elimina identidades,
+sesiones, desafíos y contadores; los ámbitos/materiales quedan sin método de
+acceso. No es un mecanismo de recuperación. El downgrade de
+0004 elimina borradores y origen de copias; el de 0003 elimina planeaciones y
+revisiones; el de 0002 elimina fuentes y versiones. Usarlo sólo en esta DB
+desechable, nunca para restaurar datos. Las pruebas recrean el esquema desde todas las migraciones.
 
 `.env.example` no se carga automáticamente. El DSN debe especificar driver
 `postgresql+psycopg`, usuario, host único y DB. Sólo se permite `sslmode` como
@@ -46,16 +52,27 @@ CREATE ROLE aulalista_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
     NOINHERIT NOREPLICATION NOBYPASSRLS;
 GRANT USAGE ON SCHEMA public TO aulalista_runtime;
 GRANT SELECT ON principal, personal_scope, alembic_version TO aulalista_runtime;
+GRANT INSERT ON principal, personal_scope TO aulalista_runtime;
+GRANT SELECT, INSERT ON auth_identity, auth_pre_session, auth_session, auth_email_challenge, auth_rate TO aulalista_runtime;
+GRANT UPDATE (email, email_verified) ON auth_identity TO aulalista_runtime;
+GRANT UPDATE (consumed, expires_at) ON auth_pre_session TO aulalista_runtime;
+GRANT UPDATE (revoked, idle_expires_at) ON auth_session TO aulalista_runtime;
+GRANT UPDATE (attempts, consumed) ON auth_email_challenge TO aulalista_runtime;
+GRANT UPDATE (count) ON auth_rate TO aulalista_runtime;
 GRANT SELECT, INSERT ON source, source_version TO aulalista_runtime;
 GRANT UPDATE (current_version) ON source TO aulalista_runtime;
+GRANT SELECT, INSERT ON planning, planning_revision TO aulalista_runtime;
+GRANT UPDATE (current_revision) ON planning TO aulalista_runtime;
+GRANT SELECT, INSERT ON planning_draft, planning_draft_revision TO aulalista_runtime;
+GRANT UPDATE (current_revision) ON planning_draft TO aulalista_runtime;
 SQL
 export AULALISTA_DATABASE_URL='postgresql+psycopg://aulalista_runtime@127.0.0.1:55432/aulalista_test'
-uv run --locked --no-editable uvicorn aulalista_api.app:create_app --factory --host 127.0.0.1 --port 8000 --no-access-log
+uv run --locked --no-editable uvicorn aulalista_api.app:create_app --factory --host 127.0.0.1 --port 8000 --no-access-log --no-proxy-headers
 ```
 
 Después de nuevas migraciones, revisar los grants necesarios antes de arrancar.
-No dar al runtime el rol dueño/superuser. La app nunca crea principales, ámbitos
-ni roles. El rol runtime puede insertar versiones y avanzar la revisión; no puede
+No dar al runtime el rol dueño/superuser. La autenticación válida aprovisiona principal/ámbito de forma idempotente;
+la app nunca crea roles. El rol runtime puede insertar versiones y avanzar la revisión; no puede
 actualizar/eliminar/truncar versiones, cambiar propietario o desactivar triggers.
 Los triggers bloquean además UPDATE/DELETE/TRUNCATE sobre historia aun cuando un
 rol tenga esos privilegios. Un administrador aún puede cambiar el esquema.
@@ -76,7 +93,7 @@ cumplir controles equivalentes antes de usar cualquier dato privado.
 
 - `GET /health/live`: 200 `{"status":"ok"}`, independiente de DB.
 - `GET /health/ready`: 200 sólo con conexión y única revisión
-  `0002_source_versions`; fallo/timeout/revisión distinta: 503 sin detalle interno.
+  `0006_editor_recovery`; fallo/timeout/revisión distinta: 503 sin detalle interno.
 - `AULALISTA_DB_TIMEOUT_SECONDS`: entero 2–30, predeterminado 3. Deadline HTTP de
   readiness completo, incluyendo espera, DNS, conexión y consulta; también fija
   timeouts de driver/servidor. Una sola sonda en vuelo evita acumular hilos.
@@ -104,8 +121,8 @@ export AULALISTA_TEST_DATABASE_URL='postgresql+psycopg://aulalista_test@127.0.0.
 export AULALISTA_TEST_ALLOW_RESET=1
 uv run --locked --no-editable ruff check .
 uv run --locked --no-editable ruff format --check .
-uv run --locked --no-editable pytest tests/test_app.py tests/test_config.py
-uv run --locked --no-editable pytest tests/test_postgres.py tests/test_materials.py
+uv run --locked --no-editable pytest tests/test_app.py tests/test_config.py tests/test_browser_runner.py
+uv run --locked --no-editable pytest tests/test_postgres.py tests/test_materials.py tests/test_plannings.py tests/test_water_fixture.py tests/test_planning_edits.py
 docker compose -f compose.test.yml logs --no-color postgres > /tmp/aulalista-postgres.log
 uv run --locked --no-editable python tests/check_postgres_log.py /tmp/aulalista-postgres.log
 uv pip check
@@ -122,6 +139,28 @@ bytes/límites/streaming, constraints, inmutabilidad y logs del proceso Uvicorn.
 Un probe causa CHECK fallido con un marcador sintético; el paso obligatorio
 posterior inspecciona logs reales de PostgreSQL sin imprimirlos. Exige el error
 esperado y ausencia de bytes, DETAIL de filas o sentencias SQL.
+
+## Integración del navegador con la API de prueba
+
+Con la DB desechable y variables de pruebas anteriores, instalar las dependencias
+web y Chromium fijado por Playwright, y ejecutar desde la raíz:
+
+```sh
+(cd web && npm ci --ignore-scripts && npx --no-install playwright install --with-deps chromium)
+uv run --locked --no-editable pytest tests/browser_integration.py
+```
+
+Este comando explícito reutiliza las migraciones, actores y rol runtime no dueño
+de las pruebas PostgreSQL. Levanta una API HTTP en un puerto loopback efímero y
+Playwright abre la entrada de tests mediante Vite en `127.0.0.1:4173`; el proxy
+de pruebas comunica el navegador con la API real, sin interceptar sus respuestas.
+Al terminar, también ante fallo o timeout, cierra API y grupo de procesos web.
+El workflow web ejecuta esta prueba además de los recorridos con servidor fixture.
+
+La sesión se inyecta exclusivamente en `tests/browser_integration.py` y en el
+entrypoint/config de navegador bajo tests. No se incluye en la wheel ni en el
+build web de producción. El servidor normal mantiene 401: esta integración no
+resuelve la identidad real de #13 ni hace que #14 esté listo para uso personal.
 
 ## Retirar únicamente el recurso de prueba
 
@@ -145,3 +184,78 @@ No hay identidad real, RLS, autorización de documentos reales ni restore de
 producción. El runtime tiene permisos SQL amplios de lectura: el aislamiento de
 T2 está en el caso de uso, no protege contra compromiso de la app/rol. Las puertas
 del piloto exigen reforzarlo. Tampoco hay UI, parsing, OCR, IA, cobro o despliegue.
+
+## B2 preparatorio: resultado fixture durable
+
+[Contrato B2](tickets/B2-resultado-simulado.md): POST JSON acotado a 4096 bytes,
+fuente T2 fixture exacta y revisión esperada; respuesta/recibo tras commit.
+Lecturas de planeación y operación propias no ejecutan generador. Namespace
+`planning-v1` separado de recibos T2; misma UUID no mezcla operaciones.
+`planning_revision` es inmutable, protegida por FK de fuente/ámbito, trigger y
+permisos mínimos. B3 añade UPDATE sólo de current_revision sobre planeaciones y
+borradores, nunca sobre la historia.
+La migración explícita 0003 agrega las tablas y una clave compuesta de referencia
+a source_version, sin alterar sus bytes ni recibos. Downgrade destruye resultados: no
+es restauración de producción. Revisar y aplicar grants al provisionar tras migrar.
+
+Sólo tests inyectan actor. Identidad real #13 y UI Acenta conectada siguen pendientes;
+no es un recorrido usable, parser ni IA. Las pruebas B2 incluyen recuperación tras
+COMMIT con transporte fallido, CAS contra append T2, aislamiento y rollback diferido.
+
+
+## B3: edición, borradores y copias
+
+[Contrato B3](specs/0003-edicion-durable.md): edición de un enunciado permitido con
+CAS e idempotencia; borrador privado versionado con identidad y CAS propios; copia
+independiente desde una revisión exacta con origen y fuente conservados. La
+migración explícita 0004 conserva B2, agrega las tablas de borradores y protege
+la relación origen/fuente/ámbito con FKs compuestas. Requiere los grants arriba
+indicados, nunca permisos de UPDATE/DELETE/TRUNCATE sobre revisiones.
+
+El nuevo fixture `water-observation-v1` corresponde a Agua que cambia/30 minutos
+y Ficha de observación. No modifica el fixture original `timing-example-v1`.
+Ambos usan bytes sintéticos opacos exactos; no son PDF, parser ni IA.
+
+No hay endpoint de deshacer: sólo revierte texto local aún no guardado. Un recibo
+siempre representa su operación exacta; un GET de planeación representa current.
+Los borradores no avanzan esa revisión y pueden basarse en una revisión antigua.
+Los listados mínimos paginan por UUID para reabrir original/copia/borrador.
+
+Downgrade 0004 destruye borradores y metadatos de origen; no es restauración. Si
+una revisión B3 supera el límite antiguo de 4096 bytes de request, el downgrade
+rechaza la reducción y revierte su transacción. Usar migraciones hacia adelante
+para datos que deban conservarse; no se acredita backup/restore de producción.
+
+Pruebas B3 añaden dos conexiones runtime reales para CAS y replay, reinicio de app,
+fallo diferido de commit, pérdida de respuesta tras commit, recibo aún no visible,
+borradores ajenos y sobre base superada, copia idempotente tras conflicto,
+inmutabilidad y fuente/origen coherentes. Los tests frontend son un gate separado;
+identidad real #13 sigue pendiente y runtime permanece cerrado.
+
+
+## Autenticación preparatoria B1
+
+Ver [contrato HTTP y límites](specs/0005-autenticacion-local.md). Sin configuración
+explícita, las operaciones privadas siguen cerradas. No introducir secretos en
+archivos del repo. `.env.example` contiene sólo nombres y marcadores, no valores
+utilizables; no se carga automáticamente. Este corte no permite recibir OTP en
+runtime: EmailSender carece de proveedor. El harness de pruebas es el único que
+inyecta verificador/transporte; nunca se distribuye como mecanismo de acceso.
+
+Google usa google-auth y caché HTTP de certificados con timeout de3segundos.
+No se solicita client secret, refresh token ni acceso a otros servicios Google.
+No se han creado credenciales ni validado servicios externos. La conexión real
+requiere configuración y comprobaciones autorizadas posteriores. La migración
+0005 no concede permisos; revisar/aplicar grants sólo en entorno autorizado.
+Los límites PG son ventanas fijas de hora/minuto, excepto cooldown de reenvío
+exacto60segundos. Purga de filas expiradas y retención se resolverán antes del
+piloto; no se añade tarea programada ni se borra historial ahora.
+
+El arranque local desactiva también `ProxyHeadersMiddleware` con
+`--no-proxy-headers`: Uvicorn confía por defecto en cabeceras reenviadas desde
+loopback, lo que permitiría alterar la IP usada por los límites. Todos los
+launchers del repositorio fijan `proxy_headers=False` o su equivalente CLI.
+No habilitar proxy headers sin diseñar y probar una frontera de confianza explícita.
+La adaptación [Render demo](render-demo.md) mantiene el peer TCP compartido, añade
+un presupuesto global PG y prepara UI/API same-origin; no acredita un despliegue
+ni confianza en cabeceras del edge.
