@@ -1,3 +1,4 @@
+import asyncio
 import os
 import signal
 import subprocess
@@ -6,7 +7,55 @@ import time
 from contextlib import nullcontext
 
 import pytest
-from browser_integration import run_process_group
+from browser_integration import lose_first_copy_response, run_process_group
+
+
+def test_copy_response_fault_preserves_app_execution_and_only_loses_first_success():
+    calls = []
+
+    async def app(scope, receive, send):
+        calls.append(scope)
+        await send(
+            {"type": "http.response.start", "status": scope["status"], "headers": []}
+        )
+        await send({"type": "http.response.body", "body": b"first", "more_body": True})
+        await send({"type": "http.response.body", "body": b"last"})
+
+    wrapped = lose_first_copy_response(app)
+
+    async def invoke(method, path, status):
+        messages = []
+
+        async def send(message):
+            messages.append(message)
+
+        await wrapped(
+            {"type": "http", "method": method, "path": path, "status": status},
+            None,
+            send,
+        )
+        return messages
+
+    for method, path, status, expected in [
+        ("GET", "/scopes/test/copies", 201, 201),
+        ("POST", "/scopes/test/revisions", 201, 201),
+        ("POST", "/scopes/test/copies", 409, 409),
+        ("POST", "/scopes/test/copies", 201, 503),
+        ("POST", "/scopes/test/copies", 201, 201),
+    ]:
+        messages = asyncio.run(invoke(method, path, status))
+        assert messages[0]["status"] == expected
+        if expected == 503:
+            assert messages[0]["headers"] == [
+                (b"content-type", b"application/json"),
+                (b"cache-control", b"no-store"),
+            ]
+            assert messages[1:] == [
+                {"type": "http.response.body", "body": b'{"detail":"unavailable"}'}
+            ]
+        else:
+            assert b"".join(message["body"] for message in messages[1:]) == b"firstlast"
+    assert len(calls) == 5
 
 
 @pytest.mark.parametrize("outcome", ["success", "failure", "timeout"])

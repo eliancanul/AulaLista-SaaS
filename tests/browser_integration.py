@@ -8,8 +8,48 @@ import threading
 import time
 from pathlib import Path
 
+import pytest
 import uvicorn
 from test_materials import actor_app
+
+
+def lose_first_copy_response(app):
+    """Simulate a failed delivery only after the real API has committed a copy."""
+    lost = False
+
+    async def wrapped(scope, receive, send):
+        dropped = False
+
+        async def deliver(message):
+            nonlocal lost, dropped
+            if (
+                not lost
+                and scope["type"] == "http"
+                and scope["method"] == "POST"
+                and scope["path"].endswith("/copies")
+                and message["type"] == "http.response.start"
+                and message["status"] == 201
+            ):
+                lost = dropped = True
+                await send(
+                    {
+                        "type": "http.response.start",
+                        "status": 503,
+                        "headers": [
+                            (b"content-type", b"application/json"),
+                            (b"cache-control", b"no-store"),
+                        ],
+                    }
+                )
+                await send(
+                    {"type": "http.response.body", "body": b'{"detail":"unavailable"}'}
+                )
+            elif not dropped:
+                await send(message)
+
+        await app(scope, receive, deliver)
+
+    return wrapped
 
 
 def run_process_group(command, *, timeout, **kwargs):
@@ -39,9 +79,12 @@ def run_process_group(command, *, timeout, **kwargs):
         process.wait(timeout=5)
 
 
-def test_water_journey_through_real_api(runtime_database, actors):
+@pytest.mark.parametrize("journey", ["acenta", "draft", "copy"])
+def test_journey_through_real_api(runtime_database, actors, journey):
     actor, scope = actors[0]
     app = actor_app(actor)
+    if journey == "copy":
+        app = lose_first_copy_response(app)
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]
@@ -59,7 +102,14 @@ def test_water_journey_through_real_api(runtime_database, actors):
                 assert time.monotonic() < deadline, "Test API startup timed out"
                 time.sleep(0.05)
             run_process_group(
-                ["npm", "run", "test:integration"],
+                [
+                    "npm",
+                    "run",
+                    "test:integration",
+                    "--",
+                    rf"tests/{journey}\.integration\.ts$",
+                    f"--output=test-results/integration/{journey}",
+                ],
                 cwd=Path(__file__).resolve().parents[1] / "web",
                 env={
                     **os.environ,
