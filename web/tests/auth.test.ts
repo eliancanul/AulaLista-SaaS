@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { AuthApi, AuthController, parseSession } from "../src/acenta/auth";
 import { ApiError, type Transport } from "../src/acenta/api";
-import { FixtureServer, session as identity } from "./acenta-fixtures";
+import { FixtureServer, planning, session as identity } from "./acenta-fixtures";
+import { EditorExitGuard } from "../src/acenta/editor-exit";
 import { waterSource } from "../src/acenta/contracts";
 const session = {
   principal_id: identity.actorId,
@@ -52,6 +53,7 @@ function setup() {
   return {
     auth,
     transport,
+    privateServer,
     setSession: (value: typeof session | null) => {
       active = value;
     },
@@ -453,4 +455,47 @@ describe("real session boundary", () => {
       editor: null,
     });
   });
+  it("a confirmed draft remains recoverable when the subsequent logout fails", async () => {
+    const s = setup(); s.setSession(session); await s.auth.start();
+    const controller = s.auth.snapshot().controller!, document = planning();
+    s.privateServer.put(document); controller.openEditor(document); controller.edit("Borrador antes de salir");
+    let logout: Promise<void> | undefined;
+    const guard = new EditorExitGuard(controller, () => {
+      s.transport.mockRejectedValueOnce(new Error("logout offline"));
+      logout = s.auth.logout();
+    });
+    guard.request(); await guard.preserve(); await logout;
+    expect(s.auth.snapshot()).toMatchObject({ phase: "logout-error", controller: null });
+    expect(controller.snapshot().closed).toBe(true);
+    const draft = [...s.privateServer.drafts.values()][0];
+    expect(draft.request.text).toBe("Borrador antes de salir");
+    expect(draft.receipt.planning_id).toBe(document.receipt.planning_id);
+    expect(s.privateServer.docs.get(document.receipt.planning_id)).toEqual(document);
+    const paths = s.transport.mock.calls.map(([path]) => String(path));
+    expect(paths.findIndex((path) => path.includes("/drafts/"))).toBeLessThan(paths.indexOf("/auth/logout"));
+    await s.auth.logout(); expect(s.auth.snapshot().phase).toBe("access");
+    await s.auth.login("google", "synthetic");
+    const next = s.auth.snapshot().controller!;
+    await next.openDraft(draft.receipt.draft_id);
+    expect(next.snapshot().editor!.text).toBe("Borrador antes de salir");
+  });
+  it("a late draft confirmation from account A cannot log out account B", async () => {
+    const s = setup(); s.setSession(session); await s.auth.start();
+    const previous = s.auth.snapshot().controller!, document = planning();
+    s.privateServer.put(document); previous.openEditor(document); previous.edit("Borrador de A");
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    s.privateServer.before = async () => { await gate; };
+    const exit = vi.fn(() => { void s.auth.logout(); });
+    const guard = new EditorExitGuard(previous, exit);
+    guard.request(); const saving = guard.preserve();
+    const other = { principal_id: crypto.randomUUID(), scope_id: crypto.randomUUID(), csrf_token: "csrf-b" };
+    s.setSession(other); await s.auth.revalidate(); guard.dispose();
+    release(); await saving;
+    expect(exit).not.toHaveBeenCalled();
+    expect(s.auth.snapshot().phase).toBe("ready");
+    expect(s.auth.snapshot().controller!.api.session.actorId).toBe(other.principal_id);
+    expect(s.transport.mock.calls.some(([path]) => path === "/auth/logout")).toBe(false);
+  });
+
 });

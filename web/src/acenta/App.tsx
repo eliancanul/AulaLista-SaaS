@@ -24,6 +24,7 @@ import {
 } from "./contracts";
 import { AcentaNavigation, type NavigationPosition } from "./navigation";
 import { toolsMenuPosition, toolsMenuScroll } from "./tools-menu";
+import { EditorExitGuard } from "./editor-exit";
 const asset = (name: string) => `/acenta/${name}`;
 function Icon({ name, small = false }: { name: string; small?: boolean }) {
   return (
@@ -293,6 +294,43 @@ function Preview({
     </article>
   );
 }
+function ExitGuard({ controller, guard, onContinue, logout = false }: {
+  controller: AcentaController;
+  guard: EditorExitGuard;
+  onContinue: () => void;
+  logout?: boolean;
+}) {
+  const { editor } = useSyncExternalStore(controller.subscribe, controller.snapshot);
+  const state = useSyncExternalStore(guard.subscribe, guard.snapshot);
+  const first = useRef<HTMLButtonElement>(null);
+  useEffect(() => { first.current?.focus(); }, []);
+  if (!editor) return null;
+  return (
+    <section className="exit-guard">
+      <h2>¿Salir con cambios?</h2>
+      <p>
+        Conserva una copia de trabajo privada para recuperar el texto sin
+        cambiar la revisión guardada.
+      </p>
+      {editor.error && <p role="alert">{editor.error}</p>}
+      <div className="actions">
+        <button ref={first} onClick={onContinue}>Seguir editando</button>
+        <button className="primary" disabled={state.busy || editor.save === "saving"}
+          onClick={() => void guard.preserve()}>
+          {logout ? "Conservar borrador y salir" : "Conservar borrador"}
+        </button>
+        {editor.pending && (
+          <button disabled={state.busy || editor.save === "saving"}
+            onClick={() => void controller.recoverEditor()}>Comprobar estado</button>
+        )}
+      </div>
+      <p className="field-hint">
+        Si falla, el texto sigue pendiente en esta pestaña mientras la sesión
+        siga válida. No recargues ni cierres el navegador.
+      </p>
+    </section>
+  );
+}
 function Editor({
   controller,
   onDismiss,
@@ -302,16 +340,13 @@ function Editor({
 }) {
   const s = useSyncExternalStore(controller.subscribe, controller.snapshot),
     e = s.editor!;
-  const [guard, setGuard] = useState(false);
-  const resource = editableResource(e.document, e.resourceKey)!;
-  const guardRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (guard) guardRef.current?.focus();
-  }, [guard]);
-  const close = () => {
+  const [guard] = useState(() => new EditorExitGuard(controller, () => {
     if (controller.closeEditor()) onDismiss();
-    else setGuard(true);
-  };
+  }));
+  const exit = useSyncExternalStore(guard.subscribe, guard.snapshot);
+  useEffect(() => () => guard.dispose(), [guard]);
+  const resource = editableResource(e.document, e.resourceKey)!;
+  const close = () => exit.open ? guard.cancel() : guard.request();
   const saveText: Record<EditorState["save"], string> = {
     clean: e.draftSaved ? "Borrador privado conservado" : "Sin cambios",
     dirty: "Cambios sin guardar",
@@ -323,39 +358,8 @@ function Editor({
   };
   return (
     <Dialog title="Editar actividad" className="editor-dialog" onClose={close}>
-      {guard ? (
-        <section className="exit-guard">
-          <h2>¿Salir con cambios?</h2>
-          <p>
-            Conserva una copia de trabajo privada para recuperar el texto sin
-            cambiar la revisión guardada.
-          </p>
-          {e.error && <p role="alert">{e.error}</p>}
-          <div className="actions">
-            <button ref={guardRef} onClick={() => setGuard(false)}>
-              Seguir editando
-            </button>
-            <button
-              className="primary"
-              disabled={e.save === "saving"}
-              onClick={async () => {
-                await controller.preserveDraft();
-                if (controller.closeEditor()) onDismiss();
-              }}
-            >
-              Conservar borrador
-            </button>
-            {e.pending && (
-              <button onClick={() => void controller.recoverEditor()}>
-                Comprobar estado
-              </button>
-            )}
-          </div>
-          <p className="field-hint">
-            Si falla, el texto sigue pendiente en este navegador y esta cuenta.
-            No se promete recuperación en otro dispositivo.
-          </p>
-        </section>
+      {exit.open ? (
+        <ExitGuard controller={controller} guard={guard} onContinue={() => guard.cancel()} />
       ) : (
         <>
           <header className="editor-header">
@@ -510,6 +514,10 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
   >(null);
   const [category, setCategory] = useState("Planear");
   const [showEditor, setShowEditor] = useState(!!s.editor);
+  const [logoutGuard] = useState(() => new EditorExitGuard(controller,
+    () => onLogout ? onLogout() : controller.closeSession()));
+  const logoutExit = useSyncExternalStore(logoutGuard.subscribe, logoutGuard.snapshot);
+  useEffect(() => () => logoutGuard.dispose(), [logoutGuard]);
   const input = useRef<HTMLTextAreaElement>(null);
   const toolsTrigger = useRef<HTMLButtonElement>(null);
   const [position, setPosition] = useState<{ value: NavigationPosition | null } | null>(null);
@@ -520,6 +528,7 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
       x: window.scrollX, y: window.scrollY,
       focus: (document.activeElement as HTMLElement | null)?.dataset.navigationFocus ?? null,
     }), (value) => {
+      logoutGuard.cancel();
       setOverlay(null);
       setShowEditor(false);
       setPosition({ value });
@@ -633,7 +642,7 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
         </button>
         <button
           aria-label="Cerrar sesión"
-          onClick={() => onLogout ? onLogout() : controller.closeSession()}
+          onClick={() => logoutGuard.request()}
         >
           <Icon name="chat" />
           {expanded && <span>Cerrar sesión</span>}
@@ -923,6 +932,15 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
           </p>
         )}
       </main>
+      {logoutExit.open && s.editor && (
+        <Dialog title="¿Salir con cambios?" className="editor-dialog" onClose={() => logoutGuard.cancel()}>
+          <ExitGuard controller={controller} guard={logoutGuard} logout onContinue={() => {
+            logoutGuard.cancel();
+            controller.resumeEditor();
+            setShowEditor(true);
+          }} />
+        </Dialog>
+      )}
       {s.original && (
         <Dialog
           title={knownSourceSample(s.original.reference.sha256) ? "Original de ejemplo" : "Recurso original"}

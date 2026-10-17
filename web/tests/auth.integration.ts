@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { createHash } from "node:crypto";
-import { sourceSamples, type SourceReceipt } from "../src/acenta/contracts";
+import { sourceSamples, waterSource, type SourceReceipt, type PlanningDocument, type DraftDocument } from "../src/acenta/contracts";
 
 type AuthSession = { principal_id: string; scope_id: string; csrf_token: string };
 
@@ -188,6 +188,118 @@ test("a fresh authenticated account discovers exact original versions without an
     const foreignCursor = await restored.request.get(`/scopes/${other.scope_id}/sources?after=${original.source_id}`);
     expect(foreignCursor.status()).toBe(422);
     expect(await foreignCursor.json()).toEqual({ detail: "invalid_request" });
+  } finally {
+    await fresh.close();
+  }
+});
+
+
+test("voluntary logout preserves an explicit server draft before revocation and reopens it in a fresh real session", async ({ page, browser }) => {
+  test.setTimeout(120_000);
+  // Production entry and real auth/CSRF/PostgreSQL. Only one draft response is lost after commit.
+  await page.goto("/");
+  const account = await login(page, "logout-draft-a@example.test");
+  const loginAt = Date.now(), origin = new URL(page.url()).origin;
+  await page.getByRole("button", { name: "Ajustar planeación", exact: true }).click();
+  await page.getByRole("button", { name: "Adjuntar referencia", exact: true }).click();
+  await page.getByRole("button", { name: /^Planeación de ciencias · ejemplo/ }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  const creating = page.waitForResponse((r) => r.request().method() === "POST" && new URL(r.url()).pathname.endsWith("/plannings"));
+  await page.getByRole("button", { name: "Enviar petición", exact: true }).click();
+  const creation = await creating; expect(creation.status()).toBe(201);
+  const original: PlanningDocument = await creation.json();
+  await page.getByRole("button", { name: "Abrir resultado editable", exact: true }).click();
+  const text = "Borrador privado antes de cerrar sesión: observa el agua con calma.";
+  await page.getByLabel("Texto", { exact: true }).fill(text);
+  // History hides the editor but retains its pending buffer; logout must still guard it.
+  await page.goBack(); await expect(page.getByRole("dialog")).toHaveCount(0);
+  const requests: string[] = [];
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (path === "/auth/logout" || (request.method() === "PUT" && path.includes("/drafts/")))
+      requests.push(`${request.method()} ${path}`);
+  });
+  const logout = page.getByRole("button", { name: "Cerrar sesión", exact: true });
+  await logout.click();
+  const guard = page.getByRole("dialog", { name: "¿Salir con cambios?", exact: true });
+  await expect(guard.getByRole("button", { name: "Seguir editando", exact: true })).toBeFocused();
+  await guard.getByRole("button", { name: "Seguir editando", exact: true }).click();
+  await expect(page.getByLabel("Texto", { exact: true })).toHaveValue(text);
+  expect(requests).toEqual([]);
+  await page.goBack(); await expect(page.getByRole("dialog")).toHaveCount(0);
+  await logout.click(); await page.keyboard.press("Escape");
+  await expect(guard).toHaveCount(0); await expect(logout).toBeFocused();
+  expect(requests).toEqual([]);
+
+  let committed: DraftDocument | undefined;
+  let draftPath = "", key = "";
+  await page.route("**/scopes/*/plannings/*/drafts/*", async (route) => {
+    const request = route.request();
+    expect(request.method()).toBe("PUT");
+    const response = await route.fetch(); // Exact original request, including real session/CSRF.
+    expect(response.status()).toBe(201);
+    committed = await response.json();
+    draftPath = new URL(request.url()).pathname;
+    key = request.headers()["idempotency-key"];
+    // The database committed, but the UI must not infer confirmation from a lost response.
+    await route.abort("failed");
+  }, { times: 1 });
+  await logout.click();
+  await guard.getByRole("button", { name: "Conservar borrador y salir", exact: true }).click();
+  await expect(guard.getByRole("alert")).toContainText("No pudimos confirmar");
+  expect(requests).toEqual([`PUT ${draftPath}`]);
+  expect(committed!.request.text).toBe(text);
+  expect(committed!.receipt).toMatchObject({ operation_id: key, draft_revision: 1,
+    planning_id: original.receipt.planning_id, base_revision_id: original.receipt.revision_id,
+    actor_id: account.principal_id, scope_id: account.scope_id });
+  expect((await page.request.get("/auth/session")).status()).toBe(200);
+  const prefix = `/scopes/${account.scope_id}`;
+  const receiptPath = `${prefix}/planning-draft-operations/${key}`;
+  const checking = page.waitForResponse((r) => new URL(r.url()).pathname === receiptPath);
+  await guard.getByRole("button", { name: "Comprobar estado", exact: true }).click();
+  const checked = await checking; expect(checked.status()).toBe(200);
+  expect(await checked.json()).toEqual(committed);
+  expect(requests).toEqual([`PUT ${draftPath}`]);
+  await expect(guard.getByRole("button", { name: "Conservar borrador y salir", exact: true })).toBeEnabled();
+  const closing = page.waitForResponse((r) => new URL(r.url()).pathname === "/auth/logout");
+  await guard.getByRole("button", { name: "Conservar borrador y salir", exact: true }).click();
+  expect((await closing).status()).toBe(204);
+  await expect(page.getByRole("button", { name: "Continuar con correo", exact: true })).toBeVisible();
+  expect(requests).toEqual([`PUT ${draftPath}`, "POST /auth/logout"]);
+  expect((await page.request.get(receiptPath)).status()).toBe(401);
+
+  const fresh = await browser.newContext({ baseURL: origin });
+  try {
+    const restored = await fresh.newPage(); await restored.goto("/");
+    expect(await restored.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
+    const cooldown = 61_000 - (Date.now() - loginAt);
+    if (cooldown > 0) await restored.waitForTimeout(cooldown);
+    const same = await login(restored, "logout-draft-a@example.test");
+    expect(same.principal_id).toBe(account.principal_id); expect(same.scope_id).toBe(account.scope_id);
+    await restored.getByRole("button", { name: "Mis recursos", exact: true }).first().click();
+    await expect(restored.getByRole("button", { name: "Recuperar borrador", exact: true })).toHaveCount(1);
+    await restored.getByRole("button", { name: "Recuperar borrador", exact: true }).click();
+    await expect(restored.getByLabel("Texto", { exact: true })).toHaveValue(text);
+    expect(await (await restored.request.get(receiptPath)).json()).toEqual(committed);
+    const planningPath = `${prefix}/plannings/${original.receipt.planning_id}`;
+    for (const path of [planningPath, `${planningPath}/revisions/1`]) {
+      const response = await restored.request.get(path); expect(response.status()).toBe(200);
+      expect(await response.json()).toEqual(original);
+    }
+    const source = await restored.request.get(`${prefix}/sources/${original.receipt.source_id}/versions/${original.receipt.source_version}`);
+    expect(source.status()).toBe(200); expect(await source.text()).toBe(waterSource);
+    expect(source.headers()["x-content-sha256"]).toBe(original.receipt.source_sha256);
+    expect(await restored.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
+    await restored.getByRole("button", { name: "Cerrar", exact: true }).click();
+    await restored.getByRole("button", { name: "Cerrar sesión", exact: true }).click();
+    await expect(restored.getByRole("button", { name: "Continuar con correo", exact: true })).toBeVisible();
+    const other = await login(restored, "logout-draft-b@example.test");
+    expect(other.scope_id).not.toBe(account.scope_id);
+    for (const path of [receiptPath, `${prefix}/planning-drafts/${committed!.receipt.draft_id}`,
+      `/scopes/${other.scope_id}/planning-drafts/${committed!.receipt.draft_id}`])
+      expect((await restored.request.get(path)).status()).toBe(404);
+    await restored.getByRole("button", { name: "Mis recursos", exact: true }).first().click();
+    await expect(restored.getByRole("button", { name: "Recuperar borrador", exact: true })).toHaveCount(0);
   } finally {
     await fresh.close();
   }

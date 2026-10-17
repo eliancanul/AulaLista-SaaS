@@ -65,7 +65,8 @@ def test_auth_journey_through_real_api(runtime_database, monkeypatch):
                     **os.environ,
                     "AULALISTA_AUTH_E2E_API_URL": f"http://127.0.0.1:{port}",
                 },
-                timeout=180,
+                # Two journeys reauthenticate after the real 60-second email cooldown.
+                timeout=300,
             )
         finally:
             server.should_exit = True
