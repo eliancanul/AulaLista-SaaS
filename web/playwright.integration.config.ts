@@ -3,10 +3,13 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests",
   testMatch: "**/*.integration.ts",
+  outputDir: "test-results/integration",
   workers: 1,
   use: {
     baseURL: "http://127.0.0.1:4173",
     browserName: "chromium",
+    screenshot: "on",
+    trace: "retain-on-failure",
     launchOptions: {
       executablePath: process.env.CHROMIUM_PATH || undefined,
       args: ["--no-sandbox"],

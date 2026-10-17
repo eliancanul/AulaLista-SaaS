@@ -52,6 +52,33 @@ async function ready(controller: AcentaController) {
   controller.openEditor();
 }
 describe("Acenta HTTP boundary", () => {
+  it("calls the default browser fetch with its global receiver", async () => {
+    const server = new FixtureServer();
+    const receivers: unknown[] = [];
+    vi.stubGlobal(
+      "fetch",
+      function (this: unknown, input: RequestInfo | URL, init?: RequestInit) {
+        receivers.push(this);
+        if (this !== globalThis) throw new TypeError("Illegal invocation");
+        return server.transport(input, init);
+      },
+    );
+    try {
+      const api = new AcentaApi(session);
+      const key = crypto.randomUUID();
+      await expect(api.createSource(waterSource, key)).resolves.toMatchObject({
+        operation_id: key,
+      });
+      await expect(api.list()).resolves.toEqual({
+        items: [],
+        next_cursor: null,
+      });
+      expect(receivers).toEqual([globalThis, globalThis]);
+      expect(server.calls.map((call) => call.method)).toEqual(["POST", "GET"]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
   it("uses same-origin/no-store, exact source bytes and only idempotency/content headers", async () => {
     const s = setup();
     const spy = vi.fn(s.server.transport);

@@ -1,6 +1,24 @@
 import { test, expect, type Page } from "@playwright/test";
 import { FixtureServer, revised, json } from "./acenta-fixtures";
 const evidence = process.env.ACENTA_EVIDENCE_DIR ?? "../evidence/acenta";
+async function assertNoHorizontalOverflow(page: Page) {
+  await page.evaluate(() => document.fonts.ready);
+  const layout = await page.evaluate(() => ({
+    viewport: innerWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+    overflowing: [...document.querySelectorAll("body *")]
+      .map((element) => ({
+        tag: element.tagName,
+        className: element.className,
+        right: element.getBoundingClientRect().right,
+        width: element.getBoundingClientRect().width,
+      }))
+      .filter((element) => element.right > innerWidth + 1),
+  }));
+  expect(layout.scrollWidth, JSON.stringify(layout)).toBeLessThanOrEqual(
+    layout.viewport,
+  );
+}
 async function assertLoadedAssets(page: Page) {
   await expect(page.locator("img").first()).toBeVisible();
   for (const img of await page.locator("img").all()) {
@@ -145,7 +163,13 @@ test("fixture request yields payload times, saved edit reloads and original rema
 }) => {
   await page.setViewportSize({ width: 1440, height: 924 });
   const server = await mount(page);
-  await edit(page);
+  await create(page);
+  await page.evaluate(() => document.fonts.ready);
+  await page.screenshot({ path: `${evidence}/result-1440.png` });
+  await page.getByRole("button", { name: "Abrir resultado editable" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Editar actividad" }),
+  ).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
   await page.screenshot({ path: `${evidence}/editor-1440.png` });
   await page
@@ -257,28 +281,20 @@ test("mobile access and composer reflow without horizontal overflow", async ({
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Bienvenido" })).toBeVisible();
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= innerWidth,
-    ),
-  ).toBe(true);
+  await page.evaluate(() => document.fonts.ready);
+  await page.screenshot({ path: `${evidence}/access-mobile.png` });
+  await assertNoHorizontalOverflow(page);
   await mount(page);
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= innerWidth,
-    ),
-  ).toBe(true);
+  await page.evaluate(() => document.fonts.ready);
+  await page.screenshot({ path: `${evidence}/home-mobile.png` });
+  await assertNoHorizontalOverflow(page);
   await edit(page);
   await page.getByLabel("Texto", { exact: true }).fill("Texto móvil");
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
   await expect(
     page.getByText("Guardado confirmado", { exact: true }),
   ).toBeVisible();
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= innerWidth,
-    ),
-  ).toBe(true);
+  await assertNoHorizontalOverflow(page);
   await page.screenshot({ path: `${evidence}/editor-mobile.png` });
 });
 

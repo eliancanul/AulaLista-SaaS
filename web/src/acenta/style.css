@@ -975,7 +975,7 @@ dialog::backdrop {
     gap: 0;
   }
   .access {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .access-left {
     min-height: 100dvh;

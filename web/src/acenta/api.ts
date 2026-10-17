@@ -227,7 +227,8 @@ export function parseDraft(v: unknown): DraftDocument {
 export class AcentaApi {
   constructor(
     readonly session: Session,
-    private transport: Transport = fetch,
+    private transport: Transport = (input, init) =>
+      globalThis.fetch(input, init),
   ) {
     if (!isUuid(session.actorId) || !isUuid(session.scopeId))
       throw new Error("Invalid session identity");
