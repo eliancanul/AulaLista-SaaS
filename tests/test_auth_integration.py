@@ -4,9 +4,11 @@ PYTEST_DONT_REWRITE: never print token, cookie or OTP arguments on assertion fai
 """
 
 import base64
+import hashlib
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from datetime import timedelta
 from uuid import uuid4
 
 import pytest
@@ -14,6 +16,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 from aulalista_api.app import create_app
+from aulalista_api.water_fixture import FIXTURE_SOURCE
 
 ORIGIN = "https://testserver"
 
@@ -143,6 +146,112 @@ def test_otp_session_real_authority_logout_and_isolation(auth_factory):
         assert a.get(path).status_code == 401
         assert write(a, sa).status_code == 401
         assert b.get("/auth/session").status_code == 200
+
+
+def test_source_catalog_new_session_discovers_exact_original_without_planning(
+    auth_factory, runtime_database, monkeypatch
+):
+    import aulalista_api.auth as authentication
+
+    factory, sender = auth_factory
+    instant = authentication.now()
+    monkeypatch.setattr(authentication, "now", lambda: instant)
+    with factory() as first:
+        original_session = login(first, sender)
+        path = f"/scopes/{original_session['scope_id']}/sources"
+        saved = first.post(
+            path,
+            content=FIXTURE_SOURCE,
+            headers={
+                "Content-Type": "application/octet-stream",
+                "Idempotency-Key": str(uuid4()),
+                "Origin": ORIGIN,
+                "X-CSRF-Token": original_session["csrf_token"],
+            },
+        )
+        assert saved.status_code == 201
+        receipt = saved.json()
+    # New application, cookie jar and real OTP/session; no browser-stored IDs.
+    instant += timedelta(seconds=61)
+    with factory() as fresh, factory() as other:
+        assert fresh.get(path).status_code == 401
+        session = login(fresh, sender)
+        assert session["principal_id"] == original_session["principal_id"]
+        assert session["scope_id"] == original_session["scope_id"]
+        listed = fresh.get(f"/scopes/{session['scope_id']}/sources")
+        assert listed.status_code == 200
+        assert listed.headers["cache-control"] == "no-store"
+        assert listed.json() == {"items": [receipt], "next_cursor": None}
+        source = listed.json()["items"][0]
+        exact_path = (
+            f"/scopes/{session['scope_id']}/sources/"
+            f"{source['source_id']}/versions/{source['number']}"
+        )
+        opened = fresh.get(exact_path)
+        assert opened.status_code == 200
+        assert opened.content == FIXTURE_SOURCE
+        assert len(opened.content) == source["size"]
+        assert hashlib.sha256(opened.content).hexdigest() == source["sha256"]
+        assert opened.headers["cache-control"] == "no-store"
+        other_session = login(other, sender, "other@example.test")
+        assert other.get(path).status_code == 404
+        assert other.get(exact_path).status_code == 404
+        other_path = f"/scopes/{other_session['scope_id']}/sources"
+        assert other.get(other_path).json() == {"items": [], "next_cursor": None}
+        forged = other.get(other_path, params={"after": source["source_id"]})
+        assert forged.status_code == 422
+        assert forged.json() == {"detail": "invalid_request"}
+        assert forged.headers["cache-control"] == "no-store"
+    with runtime_database.connect() as connection:
+        assert connection.execute(text("SELECT count(*) FROM planning")).scalar() == 0
+        assert (
+            connection.execute(text("SELECT count(*) FROM planning_draft")).scalar()
+            == 0
+        )
+
+
+def test_source_catalog_rechecks_session_after_dependency_resolution(
+    auth_factory, monkeypatch
+):
+    from aulalista_api.materials import Materials
+
+    factory, sender = auth_factory
+    reached, release = threading.Event(), threading.Event()
+    original = Materials.list_sources
+
+    def delayed(self, *args, **kwargs):
+        reached.set()
+        assert release.wait(timeout=10)
+        return original(self, *args, **kwargs)
+
+    with factory() as client, factory() as concurrent:
+        session = login(client, sender)
+        assert write(client, session).status_code == 201
+        concurrent.cookies.set(
+            "__Host-acenta-session", client.cookies.get("__Host-acenta-session")
+        )
+        path = f"/scopes/{session['scope_id']}/sources"
+        monkeypatch.setattr(Materials, "list_sources", delayed)
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pending = pool.submit(concurrent.get, path)
+            try:
+                assert reached.wait(timeout=5)
+                assert (
+                    client.post(
+                        "/auth/logout",
+                        headers={
+                            "Origin": ORIGIN,
+                            "X-CSRF-Token": session["csrf_token"],
+                        },
+                    ).status_code
+                    == 204
+                )
+            finally:
+                release.set()
+            denied = pending.result(timeout=10)
+            assert denied.status_code == 401
+            assert denied.json() == {"detail": "unauthorized"}
+            assert denied.headers["cache-control"] == "no-store"
 
 
 @pytest.mark.parametrize(

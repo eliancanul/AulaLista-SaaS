@@ -110,6 +110,42 @@ Contratos: [B2](../docs/tickets/B2-resultado-simulado.md) y
 
 ## Recuperación y límites
 
+### Originales en Mis recursos (#36)
+
+La biblioteca consulta fuentes confirmadas aunque no exista una planeación o un
+borrador. `GET /scopes/{scope_id}/sources?after={source_uuid}&limit=50` devuelve
+`{items: SourceReceipt[], next_cursor: UUID | null}` sin bytes, nombre de archivo
+ni MIME. El orden técnico es UUID de fuente ascendente; el cursor es la última
+fuente de la página, debe existir en ese ámbito y el límite de lectura admite
+1–100 (50 por defecto). No es una cuota de archivos ni un snapshot entre páginas:
+nuevas inserciones anteriores al cursor se descubren al actualizar desde el inicio.
+Cursores inválidos, inexistentes o ajenos dan 422 `invalid_request`; ámbito ajeno
+404 y sesión inválida 401. Las lecturas usan sesión real y `no-store`.
+
+Cada tarjeta fija fuente, número de versión, tamaño, SHA-256 y fecha del recibo.
+Una revisión posterior no cambia esa referencia; `Actualizar listado` ofrece la
+versión actual. Confirmar una fuente nueva invalida el listado anterior para que
+una visita vacía no la oculte. Los originales no se cuentan como copias/planeaciones
+y permanecen visibles durante actualización o error. Abrirlos reutiliza la lectura
+verificada y no modifica petición, referencia del próximo envío ni edición local.
+
+Sólo los hashes exactos de las tres muestras incorporadas permiten mostrar sus
+nombres de ejemplo. Una fuente desconocida dice `Recurso original`, también en el
+visor; no se inventa filename, PDF ni procedencia sintética. Decodificación o
+integridad no admitidas muestran un estado seguro, sin preview sustitutivo.
+
+`tests/source-library.test.ts` cubre contrato, paginación, errores, versiones y
+respuestas tardías. `tests/source-library.browser.ts` cubre catálogo, foco, regreso,
+reflow y visor. `tests/auth.integration.ts`, ejecutado por el harness auth existente,
+añade la entrada real: confirmar sin generar, vaciar almacenamiento y cookies,
+autenticar otra sesión en un contexto nuevo, descubrir, leer todos los bytes y
+comparar tamaño/hash, conservar V1 frente a V2 y aislar la cuenta B. Espera el
+cooldown real de correo, sin cambiar reloj ni política de autenticación. Este
+recorrido requiere Chromium; su bloqueo local de socket no acredita el paso del
+E2E ni sustituye la CI del candidato exacto.
+
+### Operaciones y trabajo pendiente
+
 - Un write conserva clave UUID y payload. Tras timeout o respuesta incierta,
   consultar su operación y, ante 404, repetir exactamente la misma petición.
   Un 404 de recibo no demuestra fracaso. Fallar al recuperar no descarta la clave.

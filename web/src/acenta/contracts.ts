@@ -142,12 +142,14 @@ export const sourceSamples = [
     id: "water",
     family: "water",
     name: "Planeación de ciencias · ejemplo",
+    sha256: "d88a7dcb08c92d925c1e4cc854f83579e5e9b45a2a2bfb8b85a33248a8974e05",
     bytes: waterSource,
   },
   {
     id: "water-revised",
     family: "water",
     name: "Planeación de ciencias · revisión de ejemplo",
+    sha256: "86c6a56969da27ccc0457889ec9b61c8c334140f971eb4bebe7a596103f97a33",
     bytes:
       waterSource +
       "Nota sintética de revisión: observar nuevamente al finalizar.\n",
@@ -156,11 +158,16 @@ export const sourceSamples = [
     id: "water-other",
     family: "water-other",
     name: "Otra planeación de ciencias · ejemplo",
+    sha256: "e5cbf6c739f24317b3897a1bce904a901382dc35a923d2b41ecb87c3c907a0eb",
     bytes:
       waterSource +
       "Archivo sintético independiente para otra sesión de observación.\n",
   },
 ] as const;
+/** Names are known only for these exact synthetic bytes; no filename/MIME is stored. */
+export function knownSourceSample(sha256: string) {
+  return sourceSamples.find((sample) => sample.sha256 === sha256);
+}
 export interface SourceReference {
   source_id: string;
   number: number;
