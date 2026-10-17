@@ -12,3 +12,5 @@ dist/
 !.env.example
 *.sqlite3
 *.dump
+
+/src/aulalista_api/static/

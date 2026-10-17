@@ -92,6 +92,9 @@ def revalidate_actor(db, actor):
     return actor
 
 
+PUBLIC_AUTH_LIMIT_PER_MINUTE = 120
+
+
 class Auth:
     def __init__(self, engine, settings, google=None, sender=None):
         self.engine, self.settings, self.google, self.sender = (
@@ -135,6 +138,16 @@ class Auth:
             ).returning(AuthRate.count)
         )
         return count <= maximum
+
+    def reserve_public_budget(self):
+        """Shared demo ceiling, independent of peer headers and downstream failure."""
+        self.available()
+        with Session(self.engine) as db, db.begin():
+            allowed = self.quota(
+                db, "public-auth-global", "all", PUBLIC_AUTH_LIMIT_PER_MINUTE, 60
+            )
+        if not allowed:
+            raise AuthError(429, "rate_limited")
 
     def lock_identity(self, db, issuer, subject):
         key = int.from_bytes(

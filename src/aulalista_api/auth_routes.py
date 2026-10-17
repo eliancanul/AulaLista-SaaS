@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from starlette.concurrency import run_in_threadpool
@@ -81,6 +81,10 @@ def logged_in(result):
     return response
 
 
+def public_budget(request: Request):
+    request.app.state.auth.reserve_public_budget()
+
+
 def install_auth_routes(app: FastAPI, engine):
     settings = load_auth_settings()
     verifier = (
@@ -98,7 +102,7 @@ def install_auth_routes(app: FastAPI, engine):
             headers={"Cache-Control": "no-store"},
         )
 
-    @app.get("/auth/bootstrap")
+    @app.get("/auth/bootstrap", dependencies=[Depends(public_budget)])
     def bootstrap(request: Request):
         token, document = app.state.auth.bootstrap(
             request.cookies.get(PRE_COOKIE), ip(request)
@@ -107,7 +111,7 @@ def install_auth_routes(app: FastAPI, engine):
         cookie(response, PRE_COOKIE, token, 600)
         return response
 
-    @app.post("/auth/google")
+    @app.post("/auth/google", dependencies=[Depends(public_budget)])
     async def google_login(request: Request):
         pre = checked_pre(request)
         data = await payload(request, GoogleRequest)
@@ -121,7 +125,9 @@ def install_auth_routes(app: FastAPI, engine):
             )
         )
 
-    @app.post("/auth/email/request", status_code=202)
+    @app.post(
+        "/auth/email/request", status_code=202, dependencies=[Depends(public_budget)]
+    )
     async def request_email(request: Request):
         pre = checked_pre(request)
         data = await payload(request, EmailRequest)
@@ -134,7 +140,7 @@ def install_auth_routes(app: FastAPI, engine):
         cookie(response, PRE_COOKIE, pre, 600)
         return response
 
-    @app.post("/auth/email/verify")
+    @app.post("/auth/email/verify", dependencies=[Depends(public_budget)])
     async def verify_email(request: Request):
         pre = checked_pre(request)
         data = await payload(request, VerifyRequest)

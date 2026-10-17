@@ -2,10 +2,10 @@ name: web
 
 on:
   pull_request:
-    paths: ["web/**", "src/**", "migrations/**", "pyproject.toml", "uv.lock", "tests/browser_integration.py", "tests/auth_browser_integration.py", "tests/test_auth_integration.py", "tests/conftest.py", "tests/test_materials.py", "tests/postgres-init.sql", ".github/workflows/web.yml"]
+    paths: ["web/**", "src/**", "scripts/**", "tests/check_web_artifact.py", "migrations/**", "pyproject.toml", "uv.lock", "tests/browser_integration.py", "tests/auth_browser_integration.py", "tests/test_auth_integration.py", "tests/conftest.py", "tests/test_materials.py", "tests/postgres-init.sql", ".github/workflows/web.yml"]
   push:
     branches: [main]
-    paths: ["web/**", "src/**", "migrations/**", "pyproject.toml", "uv.lock", "tests/browser_integration.py", "tests/auth_browser_integration.py", "tests/test_auth_integration.py", "tests/conftest.py", "tests/test_materials.py", "tests/postgres-init.sql", ".github/workflows/web.yml"]
+    paths: ["web/**", "src/**", "scripts/**", "tests/check_web_artifact.py", "migrations/**", "pyproject.toml", "uv.lock", "tests/browser_integration.py", "tests/auth_browser_integration.py", "tests/test_auth_integration.py", "tests/conftest.py", "tests/test_materials.py", "tests/postgres-init.sql", ".github/workflows/web.yml"]
 
 permissions:
   contents: read
@@ -103,3 +103,12 @@ jobs:
           include-hidden-files: false
           if-no-files-found: ignore
           compression-level: 0
+
+      - name: Verify installed production UI wheel (no test entrypoints)
+        working-directory: .
+        run: |
+          npm --prefix web run build
+          python scripts/package_web.py
+          uv build --no-sources
+          uv pip install --reinstall --no-deps dist/*.whl
+          .venv/bin/python tests/check_web_artifact.py
