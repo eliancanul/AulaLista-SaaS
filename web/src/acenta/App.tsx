@@ -1,0 +1,1030 @@
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
+import {
+  AcentaController,
+  editableResource,
+  type EditorState,
+} from "./controller";
+import {
+  waterContext,
+  waterSource,
+  type PlanningDocument,
+  type Resource,
+} from "./contracts";
+const asset = (name: string) => `/acenta/${name}`;
+function Icon({ name, small = false }: { name: string; small?: boolean }) {
+  return (
+    <img
+      className={small ? "icon small" : "icon"}
+      src={asset(`${name}.svg`)}
+      alt=""
+    />
+  );
+}
+function Logo({ large = false }: { large?: boolean }) {
+  return (
+    <img
+      className={large ? "logo large" : "logo"}
+      src={asset("acenta-logo-reconstruido-tinta.svg")}
+      alt="Acenta"
+    />
+  );
+}
+function Dialog({
+  children,
+  title,
+  onClose,
+  className = "",
+}: {
+  children: ReactNode;
+  title: string;
+  onClose: () => void;
+  className?: string;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    const dialog = ref.current!;
+    dialog.showModal();
+    return () => {
+      dialog.close();
+      if (previous?.isConnected) previous.focus();
+    };
+  }, []);
+  return (
+    <dialog
+      ref={ref}
+      className={className}
+      aria-label={title}
+      onCancel={(e) => {
+        e.preventDefault();
+        onClose();
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      {children}
+    </dialog>
+  );
+}
+export function AccessView() {
+  const [view, setView] = useState<
+    "select" | "email" | "register" | "pending" | "legal"
+  >("select");
+  const [previous, setPrevious] = useState<
+    "select" | "email" | "register" | "pending"
+  >("select");
+  const [email, setEmail] = useState("");
+  const [invalid, setInvalid] = useState(false);
+  const [marketing, setMarketing] = useState(false);
+  const change = (next: typeof view) => {
+    setInvalid(false);
+    setView(next);
+  };
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setInvalid(true);
+      return;
+    }
+    change("pending");
+  }
+  return (
+    <main className="access">
+      <div className="access-left">
+        <div className="access-brand">
+          <Logo large />
+        </div>
+        {view === "select" ? (
+          <section className="access-selector">
+            <h1>Bienvenido</h1>
+            <button className="google" onClick={() => change("pending")}>
+              <img
+                src={asset("google-g-oficial.svg")}
+                alt=""
+                width="20"
+                height="20"
+              />
+              Continuar con Google
+            </button>
+            <button className="text-action" onClick={() => change("email")}>
+              Continuar con correo
+            </button>
+          </section>
+        ) : view === "email" || view === "register" ? (
+          <section className="access-form">
+            <button
+              className="text-action small-text"
+              onClick={() => change("select")}
+            >
+              Volver
+            </button>
+            <h1>
+              {view === "register"
+                ? "Crea tu cuenta"
+                : "Continúa con tu correo"}
+            </h1>
+            <p className="secondary">
+              Tu espacio para preparar la próxima clase.
+            </p>
+            <form onSubmit={submit} noValidate>
+              <label htmlFor="email">Correo electrónico</label>
+              <input
+                id="email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                placeholder="nombre@ejemplo.com"
+                aria-invalid={invalid}
+                aria-describedby="email-help"
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setInvalid(false);
+                }}
+              />
+              <p
+                id="email-help"
+                className={invalid ? "validation" : "field-hint"}
+              >
+                {invalid
+                  ? "Escribe un correo válido para continuar."
+                  : "Usaremos tu correo para continuar."}
+              </p>
+              <button className="primary wide" type="submit">
+                Continuar
+              </button>
+              <label className="marketing">
+                <input
+                  type="checkbox"
+                  checked={marketing}
+                  onChange={(e) => setMarketing(e.target.checked)}
+                />
+                Quiero recibir novedades de Acenta (opcional).
+              </label>
+            </form>
+            <button
+              className="text-action"
+              onClick={() => change(view === "email" ? "register" : "email")}
+            >
+              {view === "email"
+                ? "¿Aún no tienes cuenta? Crear cuenta"
+                : "¿Ya tienes cuenta? Entrar"}
+            </button>
+            <p className="field-hint">
+              Acceso pendiente. Este formulario no envía ni guarda tu correo.
+            </p>
+          </section>
+        ) : view === "pending" ? (
+          <section className="access-form">
+            <h1>Acceso pendiente</h1>
+            <p>La conexión de acceso aún no está disponible.</p>
+            <p>
+              Google y correo están previstos. El método de correo sigue por
+              confirmar.
+            </p>
+            <p className="secondary">
+              No se han creado cuentas ni enviado datos.
+            </p>
+            <button onClick={() => change("select")}>Volver al acceso</button>
+          </section>
+        ) : (
+          <section className="access-form">
+            <h1>Documentos en preparación</h1>
+            <p>
+              Los Términos y condiciones y el Aviso de privacidad de Acenta
+              están pendientes de redacción y revisión.
+            </p>
+            <p>Esta vista no registra aceptación ni recopila datos.</p>
+            <button onClick={() => change(previous)}>Volver</button>
+          </section>
+        )}
+        {view !== "legal" && (
+          <footer className="access-legal">
+            <button
+              onClick={() => {
+                setPrevious(view);
+                change("legal");
+              }}
+            >
+              Términos y condiciones
+            </button>
+            <button
+              onClick={() => {
+                setPrevious(view);
+                change("legal");
+              }}
+            >
+              Aviso de privacidad
+            </button>
+          </footer>
+        )}
+      </div>
+      <div className="access-photo">
+        <img
+          src={asset("foto-aprobada-recorte.png")}
+          alt="Docente preparando su clase junto a una computadora y un cuaderno"
+        />
+      </div>
+    </main>
+  );
+}
+function AccountLinks() {
+  return (
+    <nav className="account-links" aria-label="Cuenta">
+      <span>Mi plan</span>
+      <span>Avisos</span>
+      <span>Uso</span>
+      <span>Mi cuenta</span>
+    </nav>
+  );
+}
+const toolCatalog: Record<string, string[]> = {
+  Planear: ["Planeación de clase", "Secuencia didáctica", "Proyecto de aula"],
+  Materiales: [
+    "Hoja de actividades",
+    "Preguntas sobre un texto",
+    "Adaptar material",
+    "Tarjetas de repaso",
+  ],
+  Evaluar: ["Diagnóstico breve", "Rúbrica y lista de cotejo"],
+  "Juegos y repaso": [
+    "Bingo temático",
+    "Memorama",
+    "Sopa de letras",
+    "Adivina con pistas",
+    "Quiz para proyectar",
+  ],
+};
+function ResultView({
+  document,
+  onOpen,
+}: {
+  document: PlanningDocument;
+  onOpen: (key: string) => void;
+}) {
+  const r = document.result;
+  const initial =
+    document.initial_request ??
+    ("prompt" in document.request ? document.request : null);
+  const total = r.activities.reduce((n, a) => n + a.minutes, 0);
+  const before = r.activities.reduce(
+    (n, a) => n + (a.previous_minutes ?? 0),
+    0,
+  );
+  return (
+    <>
+      <h1>{r.title}</h1>
+      {r.context && (
+        <p className="context-line">
+          Contexto de esta conversación: {r.context.level} · {r.context.group} ·{" "}
+          {r.context.subject} · {total} min
+        </p>
+      )}
+      <div className="result-columns">
+        <section className="conversation-card">
+          {initial && (
+            <>
+              <p className="secondary">Tú</p>
+              <p className="request-text">{initial.prompt}</p>
+            </>
+          )}
+          <p className="response-label">Luna · Respuesta de demostración</p>
+          <p>El ejemplo conserva los materiales y ajusta solo la duración.</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Momento</th>
+                {before > 0 && <th>Antes</th>}
+                <th>Ahora</th>
+              </tr>
+            </thead>
+            <tbody>
+              {r.activities.map((a, i) => (
+                <tr key={a.key ?? i}>
+                  <td>{a.title ?? a.statement}</td>
+                  {before > 0 && <td>{a.previous_minutes ?? "—"} min</td>}
+                  <td>{a.minutes} min</td>
+                </tr>
+              ))}
+              <tr>
+                <td>Total</td>
+                {before > 0 && <td>{before} min</td>}
+                <td>{total} min</td>
+              </tr>
+            </tbody>
+          </table>
+          <p className="field-hint">
+            Fuente de ejemplo · Versión {document.receipt.source_version}. El
+            original no cambia.
+          </p>
+        </section>
+        <div className="resource-cards">
+          {r.resources?.map((resource) => (
+            <section className="result-card" key={resource.key}>
+              <h2>{resource.title}</h2>
+              <p className="secondary">Hoja del alumnado · Copia de trabajo</p>
+              <p>
+                {resource.elements.find((e) => e.kind === "statement")?.text}
+              </p>
+              <p className="field-hint">
+                Revisión {document.receipt.revision} guardada.
+              </p>
+              <button className="primary" onClick={() => onOpen(resource.key)}>
+                Abrir resultado editable
+              </button>
+            </section>
+          ))}
+        </div>
+      </div>
+      <p className="synthetic-notice">{r.notice}</p>
+    </>
+  );
+}
+function Preview({
+  resource,
+  document,
+  text,
+  elementKey,
+}: {
+  resource: Resource;
+  document: PlanningDocument;
+  text: string;
+  elementKey: string;
+}) {
+  return (
+    <article className="sheet">
+      <h2>{resource.title}</h2>
+      <p className="sheet-subtitle">
+        {document.result.title} · Hoja del alumnado
+      </p>
+      <p className="activity-label">ACTIVIDAD 1</p>
+      {resource.elements.map((e) => (
+        <React.Fragment key={e.key}>
+          <p className={e.kind === "statement" ? "sheet-instruction" : ""}>
+            {e.key === elementKey ? text : e.text}
+          </p>
+          {e.kind === "question" && (
+            <div
+              className="answer-space"
+              aria-label={`Espacio para responder, ${e.lines ?? 0} líneas`}
+            />
+          )}
+        </React.Fragment>
+      ))}
+      <p className="sheet-note">Sin respuestas · El original se conserva</p>
+    </article>
+  );
+}
+function Editor({
+  controller,
+  onDismiss,
+}: {
+  controller: AcentaController;
+  onDismiss: () => void;
+}) {
+  const s = useSyncExternalStore(controller.subscribe, controller.snapshot),
+    e = s.editor!;
+  const [guard, setGuard] = useState(false);
+  const resource = editableResource(e.document, e.resourceKey)!;
+  const guardRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (guard) guardRef.current?.focus();
+  }, [guard]);
+  const close = () => {
+    if (controller.closeEditor()) onDismiss();
+    else setGuard(true);
+  };
+  const saveText: Record<EditorState["save"], string> = {
+    clean: e.draftSaved ? "Borrador privado conservado" : "Sin cambios",
+    dirty: "Cambios sin guardar",
+    saving: "Guardando…",
+    saved: "Guardado confirmado",
+    error: "Cambios pendientes",
+    unknown: "Guardado sin confirmar",
+    conflict: "Conflicto de versión",
+  };
+  return (
+    <Dialog title="Editar actividad" className="editor-dialog" onClose={close}>
+      {guard ? (
+        <section className="exit-guard">
+          <h2>¿Salir con cambios?</h2>
+          <p>
+            Conserva una copia de trabajo privada para recuperar el texto sin
+            cambiar la revisión guardada.
+          </p>
+          {e.error && <p role="alert">{e.error}</p>}
+          <div className="actions">
+            <button ref={guardRef} onClick={() => setGuard(false)}>
+              Seguir editando
+            </button>
+            <button
+              className="primary"
+              disabled={e.save === "saving"}
+              onClick={async () => {
+                await controller.preserveDraft();
+                if (controller.closeEditor()) onDismiss();
+              }}
+            >
+              Conservar borrador
+            </button>
+            {e.pending && (
+              <button onClick={() => void controller.recoverEditor()}>
+                Comprobar estado
+              </button>
+            )}
+          </div>
+          <p className="field-hint">
+            Si falla, el texto sigue pendiente en este navegador y esta cuenta.
+            No se promete recuperación en otro dispositivo.
+          </p>
+        </section>
+      ) : (
+        <>
+          <header className="editor-header">
+            <h2>Editar actividad</h2>
+            <button onClick={close}>Cerrar</button>
+          </header>
+          <div className="editor-body">
+            <section className="preview-column">
+              <p className="preview-label">VISTA PREVIA · HOJA DEL ALUMNADO</p>
+              <Preview
+                resource={resource}
+                document={e.document}
+                text={e.text}
+                elementKey={e.elementKey}
+              />
+            </section>
+            <section className="elements-column">
+              <h3>
+                Elementos de la actividad · {resource.elements.length} elementos
+              </h3>
+              {resource.elements.map((element, index) => (
+                <div className="element-card" key={element.key}>
+                  <p className="field-hint">{index + 1}　Tipo · Solo lectura</p>
+                  <div className="readonly-value">
+                    {element.kind === "statement"
+                      ? "Enunciado"
+                      : "Pregunta con líneas"}{" "}
+                    ⌄
+                  </div>
+                  <label htmlFor={`element-${element.key}`}>
+                    {element.editable ? "Texto" : "Texto · Solo lectura"}
+                  </label>
+                  {element.editable ? (
+                    <textarea
+                      id={`element-${element.key}`}
+                      value={e.text}
+                      onChange={(event) => controller.edit(event.target.value)}
+                      aria-describedby={e.error ? "editor-error" : undefined}
+                      rows={2}
+                    />
+                  ) : (
+                    <input
+                      id={`element-${element.key}`}
+                      readOnly
+                      value={element.text}
+                    />
+                  )}{" "}
+                  {element.lines !== undefined && (
+                    <>
+                      <label
+                        htmlFor={`lines-${element.key}`}
+                        className="secondary"
+                      >
+                        Líneas · Solo lectura
+                      </label>
+                      <input
+                        id={`lines-${element.key}`}
+                        className="line-count"
+                        readOnly
+                        value={element.lines}
+                      />
+                    </>
+                  )}
+                </div>
+              ))}
+              {(e.error || e.save === "unknown" || e.save === "conflict") && (
+                <section
+                  className="editor-recovery"
+                  aria-label="Recuperar edición"
+                >
+                  <p id="editor-error" role="alert">
+                    {e.error || "El guardado todavía no está confirmado."}
+                  </p>
+                  {e.save === "unknown" && (
+                    <button onClick={() => void controller.recoverEditor()}>
+                      Comprobar estado
+                    </button>
+                  )}
+                  {e.save === "conflict" && (
+                    <>
+                      {e.latest && (
+                        <p>
+                          Texto guardado:{" "}
+                          {
+                            editableResource(
+                              e.latest,
+                              e.resourceKey,
+                            )?.elements.find((x) => x.key === e.elementKey)
+                              ?.text
+                          }
+                        </p>
+                      )}
+                      <p>
+                        Tu texto permanece en el editor. El original y la
+                        revisión vigente se conservan.
+                      </p>
+                      <button onClick={() => void controller.save(true)}>
+                        Conservar copia
+                      </button>
+                    </>
+                  )}
+                  {e.save === "error" && (
+                    <button onClick={() => void controller.save()}>
+                      Reintentar guardado
+                    </button>
+                  )}
+                </section>
+              )}
+            </section>
+          </div>
+          <footer className="editor-footer">
+            <p role="status">{saveText[e.save]}</p>
+            <div className="actions">
+              <button
+                disabled={!!e.pending || e.text === e.baseline}
+                onClick={() => controller.undo()}
+              >
+                Deshacer
+              </button>
+              <button onClick={close}>Cancelar</button>
+              <button
+                className="primary"
+                disabled={
+                  e.save === "saving" ||
+                  e.save === "conflict" ||
+                  e.text === e.baseline
+                }
+                onClick={() => void controller.save()}
+              >
+                Guardar
+              </button>
+            </div>
+          </footer>
+        </>
+      )}
+    </Dialog>
+  );
+}
+export function AcentaApp({
+  controller,
+}: {
+  controller: AcentaController | null;
+}) {
+  return controller ? <Workspace controller={controller} /> : <AccessView />;
+}
+function Workspace({ controller }: { controller: AcentaController }) {
+  const s = useSyncExternalStore(controller.subscribe, controller.snapshot);
+  const [expanded, setExpanded] = useState(false);
+  const [overlay, setOverlay] = useState<
+    "context" | "attachment" | "tools" | null
+  >(null);
+  const [category, setCategory] = useState("Planear");
+  const [showEditor, setShowEditor] = useState(!!s.editor);
+  const input = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    void controller.init();
+  }, [controller]);
+  useEffect(() => {
+    const node = input.current;
+    if (node) {
+      node.style.height = "40px";
+      node.style.height = `${Math.min(160, Math.max(40, node.scrollHeight))}px`;
+    }
+  }, [s.prompt, s.view]);
+  useEffect(() => {
+    const handler = (event: BeforeUnloadEvent) => {
+      const state = controller.snapshot();
+      if (
+        state.pending ||
+        state.sourcePending ||
+        (state.editor &&
+          (state.editor.pending ||
+            (state.editor.text !== state.editor.baseline &&
+              !state.editor.draftSaved)))
+      ) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [controller]);
+  if (s.closed) return <AccessView />;
+  const openEditor = (key?: string) => {
+    controller.openEditor(s.result, key);
+    if (controller.snapshot().editor) setShowEditor(true);
+  };
+  const actionExample = () => {
+    controller.useExample();
+    setOverlay(null);
+    input.current?.focus();
+  };
+  const dismissAttachment = () => {
+    controller.cancelAttachment();
+    setOverlay(null);
+  };
+  return (
+    <div className={`workspace ${expanded ? "expanded" : ""}`}>
+      <aside className="sidebar">
+        <div className="rail-spacer" />
+        <button
+          aria-label={expanded ? "Contraer menú" : "Expandir menú"}
+          aria-expanded={expanded}
+          onClick={() => setExpanded((v) => !v)}
+        >
+          <Icon name="expand" />
+          {expanded && <span>Contraer menú</span>}
+        </button>
+        <button disabled aria-label="Nueva conversación, pendiente">
+          <Icon name="plus" />
+          {expanded && <span>Nueva conversación</span>}
+        </button>
+        <button
+          className={s.view === "home" ? "selected" : ""}
+          aria-label="Inicio"
+          onClick={() => controller.navigate("home")}
+        >
+          <Icon name="home" />
+          {expanded && <span>Inicio</span>}
+        </button>
+        <button disabled aria-label="Buscar, pendiente">
+          <Icon name="search" />
+          {expanded && <span>Buscar</span>}
+        </button>
+        <button
+          className={s.view === "resources" ? "selected" : ""}
+          aria-label="Mis recursos"
+          onClick={() => controller.navigate("resources")}
+        >
+          <Icon name="folder" />
+          {expanded && <span>Mis recursos</span>}
+        </button>
+        <button disabled aria-label="Conversaciones, pendiente">
+          <Icon name="chat" />
+          {expanded && <span>Conversaciones</span>}
+        </button>
+        <div className="rail-flex" />
+        <button disabled aria-label="Ajustes, pendiente">
+          <Icon name="settings" />
+          {expanded && <span>Ajustes</span>}
+        </button>
+        <button
+          aria-label="Cerrar sesión"
+          onClick={() => controller.closeSession()}
+        >
+          <Icon name="chat" />
+          {expanded && <span>Cerrar sesión</span>}
+        </button>
+      </aside>
+      <main className={s.view === "home" ? "home-main" : "content-main"}>
+        <AccountLinks />
+        {s.view === "home" ? (
+          <section className="home-panel">
+            <header className="home-heading">
+              <Logo />
+              <p>¡Hola!</p>
+              <h1>¿Qué trabajamos hoy?</h1>
+            </header>
+            <div className="composer-stack">
+              <form
+                className="composer"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void controller.submit();
+                }}
+              >
+                <label className="sr-only" htmlFor="request">
+                  Petición para tu clase
+                </label>
+                <textarea
+                  ref={input}
+                  id="request"
+                  value={s.prompt}
+                  placeholder="Cuéntame qué necesitas para tu clase…"
+                  onChange={(e) => controller.setPrompt(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (
+                      (e.ctrlKey || e.metaKey) &&
+                      e.key === "Enter" &&
+                      !e.nativeEvent.isComposing
+                    ) {
+                      e.preventDefault();
+                      void controller.submit();
+                    }
+                  }}
+                />
+                <div className="composer-controls">
+                  <button type="button" onClick={() => setOverlay("context")}>
+                    {waterContext.subject} ⌄
+                  </button>
+                  <button type="button" onClick={() => setOverlay("context")}>
+                    {waterContext.level} · {waterContext.group} ⌄
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOverlay("attachment")}
+                  >
+                    {s.source ? "Referencia adjunta" : "Adjuntar referencia"}
+                  </button>
+                  <button
+                    className="mic"
+                    type="button"
+                    disabled
+                    aria-label="Micrófono no disponible"
+                  >
+                    <Icon name="microphone" small />
+                  </button>
+                  <button
+                    className="send primary"
+                    aria-label="Enviar petición"
+                    type="submit"
+                    disabled={
+                      !s.prompt.trim() || !s.source || s.submit === "sending"
+                    }
+                  >
+                    <Icon name="send" />
+                  </button>
+                </div>
+                {s.source && (
+                  <div className="attachment-line">
+                    <span>Planeación de ciencias · ejemplo</span>
+                    <button
+                      type="button"
+                      onClick={() => controller.removeSource()}
+                    >
+                      Quitar
+                    </button>
+                    <button
+                      type="button"
+                      className="text-action"
+                      onClick={() => setOverlay("attachment")}
+                    >
+                      Reemplazar
+                    </button>
+                  </div>
+                )}
+              </form>
+              <div className="tool-tray">
+                <button onClick={actionExample}>
+                  <Icon name="document" small />
+                  Ajustar planeación
+                </button>
+                <button onClick={() => setOverlay("attachment")}>
+                  <Icon name="search-small" small />
+                  Revisar recurso
+                </button>
+                <button onClick={() => controller.navigate("resources")}>
+                  <Icon name="folder-small" small />
+                  Mis recursos
+                </button>
+                <button className="more" onClick={() => setOverlay("tools")}>
+                  Más herramientas ⌄
+                </button>
+              </div>
+              {s.submit === "sending" && (
+                <p role="status">Enviando petición al servidor…</p>
+              )}
+              {s.sourcePending && !s.attaching && (
+                <div>
+                  <p role="status">
+                    Referencia sin confirmar. Tu selección anterior se conserva.
+                  </p>
+                  <button onClick={() => void controller.attach(waterSource)}>
+                    Comprobar estado del adjunto
+                  </button>
+                </div>
+              )}
+              {s.pending && s.submit !== "sending" && (
+                <button onClick={() => void controller.recoverCreate()}>
+                  Comprobar estado del envío
+                </button>
+              )}
+            </div>
+            <p className="home-footnote">
+              Ejemplo sintético · Ctrl/⌘ + Enter para enviar
+            </p>
+          </section>
+        ) : s.view === "result" && s.result ? (
+          <ResultView document={s.result} onOpen={openEditor} />
+        ) : (
+          <section className="library">
+            <h1>Mis recursos</h1>
+            <p className="secondary">
+              Originales, revisiones y copias de trabajo de esta cuenta.
+            </p>
+            {s.listState === "loading" && (
+              <p role="status">Recuperando recursos…</p>
+            )}
+            {s.listState === "error" && (
+              <button onClick={() => void controller.loadResources()}>
+                Reintentar listado
+              </button>
+            )}
+            {s.listState === "ready" && !s.items.length && !s.drafts.length && (
+              <p>No hay recursos todavía. Ajusta el ejemplo para empezar.</p>
+            )}
+            {s.items.map((doc) => (
+              <article key={doc.receipt.planning_id} className="library-card">
+                <h2>
+                  {doc.result.resources?.[0]?.title ?? doc.result.title}
+                  {doc.origin ? " · Copia conservada" : ""}
+                </h2>
+                <p>
+                  {doc.result.title} · Revisión {doc.receipt.revision}
+                </p>
+                <p className="field-hint">
+                  Original conservado · Fuente versión{" "}
+                  {doc.receipt.source_version}
+                </p>
+                <button
+                  className="primary"
+                  onClick={async () => {
+                    await controller.open(doc.receipt.planning_id);
+                    const current = controller.snapshot();
+                    if (
+                      current.view === "result" &&
+                      current.editor?.document.receipt.planning_id ===
+                        doc.receipt.planning_id
+                    )
+                      setShowEditor(true);
+                  }}
+                >
+                  Reabrir copia guardada
+                </button>
+              </article>
+            ))}
+            {s.drafts.map((d) => (
+              <article key={d.receipt.draft_id} className="library-card">
+                <h2>
+                  {d.result.resources?.[0]?.title ?? d.result.title} · Borrador
+                  privado
+                </h2>
+                <p>
+                  Base {d.receipt.base_revision} · Copia de trabajo{" "}
+                  {d.receipt.draft_revision}
+                </p>
+                <button
+                  onClick={async () => {
+                    await controller.openDraft(d.receipt.draft_id);
+                    const current = controller.snapshot();
+                    if (
+                      current.view === "result" &&
+                      current.editor?.draftId === d.receipt.draft_id
+                    )
+                      setShowEditor(true);
+                  }}
+                >
+                  Recuperar borrador
+                </button>
+              </article>
+            ))}
+            {(s.cursor || s.draftCursor) && (
+              <button onClick={() => void controller.loadResources(true)}>
+                Ver más recursos
+              </button>
+            )}
+            <button
+              className="text-action"
+              onClick={() => controller.navigate("home")}
+            >
+              Volver a la petición
+            </button>
+          </section>
+        )}
+        {s.error && (
+          <p className="workspace-error" role="alert">
+            {s.error}
+          </p>
+        )}
+        {s.backupError && (
+          <p className="workspace-error" role="alert">
+            No se pudo guardar el respaldo local. Mantén esta pestaña abierta y
+            copia el texto pendiente.
+          </p>
+        )}
+      </main>
+      {overlay === "context" && (
+        <Dialog
+          title="Contexto de clase"
+          className="menu-dialog context-menu"
+          onClose={() => setOverlay(null)}
+        >
+          <p className="secondary">Contexto de clase</p>
+          <button className="menu-option" onClick={() => setOverlay(null)}>
+            <strong>
+              {waterContext.level} · {waterContext.group}
+            </strong>
+            <span>{waterContext.subject} · Agua que cambia</span>
+          </button>
+          <button className="quiet" onClick={() => setOverlay(null)}>
+            Cancelar
+          </button>
+        </Dialog>
+      )}
+      {overlay === "attachment" && (
+        <Dialog
+          title={s.source ? "Cambiar referencia" : "Adjuntar referencia"}
+          className="menu-dialog attachment-menu"
+          onClose={dismissAttachment}
+        >
+          <p className="secondary">
+            {s.source ? "Cambiar referencia" : "Adjuntar referencia"}
+          </p>
+          <button
+            className="menu-option"
+            disabled={s.attaching}
+            onClick={async () => {
+              if (await controller.attach(waterSource)) setOverlay(null);
+            }}
+          >
+            <strong>Planeación de ciencias · ejemplo</strong>
+            <span>
+              {s.attaching ? "Adjuntando…" : "Referencia sintética incorporada"}
+            </span>
+          </button>
+          <p className="field-hint">
+            Selección de ejemplo · texto UTF-8 ·{" "}
+            {new TextEncoder().encode(waterSource).length} bytes.
+          </p>
+          {s.sourcePending && !s.attaching && (
+            <p role="status">
+              Referencia sin confirmar. Selecciónala para comprobar el recibo.
+            </p>
+          )}
+          {s.error && <p role="alert">{s.error}</p>}
+          <button className="quiet" onClick={dismissAttachment}>
+            Cancelar
+          </button>
+        </Dialog>
+      )}
+      {overlay === "tools" && (
+        <Dialog
+          title="Herramientas"
+          className="menu-dialog tools-menu"
+          onClose={() => setOverlay(null)}
+        >
+          <header>
+            <h2>Herramientas</h2>
+            <button className="quiet" onClick={() => setOverlay(null)}>
+              Cerrar
+            </button>
+          </header>
+          <div className="tool-tabs" role="tablist" aria-label="Categorías">
+            {Object.keys(toolCatalog).map((c) => (
+              <button
+                key={c}
+                role="tab"
+                aria-selected={category === c}
+                onClick={() => setCategory(c)}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+          <p className="field-hint">
+            Catálogo propuesto · herramientas futuras
+          </p>
+          <div className="catalog-items">
+            {toolCatalog[category].map((t) => (
+              <p key={t}>
+                {t}
+                <span className="sr-only">, todavía no disponible</span>
+              </p>
+            ))}
+          </div>
+          <footer>
+            <button className="quiet" onClick={actionExample}>
+              Ajustar planeación ↗
+            </button>
+            <button className="quiet" onClick={() => setOverlay("attachment")}>
+              Revisar recurso ↗
+            </button>
+          </footer>
+        </Dialog>
+      )}
+      {showEditor && s.editor && (
+        <Editor
+          controller={controller}
+          onDismiss={() => setShowEditor(false)}
+        />
+      )}
+    </div>
+  );
+}

@@ -109,7 +109,7 @@ export AULALISTA_TEST_DATABASE_URL='postgresql+psycopg://aulalista_test@127.0.0.
 export AULALISTA_TEST_ALLOW_RESET=1
 uv run --locked --no-editable ruff check .
 uv run --locked --no-editable ruff format --check .
-uv run --locked --no-editable pytest tests/test_app.py tests/test_config.py
+uv run --locked --no-editable pytest tests/test_app.py tests/test_config.py tests/test_browser_runner.py
 uv run --locked --no-editable pytest tests/test_postgres.py tests/test_materials.py tests/test_plannings.py tests/test_water_fixture.py tests/test_planning_edits.py
 docker compose -f compose.test.yml logs --no-color postgres > /tmp/aulalista-postgres.log
 uv run --locked --no-editable python tests/check_postgres_log.py /tmp/aulalista-postgres.log
@@ -127,6 +127,28 @@ bytes/límites/streaming, constraints, inmutabilidad y logs del proceso Uvicorn.
 Un probe causa CHECK fallido con un marcador sintético; el paso obligatorio
 posterior inspecciona logs reales de PostgreSQL sin imprimirlos. Exige el error
 esperado y ausencia de bytes, DETAIL de filas o sentencias SQL.
+
+## Integración del navegador con la API de prueba
+
+Con la DB desechable y variables de pruebas anteriores, instalar las dependencias
+web y Chromium fijado por Playwright, y ejecutar desde la raíz:
+
+```sh
+(cd web && npm ci --ignore-scripts && npx --no-install playwright install --with-deps chromium)
+uv run --locked --no-editable pytest tests/browser_integration.py
+```
+
+Este comando explícito reutiliza las migraciones, actores y rol runtime no dueño
+de las pruebas PostgreSQL. Levanta una API HTTP en un puerto loopback efímero y
+Playwright abre la entrada de tests mediante Vite en `127.0.0.1:4173`; el proxy
+de pruebas comunica el navegador con la API real, sin interceptar sus respuestas.
+Al terminar, también ante fallo o timeout, cierra API y grupo de procesos web.
+El workflow web ejecuta esta prueba además de los recorridos con servidor fixture.
+
+La sesión se inyecta exclusivamente en `tests/browser_integration.py` y en el
+entrypoint/config de navegador bajo tests. No se incluye en la wheel ni en el
+build web de producción. El servidor normal mantiene 401: esta integración no
+resuelve la identidad real de #13 ni hace que #14 esté listo para uso personal.
 
 ## Retirar únicamente el recurso de prueba
 

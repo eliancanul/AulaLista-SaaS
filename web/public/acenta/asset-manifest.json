@@ -1,0 +1,159 @@
+[
+  {
+    "path": "acenta-logo-reconstruido-tinta.svg",
+    "bytes": 6822,
+    "sha256": "4c34205a629f38496b5b71d5d9aa2c4367f7ccf57721fcb5b46a1a6286f2f379",
+    "mime": "image/svg+xml",
+    "width": 301.0,
+    "height": 69.0
+  },
+  {
+    "path": "brand-symbol.svg",
+    "bytes": 665,
+    "sha256": "0e273467455fc036ff557e69f8987ed171a40855b451cd07e34e26fc3e2a4e0f",
+    "mime": "image/svg+xml",
+    "width": 42.0,
+    "height": 35.0
+  },
+  {
+    "path": "brand-wordmark.svg",
+    "bytes": 6328,
+    "sha256": "57d4cf339468e9c49c5020f76a774850b3afa72a4b882c7513384f141ede21fc",
+    "mime": "image/svg+xml",
+    "width": 102.0,
+    "height": 23.0
+  },
+  {
+    "path": "chat.svg",
+    "bytes": 219,
+    "sha256": "6fe2fcee00feb892cf5284a1d645e780697060c0352fddfc4db6d7a4ca303c7f",
+    "mime": "image/svg+xml",
+    "width": 24.0,
+    "height": 24.0
+  },
+  {
+    "path": "document.svg",
+    "bytes": 626,
+    "sha256": "36a728605177987e142f6b11219f52ad97fc0acd9b0f36acd91d34fdbbcab863",
+    "mime": "image/svg+xml",
+    "width": 20.0,
+    "height": 20.0
+  },
+  {
+    "path": "expand.svg",
+    "bytes": 223,
+    "sha256": "ed96babc469a592b9a9d6e60047e9c223282a543b9788051356395a4ca47e2d1",
+    "mime": "image/svg+xml",
+    "width": 24.0,
+    "height": 24.0
+  },
+  {
+    "path": "folder-small.svg",
+    "bytes": 430,
+    "sha256": "bf7051b581746e176383c805e852a72b5d281ee3a1b734ac1e6d0f33f62b6022",
+    "mime": "image/svg+xml",
+    "width": 20.0,
+    "height": 20.0
+  },
+  {
+    "path": "folder.svg",
+    "bytes": 222,
+    "sha256": "e067e91e58e727e52deff5413f6c36d06e0886d78090be1bc6ad481b92cf153c",
+    "mime": "image/svg+xml",
+    "width": 24.0,
+    "height": 24.0
+  },
+  {
+    "path": "fonts/InstrumentSerif-Regular.ttf",
+    "bytes": 70012,
+    "sha256": "498efd461f6ddfcb7a111bf9a565709d2085d48201d501ead960d93e84ffbb88",
+    "mime": "font/ttf",
+    "tables": 17
+  },
+  {
+    "path": "fonts/SourceSans3-Regular.ttf",
+    "bytes": 431196,
+    "sha256": "4644c81b86ec9caaa76b634889968ed3c4f4f52f054855933acc7c2b21e53b0f",
+    "mime": "font/ttf",
+    "tables": 19
+  },
+  {
+    "path": "fonts/SourceSans3-Semibold.ttf",
+    "bytes": 425904,
+    "sha256": "a3f4f8dcf343a8f24dc61951de93f3ba1558b15cd250ba24af8a40e957081b7d",
+    "mime": "font/ttf",
+    "tables": 19
+  },
+  {
+    "path": "foto-aprobada-recorte.png",
+    "bytes": 765008,
+    "sha256": "f2d58f4b902c989335dac9497f6b38aca1fbd36c0a36db0964cc5d334737c989",
+    "mime": "image/png",
+    "width": 784,
+    "height": 769
+  },
+  {
+    "path": "google-g-oficial.svg",
+    "bytes": 10463,
+    "sha256": "120ab6d85f85b1b4934bb0bf2a55b3dc56f11d1942c45e6aca026be02351ef06",
+    "mime": "image/svg+xml",
+    "width": 20.0,
+    "height": 20.0
+  },
+  {
+    "path": "home.svg",
+    "bytes": 241,
+    "sha256": "4f71053ba769ae5c1e2a345ab9704dc4e254b26a86cc43e128753812a1079a11",
+    "mime": "image/svg+xml",
+    "width": 24.0,
+    "height": 24.0
+  },
+  {
+    "path": "microphone.svg",
+    "bytes": 679,
+    "sha256": "3aa20565d49b33d38c16d74467fd8be7d95f6e867d6a3e10bd9d383f1d7326db",
+    "mime": "image/svg+xml",
+    "width": 20.0,
+    "height": 20.0
+  },
+  {
+    "path": "plus.svg",
+    "bytes": 215,
+    "sha256": "b43c5a59afa59d9d7c840780c3b9be8e3e255aa3a437cc6c9ae50c2ebbfe27f8",
+    "mime": "image/svg+xml",
+    "width": 24.0,
+    "height": 24.0
+  },
+  {
+    "path": "search-small.svg",
+    "bytes": 532,
+    "sha256": "ff7695df3922a9cea5321c465c4c1a4c0a2e16abcf69efae442ae2b8569765d6",
+    "mime": "image/svg+xml",
+    "width": 20.0,
+    "height": 20.0
+  },
+  {
+    "path": "search.svg",
+    "bytes": 516,
+    "sha256": "32407b39090df4f4a5d78463014d8058947215b9c154cf03de611b9128458111",
+    "mime": "image/svg+xml",
+    "width": 24.0,
+    "height": 24.0
+  },
+  {
+    "path": "send.svg",
+    "bytes": 221,
+    "sha256": "ee451a413657372fcd3f6a28a4799ead27817a80ebd20f1197dc592f8370b058",
+    "mime": "image/svg+xml",
+    "width": 24.0,
+    "height": 24.0
+  },
+  {
+    "path": "settings.svg",
+    "bytes": 575,
+    "sha256": "c7db8c930fabfec97858038ec54a9e575e3650ceccd6a7e7eafedd55d6f48ba0",
+    "mime": "image/svg+xml",
+    "width": 24.0,
+    "height": 24.0
+  }
+]
