@@ -2,6 +2,32 @@
 
 Corte de preparación: 2026-10-16 UTC. Las menciones de ausencia de publicación reflejan el estado al preparar este contrato; el estado y la evidencia actuales se registran en [#15](https://github.com/eliancanul/AulaLista-SaaS/issues/15) y en su PR.
 
+Integraciones posteriores: edición/borrador/copia en
+[PR #25](https://github.com/eliancanul/AulaLista-SaaS/pull/25), salida protegida en
+[#39](https://github.com/eliancanul/AulaLista-SaaS/pull/39) y respaldo de recarga
+en la misma sesión en [#41](https://github.com/eliancanul/AulaLista-SaaS/pull/41).
+La ausencia de identidad descrita en la base histórica de abajo fue superada por
+[B1](0005-autenticacion-local.md). La decisión de fase 1 siguiente delimita la
+recuperación tras 401; esta actualización no implementa continuidad nueva ni
+cierra #15 por sí sola.
+
+## Decisión de fase 1: recuperación tras sesión inválida
+
+El 17 de octubre de 2026 el usuario aceptó mantener la protección existente,
+registrada en [#15](https://github.com/eliancanul/AulaLista-SaaS/issues/15): un 401
+ambiguo conserva la purga del texto local no confirmado. Tras volver a entrar,
+se recupera únicamente lo confirmado en servidor desde la biblioteca, bajo la
+sesión y ámbito autorizados. Pueden perderse cambios que nunca se guardaron.
+Una respuesta perdida puede corresponder a un commit efectivo; se consulta lo
+guardado, sin fabricar un intento nuevo ni prometer que el texto local sobrevivió.
+
+La continuidad de edición no guardada tras 401/reautenticación queda aplazada
+explícitamente como mejora posterior en #15. No es una función implementada ni
+un criterio satisfecho por el respaldo de la misma sesión. Este acuerdo de
+alcance no cambia código, retención, señal de autenticación o privacidad.
+
+## Contrato histórico de edición
+
 Ticket y aceptación: [#15](https://github.com/eliancanul/AulaLista-SaaS/issues/15).
 Este documento fija el contrato implementado; estado y cierre pertenecen al issue
 y al PR con CI del candidato exacto. No sustituye la revisión independiente.

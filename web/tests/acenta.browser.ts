@@ -941,6 +941,7 @@ test("definitive save error keeps the edit and retry visibly confirms one new re
   const rejected = structuredClone(attempts()[0]);
   const base = structuredClone([...server.docs.values()][0]);
   expect(base.receipt.revision).toBe(1);
+  await retry.scrollIntoViewIfNeeded();
   await page.screenshot({ path: `${evidence}/editor-definitive-error-1440.png` });
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });

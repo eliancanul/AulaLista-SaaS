@@ -1,11 +1,13 @@
 # T4: preparar la comparación reproducible
 
-Estado: pendiente; preparación offline, sin benchmark ejecutado. Dependencia: tarea/salida de [spec 0002](../specs/0002-flujo-automatico-material.md); puede avanzar en paralelo a [T3](T3-prototipo-flujo-automatico.md).
+Referencia técnica e historial del corte. Consulta [Issues y fuentes de verdad](README.md) para elegir trabajo y consultar su estado actual.
+
+Alcance: preparación offline; este documento no acredita un benchmark ejecutado. Dependencia técnica: tarea/salida de [spec 0002](../specs/0002-flujo-automatico-material.md); puede avanzar en paralelo a [T3](T3-prototipo-flujo-automatico.md).
 
 ## Corte de implementación
 
 [T4a](T4a-harness-offline.md) incorpora únicamente el instrumento genérico offline
-y sus fixtures sintéticas/saneadas. No cierra este ticket ni acredita un benchmark
+y sus fixtures sintéticas/saneadas. No completa la preparación descrita aquí ni acredita un benchmark
 real, un matcher semántico o consumo de proveedor verificado.
 
 ## Resultado

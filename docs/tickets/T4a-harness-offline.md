@@ -1,7 +1,9 @@
 # T4a: incorporar el instrumento offline genérico
 
-Estado: instrumento implementado. Su aceptación exige revisión independiente y
-CI del SHA final; el PR asociado registra esa evidencia y el resultado de integración.
+Referencia técnica e historial del corte. Consulta [Issues y fuentes de verdad](README.md) para elegir trabajo y consultar su estado actual.
+
+Integración histórica: [PR #6](https://github.com/eliancanul/AulaLista-SaaS/pull/6), integrado el 2026-10-15 a las 13:51:47 UTC en `862f1d4e3a46ceb3de4253356c0ca0dd8993d40e`.
+La [revisión registrada](https://github.com/eliancanul/AulaLista-SaaS/pull/6#pullrequestreview-5529869076) identifica el candidato y su evidencia premerge. Este registro no atribuye CI postmerge no enlazada ni certifica candidatos posteriores.
 Depende de [T4](T4-preparar-evaluacion.md) y [spec 0002](../specs/0002-flujo-automatico-material.md).
 No cierra T4 ni habilita T5.
 
@@ -10,7 +12,7 @@ No cierra T4 ni habilita T5.
 Incorporar `evaluation/` como herramienta de desarrollo autocontenida con biblioteca
 estándar de Python, sin dependencias de runtime de la API ni conexión al producto.
 El corte conserva los 58 tests del instrumento previamente revisado y añade su
-workflow reproducible; la incorporación completa requiere otra revisión.
+workflow reproducible; su revisión de incorporación se enlaza arriba.
 
 Escritor: `integrar_harness_evaluacion`, rama `feat/t4a-offline-evaluation`.
 Archivos: `evaluation/**`, `.github/workflows/evaluation.yml`, este ticket y enlaces
@@ -39,7 +41,7 @@ Los tests validan el instrumento y sus límites, no comprensión, OCR, utilidad 
 seguridad del producto ni persistencia de las preguntas. No se modifican runtime,
 base de datos, migraciones, identidad ni UI.
 
-T4 conserva pendientes corpus/splits privados, referencias revisables, contrato
+El instrumento no resuelve corpus/splits privados, referencias revisables, contrato
 semántico, denominadores y protocolo de ensayo, capacidad y permisos de ejecución,
 modelo efectivo y cobertura de consumo. No hay elección de ganador ni presupuesto
 aprobado por añadir este instrumento.
@@ -49,4 +51,4 @@ aprobado por añadir este instrumento.
 Es aditivo y offline: revertir el incremento retira la herramienta y su workflow;
 no hay migración ni datos de aplicación que recuperar. Los resultados locales y
 materiales privados deben guardarse fuera del árbol versionado. Registrar revisión,
-SHA final, checks y omisiones en el PR antes de cambiar este estado.
+SHA final, checks y omisiones en el PR de cualquier nuevo cambio.

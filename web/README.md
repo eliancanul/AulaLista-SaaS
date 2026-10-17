@@ -1,12 +1,20 @@
-# Acenta: interfaz #14 y edición durable #15
+# Acenta: recorrido conectado B1–B5
+
+El [registro del 17 de octubre de 2026](../README.md#acenta-capacidades-verificadas-y-límites)
+enlaza los incrementos integrados. La [matriz #12](../docs/reviews/0001-matriz-fase1.md)
+distingue 38 asignaciones contractuales de la aceptación visual pendiente;
+no declara completada la fase 1. El estado del trabajo se mantiene en Issues.
 
 React + TypeScript + Vite. La entrada real recupera la sesión mediante
 `GET /auth/session` antes de abrir un espacio privado. El acceso implementa
 Google Identity Services directo (cliente y nonce de bootstrap) y códigos de
 un uso por correo. [Contrato B1](../docs/specs/0005-autenticacion-local.md).
 
-Este corte es preparatorio: no configura cliente Google, cuentas, credenciales
-ni proveedor de correo. Sin configuración, la interfaz informa indisponibilidad;
+El repositorio no incorpora cuentas, credenciales ni proveedor de correo.
+Google tiene [aceptación manual registrada](https://github.com/eliancanul/AulaLista-SaaS/issues/13#issuecomment-6231320343)
+sobre el servicio de pruebas en `355399b6f01ea6985ebdb8389691fc532c993e5f`;
+no es certificación de este árbol ni de un despliegue posterior. OTP real fue
+pospuesto por el usuario y sigue deshabilitado. Sin configuración, la interfaz informa indisponibilidad;
 no existen actores seleccionables, identidad por header ni flags demo. El código
 no afirma que un correo se entregó: muestra la respuesta genérica del servidor.
 No solicita consentimiento de marketing ni vincula Google y correo por email.
@@ -75,10 +83,15 @@ respaldo local, recarga y reabre desde PostgreSQL. Comprueba además los bytes
 originales, la revisión inicial inmutable y el recibo exacto del guardado.
 Esta identidad inyectada no acredita B1 ni permite cerrar #14.
 
-La ejecución nativa de 2026-10-16 verificó unitarias y build. Chromium abortó por
-restricción de socket Unix antes de ejecutar los recorridos. **QA visual/browser
-queda pendiente del entorno de revisión**; los archivos de test no son evidencia
-de haberlos pasado. Capturas previstas: acceso 1440×960, inicio y editor 1440×924,
+La ejecución nativa histórica de 2026-10-16 verificó unitarias y build, pero
+Chromium abortó por restricción de socket Unix antes de ejecutar los recorridos.
+La [CI web posterior de main](https://github.com/eliancanul/AulaLista-SaaS/actions/runs/39058555523),
+en `1f9e7c23db7564049b68904db62f98b5730ee0b6`, sí ejecutó 275 unitarias totales,
+33 recorridos de navegador, cinco wrappers HTTP/PostgreSQL y el wrapper auth de
+cuatro escenarios. Los totales incluyen pruebas legacy; no equivalen a un test
+por estado ni a 38 estados visuales aceptados. La matriz enlazada arriba conserva
+los huecos de evidencia; la actualización documental no ejecutó suites nuevas.
+Cada nuevo candidato requiere sus propios gates. Capturas previstas: acceso 1440×960, inicio y editor 1440×924,
 editor móvil 390×844. Cada test espera `document.fonts.ready` cuando compara la
 vista de referencia. Revisar también teclado, foco modal, Escape e inercia del
 fondo; la captura por sí sola no demuestra esos comportamientos.
@@ -141,8 +154,8 @@ añade la entrada real: confirmar sin generar, vaciar almacenamiento y cookies,
 autenticar otra sesión en un contexto nuevo, descubrir, leer todos los bytes y
 comparar tamaño/hash, conservar V1 frente a V2 y aislar la cuenta B. Espera el
 cooldown real de correo, sin cambiar reloj ni política de autenticación. Este
-recorrido requiere Chromium; su bloqueo local de socket no acredita el paso del
-E2E ni sustituye la CI del candidato exacto.
+recorrido requiere Chromium. Su ejecución en el SHA documentado consta en la CI
+enlazada arriba; ni los archivos de test ni esa CI acreditan candidatos posteriores.
 
 ### Cierre voluntario con edición pendiente (#15, corte parcial)
 
@@ -170,8 +183,11 @@ En la pantalla de suspensión por no poder revalidar la sesión, `Cerrar sesión
 conserva la purga inmediata y el reintento de logout existentes; no intenta
 confirmar un borrador sin autoridad comprobada. No guarda automáticamente la
 petición ni un adjunto pendiente y no cambia su tratamiento. 401/403, caducidad, revocación y
-cambio de sesión/CSRF mantienen la purga actual: recuperar trabajo no confirmado
-tras esos casos sigue pendiente. La recarga de la misma pestaña/sesión ahora admite
+cambio de sesión/CSRF mantienen la purga actual. El usuario aceptó para fase 1
+esta [limitación de recuperación](../docs/specs/0003-edicion-durable.md#decisión-de-fase-1-recuperación-tras-sesión-inválida):
+tras login sólo se recupera lo confirmado en biblioteca; pueden perderse cambios
+nunca guardados. La continuidad del texto no confirmado tras 401 se aplaza como
+mejora posterior en #15, sin implementación nueva. La recarga de la misma pestaña/sesión ahora admite
 el respaldo B3 mínimo descrito abajo; no garantiza recuperación al cerrar el navegador. #15 y
 #13 siguen abiertos; esto no habilita el proveedor de correo ni autentica con un
 servicio externo real.
@@ -182,8 +198,9 @@ y PostgreSQL, sustituye sólo el transporte de correo existente y pierde una
 respuesta de borrador después de su commit real. Comprueba guardia/cancelación,
 recibo previo a logout, reapertura en otra sesión sin storage, fuente/base exactas
 y 404 de la cuenta B. El presupuesto del runner admite dos cooldowns reales de
-correo; no se relaja la política auth. La recogida de estos tests no acredita su
-ejecución: Chromium local sigue bloqueado y se requiere CI del candidato exacto.
+correo; no se relaja la política auth. La recogida local de estos tests no
+acreditaba su ejecución; la CI del SHA documentado sí los ejecutó. Un nuevo
+candidato requiere CI exacta, sin trasladar ese éxito por inferencia.
 
 ### Operaciones y trabajo pendiente
 

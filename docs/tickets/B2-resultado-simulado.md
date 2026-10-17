@@ -2,6 +2,12 @@
 
 Registro histórico de preparación del 2026-10-16 UTC. Las menciones de ausencia de publicación/CI describen ese corte original. El estado actual se consulta en [#14](https://github.com/eliancanul/AulaLista-SaaS/issues/14) y en su PR; la [spec 0003](../specs/0003-edicion-durable.md) documenta el fixture adicional y la edición posteriores.
 
+El backend se integró en [PR #21](https://github.com/eliancanul/AulaLista-SaaS/pull/21)
+y su consumidor UI/HTTP en [#22](https://github.com/eliancanul/AulaLista-SaaS/pull/22).
+Las restricciones históricas de identidad/UI descritas abajo no representan su
+estado actual. Consulta [B1](../specs/0005-autenticacion-local.md) para sesión y
+la [matriz #12](../reviews/0001-matriz-fase1.md) para evidencia y pendientes.
+
 Base: `d611d8faf54fde3efd64a4c866d327c90679ab56`. Autor: agente cloud,
 checkout `/workspace/AulaLista-SaaS`, rama local `work`, escritor único.
 Sin publicación autorizada. No cierra #14: identidad #13 y consumidor Acenta/UI

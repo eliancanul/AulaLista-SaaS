@@ -1,6 +1,8 @@
 # T3: probar el recorrido automático visible
 
-Estado: incremento sintético integrado en [PR #5](https://github.com/eliancanul/AulaLista-SaaS/pull/5), con revisión independiente y CI premerge/postmerge correctas. Sin validación con docentes ni cierre global de H2. Dependencia: [ADR 0002](../adr/0002-ux-interpretacion-automatica.md), [spec 0002](../specs/0002-flujo-automatico-material.md) y revisión previa del contrato/recorrido [H2](../reviews/README.md), realizada antes de programar. La revisión de agentes no acredita utilidad docente real. T4 continúa su preparación offline.
+Referencia técnica e historial del corte. Consulta [Issues y fuentes de verdad](README.md) para elegir trabajo y consultar su estado actual.
+
+Integración histórica: incremento sintético integrado en [PR #5](https://github.com/eliancanul/AulaLista-SaaS/pull/5), con revisión independiente y CI premerge/postmerge correctas. Sin validación con docentes ni cierre global de H2. Dependencia: [ADR 0002](../adr/0002-ux-interpretacion-automatica.md), [spec 0002](../specs/0002-flujo-automatico-material.md) y revisión previa del contrato/recorrido [H2](../reviews/README.md), realizada antes de programar. La revisión de agentes no acredita utilidad docente real. El alcance de preparación offline se conserva en [T4](T4-preparar-evaluacion.md).
 
 ## Resultado
 
