@@ -587,6 +587,15 @@ textarea {
   gap: 12px;
   align-items: flex-start;
 }
+.library button {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.library-card h2,
+.library-card p {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
 .library-card h2 {
   font-size: 22px;
 }
