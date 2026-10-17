@@ -78,3 +78,50 @@ El caso real de aceptación y sus recibos se conservan en privado. Su resumen
 saneado en el PR debe explicar omisiones, cuatro filas conservadas, geometría no
 verificada, la pérdida inicial invisible a una transformación posterior y la
 muestra previamente vista. Nunca publicar identificadores ni transcripciones.
+
+## Afirmaciones seleccionadas (#43)
+
+`claims_replay` consume el [contrato de evidencia](../docs/specs/0008-evidencia-literal.md)
+y un manifiesto `aulalista-claims-replay.v1`. La selección/adjudicación es explícita
+por el operador o agente responsable, no una auditoría automática de toda la
+respuesta ni revisión docente implícita. El manifiesto contiene:
+
+- `source_manifest`: `path`/`sha256` del manifiesto de fuente anterior; se vuelven
+  a leer y verificar sus originales, artefactos, selectores y snapshots.
+- `cases`: lista no vacía. Cada caso tiene `id` único, `stage=original|separate_check`,
+  `document_index` base cero, `owner_id`, `scope_id` y `snapshot_sha256` fijados.
+- `targets`: lista confiable de `{id, representation_id, role, context_id}`.
+  Representación y requisitos estructurales no proceden de la respuesta modelo.
+- `claims`: afirmaciones con `target`, `kind`, `value` y `evidence`, lista de
+  referencias exactas del contrato. Una derivación agrega `derivation={rule,inputs}`.
+  Una referencia con offsets no localizados no pasa; no se reemplaza su página
+  declarada por otra donde se encontró el valor. Una corrección es otro caso.
+- `original_response`: `path`/`sha256` de la respuesta intacta. El adaptador privado
+  debe registrar/revisar los spans o selectores de cada afirmación elegida dentro
+  del original. El CLI verifica sus bytes, **no interpreta una respuesta arbitraria
+  para comprobar automáticamente esa selección**.
+- `expectations`: exactamente una adjudicación por target con `target`, `state` y
+  `mechanically_decidable` booleano. Conserva los no decidibles en el denominador.
+
+Los tests muestran un manifiesto exclusivamente sintético. Las unidades con papel
+estructural deben haber sido obtenidas de la fuente controlada por un proceso
+confiable; el modelo no puede crear la evidencia de su propio papel.
+
+```sh
+PYTHONPATH=src:. python3 -B -m document_checks.claims_replay run /private/claims.json --out /private/claims-run
+sha256sum /private/claims-run/receipt.json
+PYTHONPATH=src:. python3 -B -m document_checks.claims_replay verify /private/claims.json --out /private/claims-run --receipt-sha256 DIGEST_RETENIDO
+```
+
+El recibo conserva expected/actual por target, falsos aceptados/rechazados y no
+decidibles, agrupados por respuesta original o comprobación separada. Los errores
+se miden contra las adjudicaciones declaradas; no se certifica su corrección. Para
+tasas, informar por separado cuántos casos eran aceptables/rechazables/indecidibles,
+y nunca dividir por cero. No llamar precisión general al porcentaje de esa muestra.
+`verify` revalida todas las afirmaciones, no confía en estados `backed`/`checked`
+guardados. Un formato de manifiesto inválido detiene la corrida con mensaje
+genérico; una afirmación insuficiente conserva su resultado junto al dato.
+
+Los archivos resultantes contienen datos privados igual que el replay de fuente.
+El workflow existente descubre automáticamente los nuevos tests de este directorio
+y los ejecuta normal y con `-O`; no cambia fixtures/scorer/manifiesto de `evaluation`.
