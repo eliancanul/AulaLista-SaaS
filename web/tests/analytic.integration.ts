@@ -67,11 +67,46 @@ test("analytic client recovers a committed section and preserves exact independe
   expect(result.draftReopened.result.purpose).toBe("Borrador de la clase.");
   expect(result.nextPlanning.analytic_origin).toEqual(result.updated);
   expect(result.planning.receipt.source_id).toBeNull();
-  // The new section UI is deliberately outside this partial increment. Derived
-  // classes remain usable through the already implemented library and reader.
+  // The analytic explorer/reader remain pending. Derived classes retain the
+  // already implemented library and reader.
   await page.reload();
   await page.getByRole("button", { name: "Mis recursos", exact: true }).first().click();
   await expect(page.getByRole("button", { name: "Consultar planeación", exact: true })).toHaveCount(3);
   await page.getByRole("button", { name: "Consultar planeación", exact: true }).first().click();
   await expect(page.getByRole("dialog", { name: "Vista previa", exact: true })).toBeVisible();
+});
+
+test("analytic form saves and revises exact manual data through real HTTP and PostgreSQL", async ({ page }) => {
+  await page.goto("/tests/acenta-api.html");
+  await page.getByRole("button", { name: "Crear planeación", exact: true }).click();
+  await page.getByRole("button", { name: "Programa analítico", exact: true }).click();
+  await page.getByLabel("Nombre del apartado").fill(" Apartado manual desde el formulario ");
+  await page.getByLabel("Grado").selectOption("3.º de primaria");
+  await page.getByLabel("Periodo").fill(" Octubre · 2026 ");
+  await page.getByLabel("Contexto del grupo", { exact: true }).fill(" Comunidad imaginaria. ");
+  await page.getByLabel("Situación hipotética", { exact: true }).check();
+  await page.getByLabel("Situación a trabajar").fill(" Situación escrita por el docente. ");
+  await page.getByLabel(/^Contenido \*$/).fill(" Contenido manual. ");
+  await page.getByLabel("Proceso de desarrollo de aprendizaje (PDA)").fill(" PDA manual. ");
+  const createResponse = page.waitForResponse(response => response.request().method() === "POST" &&
+    new URL(response.url()).pathname.endsWith("/analytic-sections"));
+  await page.getByRole("button", { name: "Guardar apartado", exact: true }).click();
+  const created = await createResponse;
+  expect(created.status()).toBe(201);
+  const original = await created.json();
+  await expect(page.getByRole("status").filter({ hasText: "Apartado guardado" })).toBeVisible();
+  expect(original.data).toMatchObject({
+    name: " Apartado manual desde el formulario ", period: " Octubre · 2026 ",
+    context: { text: " Comunidad imaginaria. ", hypothetical: true },
+    entries: [{ content: " Contenido manual. ", pda: " PDA manual. " }], reference: null,
+  });
+  const path = `/scopes/${process.env.AULALISTA_E2E_SCOPE_ID}/analytic-sections/${original.receipt.section_id}`;
+  await page.getByLabel("Situación a trabajar").fill(" Otra situación manual. ");
+  await page.getByRole("button", { name: "Guardar cambios", exact: true }).click();
+  await expect(page.getByText("Revisión 2 confirmada.", { exact: true })).toBeVisible();
+  const reopened = await page.request.get(path);
+  expect(reopened.status()).toBe(200);
+  expect(reopened.headers()["cache-control"]).toBe("no-store");
+  expect((await reopened.json()).data).toEqual({ ...original.data, situation: " Otra situación manual. " });
+  expect(await (await page.request.get(`${path}/revisions/1`)).json()).toEqual(original);
 });

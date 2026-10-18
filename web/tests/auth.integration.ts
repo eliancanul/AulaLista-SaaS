@@ -25,6 +25,52 @@ async function login(page: Page, email: string) {
   return (await verified.json()) as AuthSession;
 }
 
+test("manual analytic form survives session revalidation and saves before authenticated logout", async ({ page }) => {
+  await page.goto("/");
+  const account = await login(page, "analytic-form-a@example.test");
+  await page.getByRole("button", { name: "Crear planeación", exact: true }).click();
+  await page.getByRole("button", { name: "Programa analítico", exact: true }).click();
+  await page.getByLabel("Nombre del apartado").fill(" Apartado manual con sesión real ");
+  await page.getByLabel("Grado").selectOption("3.º de primaria");
+  await page.getByLabel("Periodo").fill("Octubre");
+  await page.getByLabel("Situación a trabajar").fill(" Situación manual. ");
+  await page.getByLabel(/^Contenido \*$/).fill(" Contenido propio. ");
+  await page.getByLabel("Proceso de desarrollo de aprendizaje (PDA)").fill(" PDA propio. ");
+  // Exercise the production lifecycle: hide invalidates admission, pageshow
+  // checks the same cookie/session before revealing the retained buffer.
+  await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+  await expect(page.getByLabel("Nombre del apartado")).toHaveCount(0);
+  await page.evaluate(() => window.dispatchEvent(new Event("pageshow")));
+  await expect(page.getByLabel("Nombre del apartado")).toHaveValue(" Apartado manual con sesión real ");
+  const createdResponse = page.waitForResponse(response => response.request().method() === "POST" &&
+    new URL(response.url()).pathname.endsWith("/analytic-sections"));
+  await page.getByRole("button", { name: "Guardar apartado", exact: true }).click();
+  const created = await createdResponse;
+  expect(created.status()).toBe(201);
+  const original = await created.json();
+  expect(original.receipt.actor_id).toBe(account.principal_id);
+  expect(original.receipt.scope_id).toBe(account.scope_id);
+  await expect(page.getByRole("status").filter({ hasText: "Apartado guardado" })).toBeVisible();
+  await page.getByLabel("Nombre del apartado").fill(" Cambio guardado antes de salir ");
+  await page.getByRole("button", { name: "Cerrar sesión", exact: true }).click();
+  const guard = page.getByRole("dialog", { name: "¿Salir con cambios en el apartado?" });
+  await expect(guard).toBeVisible();
+  const revisionResponse = page.waitForResponse(response => response.request().method() === "POST" &&
+    new URL(response.url()).pathname.endsWith(`/analytic-sections/${original.receipt.section_id}/revisions`));
+  await guard.getByRole("button", { name: "Guardar apartado y salir", exact: true }).click();
+  const revised = await revisionResponse;
+  expect(revised.status()).toBe(201);
+  const revision = await revised.json();
+  expect(revision.receipt.revision).toBe(2);
+  expect(revision.data).toEqual({ ...original.data, name: " Cambio guardado antes de salir " });
+  await expect(page.getByRole("button", { name: "Continuar con correo", exact: true })).toBeVisible();
+  const path = `/scopes/${account.scope_id}/analytic-sections/${original.receipt.section_id}`;
+  expect((await page.request.get(path)).status()).toBe(401);
+  const other = await login(page, "analytic-form-b@example.test");
+  expect(other.scope_id).not.toBe(account.scope_id);
+  expect((await page.request.get(path)).status()).toBe(404);
+});
+
 test("real OTP auth, Secure cookies, PostgreSQL write, reload and cross-account isolation", async ({ page, context }) => {
   // Only the Python sender is replaced; no route interception or actor/session override.
   await page.goto("/");

@@ -36,7 +36,7 @@ export function AuthenticatedApp({ auth }: { auth: AuthController }) {
     // The workspace is hidden during uncertainty, but its unsaved buffer still needs protection.
     const preserve = (event: BeforeUnloadEvent) => {
       const work = state.controller?.snapshot();
-      if (!work || !(work.pending || work.sourcePending || needsEditorGuard(work.editor))) return;
+      if (!work || !(work.pending || work.sourcePending || needsEditorGuard(work.editor) || state.controller?.analytic.hasUnsavedChanges())) return;
       event.preventDefault();
       event.returnValue = "";
     };

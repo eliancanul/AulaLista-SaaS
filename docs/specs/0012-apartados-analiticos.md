@@ -5,18 +5,50 @@ sobre `e48b3ba52023bc1afdfb97c53a307fc3403cdc4f`, que ya integra #52 mediante
 PR #56. Complementa [0010](0010-herramientas-contexto-curricular.md) y conserva
 los contratos de [fundación](0001-fundacion.md) y [edición](0003-edicion-durable.md).
 
-Este corte proporciona API y contratos del consumidor. **No completa #53:** la
-interfaz de alta/edición, explorador, lectura y derivación queda pendiente. Antes
-de implementarla deben materializarse e inspeccionarse las maquetas aprobadas. El usuario
-eligió escritorio C y móvil A con la condición de mantener código limpio,
+Este corte proporciona API, contratos del consumidor y el formulario de
+alta/edición de escritorio C. **No completa #53:** el explorador, lector,
+derivación visual y composición móvil A quedan pendientes. El formulario C se
+materializó e inspeccionó; las otras tres referencias aún no son accesibles.
+El alcance permite avanzar ese formulario de forma independiente, sin sustituir
+las pantallas pendientes. El usuario eligió escritorio C y móvil A con la
+condición de mantener código limpio,
 reutilizar controles/estilos de GuidedForm y GuidedReader y separar la lógica del
 apartado de la de Planeación. Las cuatro referencias cubren formulario y
 guardado de escritorio C, e inicio y contenidos de móvil A. No se incorporan
 sus archivos ni identificadores privados al repositorio.
 
 El explorador y la derivación conservan las composiciones de Figma enlazadas en
-0010 §11. Este incremento no escribe Figma ni acredita validación visual, de
-foco, teclado, reflow o interrupción del nuevo recorrido.
+0010 §11. Este incremento no escribe Figma. Las pruebas de foco, teclado,
+reflow e interrupción del formulario no acreditan las pantallas pendientes ni
+el recorrido completo de #53.
+
+## Formulario de escritorio
+
+La modalidad **Programa analítico** se abre desde Planeación, sin añadir una
+tarjeta al catálogo. Reutiliza Logo y los controles/estilos de GuidedForm:
+nombre, grado y periodo visibles; contexto/situación y pares contenido/PDA
+expandibles. Campo, ejes, idioma y referencia exacta son opciones manuales.
+La ausencia de una referencia oficial permanece explícita.
+
+**Guardar apartado** es una acción explícita. Una confirmación conserva abierto
+el formulario y permite guardar revisiones posteriores del mismo apartado.
+No se abre un lector provisional ni se ofrece todavía la derivación visual.
+El explorador pendiente permitirá elegir y reabrir otros apartados confirmados;
+este formulario retiene únicamente el apartado actual durante la sesión.
+
+Su controlador mantiene datos e intención separados del editor de Planeación.
+Una respuesta incierta bloquea cambios y ofrece **Comprobar guardado**: consulta
+la operación, correlaciona los datos y la revisión exactos y, ante ausencia,
+reenvía la misma clave y solicitud. Doble clic no crea otra operación. Un
+conflicto conserva el texto; cargar la revisión vigente exige descartar
+explícitamente los cambios. No combina ni sobrescribe revisiones silenciosamente.
+
+La navegación dentro de la pestaña conserva el formulario. Cerrar sesión exige
+resolver el guardado o descartar explícitamente; cancelar esa salida invalida
+también su continuación asíncrona. Recarga/cierre con cambios o una operación
+pendiente activa la advertencia del navegador. No se añade almacenamiento local
+ni recuperación de este buffer tras recarga o 401: guardar antes de salir sigue
+siendo necesario. Suspensión/cierre de sesión invalida respuestas tardías.
 
 ## Datos y autoridad
 
