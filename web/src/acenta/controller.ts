@@ -119,6 +119,7 @@ export interface State {
   pending: CreateIntent | null;
   backupError: boolean;
   recoveryWarning: string;
+  generationRecoveryWarning: string;
   recoveryEnabled: boolean;
   recoveryAvailable: boolean;
   closed: boolean;
@@ -152,6 +153,7 @@ const fresh = (): State => ({
   pending: null,
   backupError: false,
   recoveryWarning: "",
+  generationRecoveryWarning: "",
   recoveryEnabled: false,
   recoveryAvailable: false,
   closed: false,
@@ -193,7 +195,7 @@ export class AcentaController {
     if (!isUuid(workspaceId)) throw Error("Invalid workspace identity");
     this.backupKey = `acenta:work:v1:${api.session.actorId}:${api.session.scopeId}:${workspaceId}`;
     this.restore();
-    this.state = {...this.state, recoveryWarning:this.recoveryWarning(), recoveryEnabled:!!this.recovery?.enabled, recoveryAvailable:!!this.recovery?.candidate};
+    this.state = {...this.state, ...this.recoveryWarnings(), recoveryEnabled:!!this.recovery?.enabled, recoveryAvailable:!!this.recovery?.candidate};
   }
   subscribe = (fn: () => void) => {
     this.listeners.add(fn);
@@ -202,8 +204,8 @@ export class AcentaController {
     };
   };
   snapshot = () => this.state;
-  private recoveryWarning() {
-    return [this.recovery?.warning, this.recovery?.generations.warning].filter(Boolean).join(" ");
+  private recoveryWarnings() {
+    return { recoveryWarning: this.recovery?.warning ?? "", generationRecoveryWarning: this.recovery?.generations.warning ?? "" };
   }
   private emit(patch: Partial<State> = {}) {
     const previous = this.state.editor;
@@ -212,7 +214,7 @@ export class AcentaController {
     this.persist();
     if (previous !== this.state.editor && !this.restoring && !this.suspended && !this.state.closed) this.recovery?.save(this.state.editor);
     if (previousPending !== this.state.pending && !this.suspended && !this.state.closed) this.recovery?.generations.save(this.state.pending);
-    this.state = {...this.state, recoveryWarning: this.recoveryWarning(), recoveryAvailable: !!this.recovery?.candidate};
+    this.state = {...this.state, ...this.recoveryWarnings(), recoveryAvailable: !!this.recovery?.candidate};
     for (const fn of this.listeners) fn();
   }
   private persist() {
@@ -419,15 +421,19 @@ export class AcentaController {
     if (epoch === this.epoch && generation === this.availabilityGeneration && !this.state.closed && !this.suspended)
       this.emit({generationAvailable: available});
   }
-  async submitGuided() {
+  async submitGuided(mode: "example" | "ai") {
     if (this.state.closed || this.suspended || this.busy) return;
     if (this.state.pending) return this.recoverCreate();
+    if (mode === "ai" && !this.state.generationAvailable) {
+      this.emit({error: "La generación con IA no está disponible. No se inició un intento. Tus datos siguen aquí."});
+      return;
+    }
     if (Object.keys(validateGuidedRequest(this.state.guided)).length) {
       this.emit({error: "Revisa los campos marcados antes de crear la planeación."});
       return;
     }
     const { fixture_context: _fixture, ...manual } = this.state.guided;
-    const payload: GuidedPlanningRequest | GeneratedPlanningRequest = this.state.generationAvailable
+    const payload: GuidedPlanningRequest | GeneratedPlanningRequest = mode === "ai"
       ? {...manual, contract_version: 3} : this.state.guided;
     const intent: CreateIntent = {kind: "create", key: crypto.randomUUID(), navigation: this.navigation,
       payload: structuredClone(payload)};

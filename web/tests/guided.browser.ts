@@ -28,7 +28,7 @@ async function mount(page: Page, server = new GuidedServer()) {
     .click();
   return server;
 }
-test("available AI creation stays pending without resending and displays the recovered provenance", async ({ page }) => {
+for (const trigger of ["click", "Enter"] as const) test(`available AI creation through ${trigger} stays pending without resending and displays the recovered provenance`, async ({ page }) => {
   const server = new GuidedServer();
   let pending = true;
   server.after = async (call, response) => {
@@ -51,7 +51,9 @@ test("available AI creation stays pending without resending and displays the rec
   await mount(page, server);
   await expect(page.getByRole("status")).toContainText("La generación con IA está disponible");
   await page.getByRole("button", { name: "Usar datos del ejemplo" }).click();
-  await page.getByRole("button", { name: "Crear planeación", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Generar con IA", exact: true })).toBeVisible();
+  if (trigger === "click") await page.getByRole("button", { name: "Generar con IA", exact: true }).click();
+  else await page.getByLabel("Tema").press("Enter");
   await expect(page.getByRole("heading", { name: "Resultado sin confirmar" })).toBeVisible();
   await page.getByRole("button", { name: "Consultar estado", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("No se pudo confirmar el resultado");
@@ -60,12 +62,17 @@ test("available AI creation stays pending without resending and displays the rec
   const reader = page.getByRole("dialog", { name: "Vista previa", exact: true });
   await expect(reader).toBeVisible();
   await expect(reader.locator(".guided-type")).toContainText("Generada con IA");
+  await reader.getByRole("button", { name: "Editar", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Editar planeación", exact: true }).locator(".guided-field-preview")).toContainText("Generada con IA");
+  await page.getByRole("dialog", { name: "Editar planeación", exact: true }).getByRole("button", { name: "Cerrar", exact: true }).click();
+  await reader.getByRole("button", { name: "Cerrar", exact: true }).click();
+  await expect(page.locator(".library-card")).toContainText("Generada con IA");
   expect(server.calls.filter(call => call.path === "generated-plannings")).toHaveLength(1);
 });
 async function create(page: Page) {
   await page.getByRole("button", { name: "Usar datos del ejemplo" }).click();
   await page
-    .getByRole("button", { name: "Crear planeación", exact: true })
+    .getByRole("button", { name: "Crear ejemplo de software", exact: true })
     .click();
   await expect(
     page.getByRole("dialog", { name: /Vista previa|Lectura de planeación/ }),
@@ -100,7 +107,7 @@ test("guided form validates in place, preserves optional manual provenance and p
 }) => {
   const server = await mount(page);
   await page
-    .getByRole("button", { name: "Crear planeación", exact: true })
+    .getByRole("button", { name: "Crear ejemplo de software", exact: true })
     .click();
   await expect(page.getByLabel("Asignatura")).toBeFocused();
   expect(server.docs.size).toBe(0);
@@ -118,7 +125,7 @@ test("guided form validates in place, preserves optional manual provenance and p
     fullPage: true,
   });
   await page
-    .getByRole("button", { name: "Crear planeación", exact: true })
+    .getByRole("button", { name: "Crear ejemplo de software", exact: true })
     .dblclick();
   const dialog = page.getByRole("dialog", {
     name: "Vista previa",
@@ -216,7 +223,7 @@ test("unknown creation is recovered without duplicates; CAS conflict preserves t
   };
   await page.getByRole("button", { name: "Usar datos del ejemplo" }).click();
   await page
-    .getByRole("button", { name: "Crear planeación", exact: true })
+    .getByRole("button", { name: "Crear ejemplo de software", exact: true })
     .click();
   await expect(
     page.getByRole("heading", { name: "Resultado sin confirmar" }),

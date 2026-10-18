@@ -261,7 +261,7 @@ function Editor({
                 <h2>{e.document.result.title}</h2>
                 <h3>{fieldLabel(resource, e.elementKey)}</h3>
                 <p>{e.text}{e.elementKey === "minutes" ? " min" : ""}</p>
-                <p className="field-hint">Ejemplo sintético · Revisión {e.document.receipt.revision}</p>
+                <p className="field-hint">{e.document.result.provenance === "openai-guided-v1" ? "Generada con IA" : "Ejemplo de software"} · Revisión {e.document.receipt.revision}</p>
               </article> : <Preview
                 resource={resource}
                 document={e.document}
@@ -686,7 +686,7 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
               )}
               {s.pending && s.submit !== "sending" && (
                 <button onClick={() => void controller.recoverCreate()}>
-                  Comprobar estado del envío
+                  {s.pending.payload.contract_version === 3 ? "Consultar estado de generación" : "Comprobar estado del envío"}
                 </button>
               )}
             </div>
@@ -695,7 +695,7 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
             </p>
           </section>
         ) : s.view === "result" && s.result ? isGuided(s.result.result) ? (
-          <section className="library"><h1>Mis recursos</h1><article className="library-card"><h2>{s.result.result.title}</h2><p>Planeación de clase · Ejemplo sintético</p><p>Revisión {s.result.receipt.revision} guardada</p></article></section>
+          <section className="library"><h1>Mis recursos</h1><article className="library-card"><h2>{s.result.result.title}</h2><p>Planeación de clase · {s.result.result.provenance === "openai-guided-v1" ? "Generada con IA" : "Ejemplo de software"}</p><p>Revisión {s.result.receipt.revision} guardada</p></article></section>
         ) : (
           <ResultView
             document={s.result}
@@ -758,6 +758,7 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
                 <p>
                   {doc.result.title} · Revisión {doc.receipt.revision}
                 </p>
+                {isGuided(doc.result) && <p>{doc.result.provenance === "openai-guided-v1" ? "Generada con IA" : "Ejemplo de software"}</p>}
                 <p className="field-hint">
                   {doc.receipt.source_id ? `Original conservado · Fuente versión ${doc.receipt.source_version}` : "Sin referencia adjunta · Contexto manual"}
                 </p>
@@ -826,8 +827,9 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
         {s.recoveryWarning && <p className="workspace-error" role="alert">{s.recoveryWarning}</p>}
         {(s.recoveryAvailable || s.recoveryWarning) && <div>
           {s.recoveryAvailable && <button onClick={() => void controller.restoreRecovery()}>Reintentar recuperar edición</button>}
-          <button onClick={() => controller.discardRecovery()}>Descartar respaldo de este navegador</button>
+          <button onClick={() => controller.discardRecovery()}>Descartar respaldo de edición</button>
         </div>}
+        {s.generationRecoveryWarning && <p className="workspace-error" role="alert">{s.generationRecoveryWarning}</p>}
         {s.backupError && (
           <p className="workspace-error" role="alert">
             No se pudo guardar el respaldo local. Mantén esta pestaña abierta y

@@ -39,12 +39,33 @@ it("uses the real-generation contract only after the server advertises availabil
   expect(c.snapshot().generationAvailable).toBe(false);
   await c.loadGenerationAvailability();
   expect(c.snapshot().generationAvailable).toBe(true);
-  await Promise.all([c.submitGuided(), c.submitGuided()]);
+  await Promise.all([c.submitGuided("ai"), c.submitGuided("ai")]);
   expect(server.calls.filter(c => c.method === "POST")).toHaveLength(1);
   expect(server.calls.at(-1)?.path).toBe("generated-plannings");
   expect(JSON.parse(server.calls.at(-1)!.body!)).not.toHaveProperty("fixture_context");
   expect(c.snapshot().result?.request.contract_version).toBe(3);
   expect(c.snapshot().result?.result.provenance).toBe("openai-guided-v1");
+});
+
+it("an action presented as an example stays an example when AI becomes available", async () => {
+  const { server, controller: c } = setup();
+  await c.loadGenerationAvailability();
+  await c.submitGuided("example");
+  expect(server.calls.filter(call => call.method === "POST").map(call => call.path)).toEqual(["guided-plannings"]);
+  expect(c.snapshot().result?.request.contract_version).toBe(2);
+});
+
+it("an AI action whose availability disappears never falls back to an example or creates an operation", async () => {
+  const { server, controller: c } = setup();
+  await c.loadGenerationAvailability();
+  server.available = false;
+  await c.loadGenerationAvailability();
+  await c.submitGuided("ai");
+  expect(server.calls.filter(call => call.method === "POST")).toHaveLength(0);
+  expect(c.snapshot().pending).toBeNull();
+  expect(c.snapshot().result).toBeNull();
+  expect(c.snapshot().guided).toEqual(guidedRequest());
+  expect(c.snapshot().error).toContain("No se inició un intento");
 });
 
 it("restores a generated pending operation after reload and only queries its original key", async () => {
@@ -57,7 +78,7 @@ it("restores a generated pending operation after reload and only queries its ori
   const { server, controller: c } = setup(storage);
   await c.loadGenerationAvailability();
   server.generationState = "generation_uncertain";
-  await c.submitGuided();
+  await c.submitGuided("ai");
   const key = c.snapshot().pending!.key;
   const restored = new AcentaController(new AcentaApi(session, server.transport), storage, workspaceId);
   expect(restored.snapshot().backupError).toBe(false);
@@ -72,11 +93,12 @@ it.each(["generation_pending", "generation_uncertain"])("keeps %s recoverable wi
   const { server, controller: c } = setup();
   await c.loadGenerationAvailability();
   server.generationState = code;
-  await c.submitGuided();
+  await c.submitGuided("ai");
   const key = c.snapshot().pending?.key;
   expect(key).toBeTruthy();
   expect(c.snapshot().submit).toBe("unknown");
-  await c.submitGuided();
+  server.available = false; await c.loadGenerationAvailability();
+  await c.submitGuided("example");
   server.generationState = null;
   await c.recoverCreate();
   expect(c.snapshot().pending?.key).toBe(key);
@@ -90,7 +112,7 @@ it("a failed generation permits a new key only after another explicit submission
   const { server, controller: c } = setup();
   await c.loadGenerationAvailability();
   server.generationState = "generation_pending";
-  await c.submitGuided();
+  await c.submitGuided("ai");
   const first = c.snapshot().pending!.key;
   server.generationState = "generation_failed";
   await c.recoverCreate();
@@ -100,7 +122,7 @@ it("a failed generation permits a new key only after another explicit submission
   await c.recoverCreate();
   expect(server.calls.filter(c => c.method === "POST")).toHaveLength(1);
   server.generationState = null;
-  await c.submitGuided();
+  await c.submitGuided("ai");
   expect(c.snapshot().result?.receipt.operation_id).not.toBe(first);
   expect(server.calls.filter(c => c.method === "POST")).toHaveLength(2);
 });
@@ -110,7 +132,7 @@ it("reports unavailable generation as a definite pre-admission rejection and pre
   await c.loadGenerationAvailability();
   server.generationState = "generation_unavailable";
   server.generationStatus = 503;
-  await c.submitGuided();
+  await c.submitGuided("ai");
   expect(c.snapshot().pending).toBeNull();
   expect(c.snapshot().submit).toBe("error");
   expect(c.snapshot().guided).toEqual(guidedRequest());
@@ -123,7 +145,7 @@ it.each([false, "true", null])("keeps generation closed for unavailable or inval
   server.available = available;
   await c.loadGenerationAvailability();
   expect(c.snapshot().generationAvailable).toBe(false);
-  await c.submitGuided();
+  await c.submitGuided("example");
   expect(server.calls.at(-1)?.path).toBe("guided-plannings");
   expect(c.snapshot().result?.result.provenance).toBe("synthetic-fixture-v1");
 });
@@ -144,7 +166,7 @@ it("cannot enable generation from a capability response arriving after session s
 it("preserves generated provenance and manual origin through edits, copies, drafts and reopening without generating again", async () => {
   const { server, controller: c } = setup();
   await c.loadGenerationAvailability();
-  await c.submitGuided();
+  await c.submitGuided("ai");
   const initial = c.snapshot().result!.request;
   c.openEditor();
   c.edit("Propósito editado en prueba de software.");

@@ -58,6 +58,7 @@ export function GuidedForm({ controller }: { controller: AcentaController }) {
   const pending = !!s.pending;
   const sending = s.submit === "sending";
   const generatingWithAI = s.pending?.payload.contract_version === 3;
+  const creationMode = s.generationAvailable ? "ai" : "example";
   const reference = s.sources.find(
     (source) =>
       source.source_id === q.reference?.source_id &&
@@ -79,7 +80,7 @@ export function GuidedForm({ controller }: { controller: AcentaController }) {
           ?.querySelector<HTMLElement>("[aria-invalid=true]")
           ?.focus(),
       );
-    } else void controller.submitGuided();
+    } else void controller.submitGuided(creationMode);
   };
   return (
     <section className="guided-page">
@@ -530,7 +531,7 @@ export function GuidedForm({ controller }: { controller: AcentaController }) {
               type="submit"
               disabled={s.attaching || s.sourcePending}
             >
-              Crear planeación
+              {creationMode === "ai" ? "Generar con IA" : "Crear ejemplo de software"}
             </button>
           </footer>
         )}

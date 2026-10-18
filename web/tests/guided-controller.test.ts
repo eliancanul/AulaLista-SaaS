@@ -26,7 +26,7 @@ const deferred = () => {
 describe("guided creation and B3 invariants", () => {
   it("creates once on a double submit without any fabricated source or editor", async () => {
     const { server, controller: c } = setup();
-    await Promise.all([c.submitGuided(), c.submitGuided()]);
+    await Promise.all([c.submitGuided("example"), c.submitGuided("example")]);
     expect(server.calls.filter((x) => x.method === "POST")).toHaveLength(1);
     expect(server.calls[0].path).toBe("guided-plannings");
     expect(c.snapshot().result?.receipt.source_id).toBeNull();
@@ -36,10 +36,10 @@ describe("guided creation and B3 invariants", () => {
   it("validates locally and keeps unsupported values after a certain rejection", async () => {
     const { server, controller: c } = setup();
     c.setGuided({ ...guidedExample(), topic: "" });
-    await c.submitGuided();
+    await c.submitGuided("example");
     expect(server.calls).toHaveLength(0);
     c.setGuided({ ...guidedExample(), subject: "Matemáticas" });
-    await c.submitGuided();
+    await c.submitGuided("example");
     expect(c.snapshot().pending).toBeNull();
     expect(c.snapshot().guided.subject).toBe("Matemáticas");
     expect(c.snapshot().error).toContain("Tus datos siguen aquí");
@@ -50,12 +50,12 @@ describe("guided creation and B3 invariants", () => {
       if (call.path === "guided-plannings") throw Error("transport lost");
       return response;
     };
-    await c.submitGuided();
+    await c.submitGuided("example");
     const key = c.snapshot().pending!.key;
     expect(c.snapshot().submit).toBe("unknown");
     expect(c.snapshot().result).toBeNull();
     server.after = null;
-    await c.submitGuided();
+    await c.submitGuided("example");
     expect(c.snapshot().result?.receipt.operation_id).toBe(key);
     expect(server.docs.size).toBe(1);
     expect(server.calls.map((x) => x.path)).toEqual([
@@ -69,7 +69,7 @@ describe("guided creation and B3 invariants", () => {
     server.before = async (call) => {
       if (call.path === "guided-plannings") await gate.promise;
     };
-    const pending = c.submitGuided();
+    const pending = c.submitGuided("example");
     c.navigate("home");
     gate.resolve();
     await pending;
@@ -83,7 +83,7 @@ describe("guided creation and B3 invariants", () => {
     server.before = async () => {
       await gate.promise;
     };
-    const pending = c.submitGuided();
+    const pending = c.submitGuided("example");
     c.suspend();
     gate.resolve();
     await pending;
@@ -93,7 +93,7 @@ describe("guided creation and B3 invariants", () => {
   });
   it("saves every basic field durably without replacing manual origin", async () => {
     const { server, controller: c } = setup();
-    await c.submitGuided();
+    await c.submitGuided("example");
     const initial = c.snapshot().result!.request;
     for (const [resource, element, text] of [
       ["planning", "purpose", "Propósito revisado"],
@@ -119,7 +119,7 @@ describe("guided creation and B3 invariants", () => {
   });
   it("preserves dirty text on CAS conflict and can save an independent copy", async () => {
     const { server, controller: c } = setup();
-    await c.submitGuided();
+    await c.submitGuided("example");
     const base = c.snapshot().result!;
     c.openEditor();
     c.edit("Mi corrección pendiente");
@@ -134,7 +134,7 @@ describe("guided creation and B3 invariants", () => {
   });
   it("keeps a failed numeric correction editable and never calls it saved", async () => {
     const { controller: c } = setup();
-    await c.submitGuided();
+    await c.submitGuided("example");
     c.openEditor(c.snapshot().result!, "activity:closure", "minutes");
     c.edit("0");
     await c.save();
@@ -149,14 +149,14 @@ describe("guided creation and B3 invariants", () => {
       d.receipt.source_id = crypto.randomUUID();
       return json(d, 201);
     };
-    await c.submitGuided();
+    await c.submitGuided("example");
     expect(c.snapshot().result).toBeNull();
     expect(c.snapshot().pending).not.toBeNull();
     expect(c.snapshot().submit).toBe("unknown");
   });
   it("preserves and reopens a private guided draft at its exact target without changing the confirmed revision", async () => {
     const { server, controller: c } = setup();
-    await c.submitGuided();
+    await c.submitGuided("example");
     c.openEditor(c.snapshot().result!, "activity:closure", "statement");
     c.edit("Cierre pendiente de prueba");
     await c.preserveDraft();
@@ -184,7 +184,7 @@ describe("guided creation and B3 invariants", () => {
     server.before = async (call) => {
       if (call.path === "guided-plannings") throw Error("before delivery");
     };
-    await c.submitGuided();
+    await c.submitGuided("example");
     const key = c.snapshot().pending!.key;
     server.before = null;
     await c.recoverCreate();

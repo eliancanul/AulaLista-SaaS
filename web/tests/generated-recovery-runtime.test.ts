@@ -45,7 +45,7 @@ function harness() {
 async function pendingGeneration(h: ReturnType<typeof harness>) {
   const auth = h.fresh(); await auth.start();
   const c = auth.snapshot().controller!;
-  c.setGuided(guidedRequest()); await c.loadGenerationAvailability(); await c.submitGuided();
+  c.setGuided(guidedRequest()); await c.loadGenerationAvailability(); await c.submitGuided("ai");
   return { auth, c };
 }
 
@@ -55,7 +55,7 @@ it("real authenticated remount restores the same generation key and fixed TTL, t
   const c = auth.snapshot().controller!;
   c.setGuided(guidedRequest());
   await c.loadGenerationAvailability();
-  await c.submitGuided();
+  await c.submitGuided("ai");
   const key = c.snapshot().pending!.key;
   expect(h.slots.size).toBe(1);
   const raw = [...h.slots.values()][0];
@@ -103,9 +103,11 @@ it("corrupt generation recovery is not used or overwritten, and leaves the edito
   const reload = h.fresh(); await reload.start(); const restored = reload.snapshot().controller!;
   expect(restored.snapshot().pending).toBeNull();
   expect(restored.snapshot().editor?.text).toBe("Edición sintética pendiente.");
+  expect(restored.snapshot().recoveryWarning).toBe("");
+  expect(restored.snapshot().generationRecoveryWarning).toContain("No pudimos utilizar el respaldo de la generación");
   expect(h.slots.get(GENERATION_RECOVERY_KEY)).toBe('{"invalid":"slot"}');
   expect(h.slots.get(RECOVERY_KEY)).toBe(editorRaw);
-  restored.setGuided(guidedRequest()); await restored.loadGenerationAvailability(); await restored.submitGuided();
+  restored.setGuided(guidedRequest()); await restored.loadGenerationAvailability(); await restored.submitGuided("ai");
   expect(h.server.calls.every(call => call.method === "GET")).toBe(true);
   expect(restored.snapshot().error).toContain("No se inició");
 });
@@ -117,7 +119,15 @@ it("restores simultaneous editor and generation slots without a late generation 
   const reload = h.fresh(); await reload.start(); const restored = reload.snapshot().controller!;
   expect(restored.snapshot().pending).not.toBeNull();
   expect(restored.snapshot().editor?.text).toBe("Edición sintética que debe sobrevivir.");
+  restored.navigate("resources");
+  const editorRaw = h.slots.get(RECOVERY_KEY);
+  h.state = "not_found"; await restored.recoverCreate();
+  expect(restored.snapshot().view).toBe("resources");
+  expect(h.slots.get(RECOVERY_KEY)).toBe(editorRaw);
+  const callsBeforeSuccess = h.server.calls.length;
   h.state = ""; await restored.recoverCreate();
+  expect(restored.snapshot().view).toBe("resources");
+  expect(h.server.calls.slice(callsBeforeSuccess).every(call => call.method === "GET")).toBe(true);
   expect(restored.snapshot().editor?.text).toBe("Edición sintética que debe sobrevivir.");
   expect(restored.snapshot().result?.receipt.planning_id).toBe(doc.receipt.planning_id);
   expect(h.slots.has(GENERATION_RECOVERY_KEY)).toBe(false);

@@ -70,6 +70,20 @@ sólo por GET. Un fallo definitivo permite otra operación únicamente por acci�
 explícita. El plazo lógico impide confirmar respuestas tardías; no demuestra
 cancelación o ausencia de consumo remoto.
 
+El respaldo de generación y el de edición usan slots independientes. Una
+advertencia de generación no ofrece descartar el respaldo del editor ni el
+intento incierto. «Descartar respaldo de edición» afecta sólo a edición;
+consultar una generación conserva ese texto, su respaldo y la navegación vigente.
+No hay una acción de descarte de generación que permita olvidar su clave y
+reenviar. Las reservas del servidor no cambian por acciones de recuperación UI.
+
+El formulario identifica su acción como «Crear ejemplo de software» o «Generar
+con IA». El modo mostrado se pasa explícitamente al envío, también con Enter:
+la disponibilidad posterior no convierte una acción de ejemplo en IA. Si deja
+de estar disponible la IA, esa acción falla sin envío ni fallback a ejemplo.
+La procedencia permanece visible en lector, editor y biblioteca. No se añaden
+selectores, modales ni aprobaciones.
+
 Se revalida la sesión/propiedad al admitir, antes de generar y antes de confirmar.
 Resultado y revisión inicial se confirman atómicamente; después lectura, replay,
 edición, copia y borrador nunca llaman al proveedor ni pisan revisiones humanas.

@@ -15,7 +15,7 @@ test("guided request without source survives response loss and all basic edits t
     .fill("Escenario hipotético de prueba de software");
   await page.getByLabel("Situación hipotética").check();
   await page
-    .getByRole("button", { name: "Crear planeación", exact: true })
+    .getByRole("button", { name: "Crear ejemplo de software", exact: true })
     .dblclick();
   await expect(
     page.getByRole("heading", { name: "Resultado sin confirmar" }),
