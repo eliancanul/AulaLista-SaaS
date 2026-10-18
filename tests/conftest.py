@@ -121,7 +121,9 @@ def runtime_database(migrated_database, actors, monkeypatch):
             GRANT SELECT, INSERT ON planning, planning_revision TO aulalista_runtime;
             GRANT UPDATE (current_revision) ON planning TO aulalista_runtime;
             GRANT SELECT, INSERT ON planning_draft, planning_draft_revision TO aulalista_runtime;
-            GRANT UPDATE (current_revision) ON planning_draft TO aulalista_runtime
+            GRANT UPDATE (current_revision) ON planning_draft TO aulalista_runtime;
+            GRANT SELECT, INSERT ON analytic_section, analytic_section_revision TO aulalista_runtime;
+            GRANT UPDATE (current_revision) ON analytic_section TO aulalista_runtime
         """)
         )
     settings = load_settings()

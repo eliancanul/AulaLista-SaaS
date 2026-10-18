@@ -98,6 +98,15 @@ fondo; la captura por sí sola no demuestra esos comportamientos.
 
 ## Componentes y contratos
 
+El [incremento de apartados #53](../docs/specs/0012-apartados-analiticos.md)
+añade DTO, validación de recibos, transporte scoped y prellenado determinista en
+`analytic-sections.ts` y `api.ts`. La procedencia `analytic_origin` fija el
+apartado y revisión elegidos y se conserva al leer ediciones, copias y borradores.
+Los pares contenido/PDA permanecen manuales, separados de objetivos.
+La UI de este recorrido sigue pendiente: no hay todavía nueva entrada visible,
+guardia de interrupción ni aceptación visual del apartado. Las regresiones del
+recorrido existente no acreditan esos estados pendientes.
+
 - `src/acenta/App.tsx`: acceso, shell, composer, menús, resultado, editor, guardia
   de salida y biblioteca mínima para reabrir revisiones/copia/borrador.
 - `src/acenta/style.css`: tokens visuales, fuentes locales y reflow responsive.

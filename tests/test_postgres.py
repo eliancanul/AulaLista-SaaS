@@ -66,6 +66,8 @@ def test_empty_database_migrates_and_upgrade_is_repeatable(empty_database):
         "planning_revision",
         "planning_draft",
         "planning_draft_revision",
+        "analytic_section",
+        "analytic_section_revision",
     }
     command.check(Config("alembic.ini"))
 
