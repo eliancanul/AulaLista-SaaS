@@ -44,9 +44,11 @@ Ninguna entrada se habilita por aparecer en el catálogo. Las siete futuras nece
 2. **Completar lo esencial.** Mostrar primero los campos requeridos. Recuperar contexto compatible de un material propio cuando exista; no inventar datos del grupo.
 3. **Afinar opcionalmente.** Agrupar currículo, contexto, método, idioma y referencias. Mantener sus valores visibles como un resumen breve, con acción para editarlos.
 4. **Generar.** Una acción clara; errores de campos junto al dato correspondiente. Sin confirmaciones de extracción ni de cada bloque.
-5. **Editar y reabrir.** El resultado útil abre en un editor. El guardado automático indica su estado real y conserva el contexto usado. Mis recursos recupera la revisión confirmada.
+5. **Ver primero; editar si hace falta.** El resultado útil abre en una vista previa modal, con el fondo de la aplicación oscurecido. **Editar** es una acción opcional; no se abre el editor por defecto. El guardado automático indica su estado real y conserva el contexto usado. Mis recursos recupera la revisión confirmada.
 
-**Composición visual propuesta:** navegación, tipografía, color y controles propios de Acenta; formulario de una columna, etiquetas persistentes y ayuda breve. En escritorio puede coexistir un resumen lateral del contexto; en móvil se integra en el flujo. La pantalla de resultado prioriza el material y deja sus fuentes a un clic. Teclado, foco y avisos accesibles forman parte de la aceptación futura, no se acreditan con este documento.
+**Alcance de edición:** «resultado editable» significa que puede corregirse cuando el docente lo elija; no obliga a editar para consultar, guardar o reabrir. Se conserva la edición básica de fase 1, acotada a elementos declarados editables de sus materiales; su adaptación al nuevo tipo de Planeación todavía debe implementarse y probarse. El editor completo de texto enriquecido queda para una integración posterior y no es requisito de este primer recorrido.
+
+**Composición visual propuesta:** navegación, tipografía, color y controles propios de Acenta; formulario compacto de una columna, etiquetas persistentes y ayuda breve, sin una barra lateral explicativa. La procedencia se muestra junto al campo o material correspondiente, con el detalle de fuentes accesible en contexto. La vista previa prioriza el material. Teclado, foco y avisos accesibles forman parte de la aceptación futura, no se acreditan con este documento.
 
 El campo Contexto permite describir la necesidad del docente. No sustituye los campos guiados ni exige datos identificables de estudiantes. Si describe una situación hipotética, esa condición se conserva al generar, derivar y reabrir: nunca se convierte en un diagnóstico de un grupo real. No exige otra confirmación. Formularios y resultados permanecen privados en el ámbito autorizado.
 
@@ -192,7 +194,7 @@ Estas son garantías propuestas para las seis herramientas y la modalidad Analí
 | Procesando | Estado real; salir y volver sin reenviar | Operación identificable y recuperación del mismo intento |
 | Demora o conexión perdida | “Aún no pudimos confirmar el resultado”; comprobar estado | Un timeout no significa fracaso ni autoriza duplicar trabajo |
 | Resultado parcial útil | Parte independiente editable y límites visibles | No llamar completo a un material que aún carece de lo esencial |
-| Resultado listo | Material accesible, legible y guardado confirmado | Una notificación o fila creada no prueba finalización |
+| Resultado listo | Vista previa legible del material, Editar opcional y guardado confirmado | Una notificación o fila creada no prueba finalización |
 | Guardando / sin guardar | Estado y edición pendientes visibles | “Guardado” sólo con recibo durable de esa revisión |
 | Conflicto de revisión | Conservar texto local; revisar versión vigente o copia | Sin sobrescritura silenciosa ni merge automático destructivo |
 | Fallo terminal | Motivo útil, entradas preservadas y reintento explícito | Reconciliar operación anterior antes de una nueva |
@@ -230,6 +232,7 @@ Antes de generación real se fijarán límites de entrada/salida, duración, int
 - Fuente manual: se admite y se mantiene identificada como aportación, sin etiqueta oficial automática.
 - Fuente exacta: el resultado conserva edición y localizador; una nueva versión no cambia el pasado.
 - Fixture: un ejemplo sintético siempre conserva esa etiqueta y nunca se presenta como respuesta de un modelo real.
+- Vista previa: consultar y cerrar el resultado sin editar es un recorrido válido. Elegir Editar permite la corrección básica y conserva sus garantías de guardado/reapertura; no exige integrar el editor completo.
 - Recuperación: doble clic, timeout o respuesta perdida no duplican el material; resultado tardío no pisa una corrección.
 - Derivación: Analítico → Planeación conserva el apartado, revisión de origen y condición hipotética del contexto cuando corresponda, sin sincronización destructiva ni conversión en diagnóstico real.
 - Herramienta futura: no se envía petición ni se simula que está disponible.
@@ -240,7 +243,7 @@ Antes de generación real se fijarán límites de entrada/salida, duración, int
 
 1. **Aprobar la vista previa:** revisar Planeación y su modalidad Programa analítico, con estados normal, sin currículo y error recuperable. Mantener [#11](https://github.com/eliancanul/AulaLista-SaaS/issues/11) como referencia de diseño; no cambiar Figma antes de aprobar esa vista previa.
 2. **Incorporar los contratos de #18:** matriz y fuentes identificadas, decisiones pendientes explícitas y revisión independiente del documento. El cierre documental exige evidencia del candidato en PR/CI; no certifica implementación ni resuelve derechos o equivalencia curricular pendientes.
-3. **Primer corte posterior:** Planeación desde cero con formulario guiado y contexto manual, demostración sintética claramente etiquetada, edición/guardado/reapertura completas.
+3. **Primer corte posterior:** Planeación desde cero con formulario guiado y contexto manual, demostración sintética claramente etiquetada, vista previa inicial, edición básica opcional y guardado/reapertura completos.
 4. **Reutilización de apartados:** Analítico → Planeación puede desarrollarse con contexto manual autorizado, sin depender de importar un corpus oficial. La selección desde un banco curricular es un corte separado, condicionado a resolver derechos, fuentes y versión aplicable. No se importa corpus por defecto.
 5. **Herramientas por unidades completas:** Hoja, Preguntas, Adaptar, Tarjetas y Bingo; confirmar el orden al preparar cada corte, reutilizar contratos y evitar un generador universal prematuro.
 
@@ -248,7 +251,7 @@ Cada implementación posterior necesita alcance autorizado, pruebas del candidat
 
 ## 11. Pendientes de implementación y fuentes
 
-1. **Vista previa:** se presentaron dos imágenes estáticas de escritorio; su aprobación sigue pendiente antes de tocar Figma/UI. La ubicación de Programa analítico dentro de Planeación ya está decidida. Esas imágenes no acreditan móvil, teclado, foco ni comportamiento implementado.
+1. **Vista previa:** el usuario eligió el patrón de resultado modal con fondo oscurecido y Editar opcional; la nueva composición visual sigue pendiente de aprobación antes de tocar Figma/UI. La ubicación de Programa analítico dentro de Planeación ya está decidida. La dirección elegida no acredita móvil, teclado, foco ni comportamiento implementado.
 2. **Decisión curricular de diseño pendiente:** elegir y registrar la fuente/edición oficial exacta para la cobertura inicial de Fase 4, tras comparar los documentos 2024 y 2025. La matriz admite pendientes, pero esa selección aún no está decidida; se mantiene explícita al valorar el cierre documental de #18. Los derechos y la autorización de importar/utilizar un corpus comercial son una puerta operativa separada: no se exige una importación para cerrar el contrato ni se bloquea usar contexto manual autorizado.
 3. **Campos de las otras cinco herramientas:** contrato de diseño propio aprobado como propuesta; afinar su interfaz y límites por corte. No se atribuyen a Teachy sin comprobar sus formularios.
 4. **Generación real, archivos, web y presupuesto:** [#19](https://github.com/eliancanul/AulaLista-SaaS/issues/19) y autorizaciones propias mantienen sus puertas; sus controles aquí son contrato futuro.
@@ -259,4 +262,4 @@ Fuentes revisadas: issue, catálogo, instrucciones y contratos de la base indica
 
 Este diseño no acredita tests de implementación, benchmarks, generaciones de Acenta, migraciones, importaciones ni cambios de producto. La revisión documental y la CI aplicable a su candidato se registran en el PR; no certifican generación real, seguridad operativa o eficacia pedagógica. No hay migración o recuperación de datos aplicable a incorporar esta spec.
 
-**Siguiente paso:** revisar la vista previa presentada y registrar por separado su aprobación y la evidencia de cada implementación posterior.
+**Siguiente paso:** revisar la nueva vista previa modal y registrar por separado su aprobación visual y la evidencia de cada implementación posterior.
