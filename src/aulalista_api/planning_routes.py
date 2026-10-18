@@ -7,14 +7,47 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
-from aulalista_api.guided_planning import GuidedPlanningRequest
+from aulalista_api.guided_planning import (
+    GeneratedPlanningRequest,
+    GuidedPlanningRequest,
+)
 from aulalista_api.material_routes import Actor, Operation, bounded_content
 from aulalista_api.materials import MaterialError
+from aulalista_api.planning_generation import GeneratedPlannings
 from aulalista_api.plannings import MAX_REQUEST_BYTES, PlanningRequest, Plannings
 
 
-def install_planning_routes(app: FastAPI, engine) -> None:
+def install_planning_routes(
+    app: FastAPI, engine, *, provider=None, profile=None
+) -> None:
     plannings = Plannings(engine)
+    generation = GeneratedPlannings(engine, provider=provider, profile=profile)
+    app.state.planning_generation = generation
+
+    @app.get("/scopes/{scope_id}/planning-generation")
+    def generation_capability(scope_id: UUID, actor: Actor):
+        return JSONResponse(
+            generation.capability(actor, scope_id),
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/scopes/{scope_id}/generated-plannings", status_code=201)
+    async def create_generated_planning(
+        scope_id: UUID, actor: Actor, operation: Operation, request: Request
+    ):
+        content = await bounded_content(
+            request, media_type="application/json", max_bytes=MAX_REQUEST_BYTES
+        )
+        try:
+            payload = GeneratedPlanningRequest.model_validate_json(content)
+        except ValidationError:
+            raise MaterialError(422, "invalid_request") from None
+        saved = await run_in_threadpool(
+            generation.write, actor, scope_id, operation, payload
+        )
+        return JSONResponse(
+            saved, status_code=201, headers={"Cache-Control": "no-store"}
+        )
 
     @app.post("/scopes/{scope_id}/plannings", status_code=201)
     async def create_planning(
@@ -61,7 +94,13 @@ def install_planning_routes(app: FastAPI, engine) -> None:
 
     @app.get("/scopes/{scope_id}/planning-operations/{operation_id}")
     def read_operation(scope_id: UUID, operation_id: UUID, actor: Actor):
+        try:
+            saved = plannings.read(actor, scope_id, operation_id=operation_id)
+        except MaterialError as error:
+            if error.status != 404:
+                raise
+            saved = generation.operation(actor, scope_id, operation_id)
         return JSONResponse(
-            plannings.read(actor, scope_id, operation_id=operation_id),
+            saved,
             headers={"Cache-Control": "no-store"},
         )

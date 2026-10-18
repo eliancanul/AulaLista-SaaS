@@ -22,8 +22,9 @@ Después de editar código local, repetir `uv sync --locked --no-editable
 --reinstall-package aulalista-api` para no probar una wheel anterior de la caché.
 
 Las migraciones requieren el rol dueño de esquema. No se ejecutan en el arranque
-ni desde endpoints. El head esperado es `0007_guided_planning`; sus límites de
-downgrade se describen en la sección de planeación guiada. El downgrade de
+ni desde endpoints. El head esperado es `0008_openai_planning`; esta migración
+rechaza downgrade si conserva algún intento de generación, para no perder evidencia
+de envíos. Los límites de 0007 se describen en la sección de planeación guiada. El downgrade de
 `0006_editor_recovery` elimina sólo el UUID de recuperación: no revoca sesiones
 ni borra respaldos de navegadores. El binario
 0005 no acepta readiness0006; cualquier rollback requiere coordinación explícita.
@@ -67,6 +68,11 @@ GRANT SELECT, INSERT ON planning, planning_revision TO aulalista_runtime;
 GRANT UPDATE (current_revision) ON planning TO aulalista_runtime;
 GRANT SELECT, INSERT ON planning_draft, planning_draft_revision TO aulalista_runtime;
 GRANT UPDATE (current_revision) ON planning_draft TO aulalista_runtime;
+GRANT SELECT, INSERT ON planning_generation_attempt TO aulalista_runtime;
+GRANT UPDATE (state, finished_at, counted_input_tokens, generation_requests,
+    model, service_tier, provider_request_id, input_tokens, output_tokens, cached_tokens,
+    cache_write_tokens, reasoning_tokens, error_code, planning_revision_id)
+    ON planning_generation_attempt TO aulalista_runtime;
 SQL
 export AULALISTA_DATABASE_URL='postgresql+psycopg://aulalista_runtime@127.0.0.1:55432/aulalista_test'
 uv run --locked --no-editable uvicorn aulalista_api.app:create_app --factory --host 127.0.0.1 --port 8000 --no-access-log --no-proxy-headers
@@ -95,7 +101,7 @@ cumplir controles equivalentes antes de usar cualquier dato privado.
 
 - `GET /health/live`: 200 `{"status":"ok"}`, independiente de DB.
 - `GET /health/ready`: 200 sólo con conexión y única revisión
-  `0007_guided_planning`; fallo/timeout/revisión distinta: 503 sin detalle interno.
+  `0008_openai_planning`; fallo/timeout/revisión distinta: 503 sin detalle interno.
 - `AULALISTA_DB_TIMEOUT_SECONDS`: entero 2–30, predeterminado 3. Deadline HTTP de
   readiness completo, incluyendo espera, DNS, conexión y consulta; también fija
   timeouts de driver/servidor. Una sola sonda en vuelo evita acumular hilos.
@@ -290,3 +296,27 @@ rotuladas; el recorrido `guided.integration.ts` atraviesa HTTP y PostgreSQL
 reales y pierde una respuesta tras commit para comprobar recuperación por
 recibo. Una nueva sesión sólo reabre datos confirmados; no se promete recuperar
 el formulario ni texto pendiente después de 401.
+
+### Adaptador OpenAI preparado offline
+
+[Spec 0013](specs/0013-planeacion-openai.md) define el DTO manual v3 y su intento
+durable. `create_app()` mantiene OpenAI deshabilitado; no descubre ni lee
+`OPENAI_API_KEY`. La composición explícita recibe `planning_provider` y
+`generation_profile` únicamente tras resolver las puertas de activación. Los
+tests inyectan un transporte falso, jamás una credencial o una llamada real.
+
+`planning-generation` devuelve disponibilidad autorizada. `generated-plannings`
+admite sólo entradas exactas de un perfil explícito, reserva antes del conteo,
+limita la entrada contada y confirma la salida validada. La tabla
+`planning_generation_attempt` conserva reserva, configuración y consumo observado;
+campos desconocidos son null. No se libera reserva automáticamente. Un intento
+incierto bloquea nuevas admisiones hasta conciliación explícita, todavía no
+implementada. Lectura, edición, copia y replay no ejecutan el proveedor.
+
+Las pruebas nuevas son `test_generated_contract.py`, `test_openai_planning.py`,
+`test_planning_generation.py` y `test_generated_routes.py`; las dos últimas
+requieren el PostgreSQL desechable y el rol runtime. La UI distingue procedencia
+real preparada y ejemplo de software; sus pruebas simulan respuestas y no
+acreditan inferencia real. La descarga local del Chromium fijado puede requerir
+acceso a su CDN; usar otra versión local debe registrarse como evidencia distinta
+de CI, nunca como equivalencia.

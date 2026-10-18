@@ -4,7 +4,8 @@ import type {
   Session,
   SourceReceipt,
   CreationRequest,
-  GuidedPlanningRequest,
+  ManualPlanningRequest,
+  GeneratedPlanningRequest,
   PlanningDocument,
   EditRequest,
   CopyRequest,
@@ -73,7 +74,7 @@ export function sameJson(left: unknown, right: unknown): boolean {
 export function parseResult(v: unknown): Result {
   assert(
     object(v) &&
-      v.provenance === "synthetic-fixture-v1" &&
+      (v.provenance === "synthetic-fixture-v1" || v.provenance === "openai-guided-v1") &&
       typeof v.title === "string" &&
       typeof v.notice === "string",
   );
@@ -135,7 +136,7 @@ export function parseResult(v: unknown): Result {
         usefulText(a.statement) && Number(a.minutes) >= 1 && Number(a.minutes) <= 180) &&
       new Set((v.activities as Record<string, unknown>[]).map(a => a.key)).size === (v.activities as unknown[]).length &&
       (v.activities as Record<string, unknown>[]).reduce((sum, a) => sum + Number(a.minutes), 0) === v.duration_minutes);
-  } else assert(v.purpose === undefined && v.formative_assessment === undefined && v.duration_minutes === undefined);
+  } else assert(v.provenance === "synthetic-fixture-v1" && v.purpose === undefined && v.formative_assessment === undefined && v.duration_minutes === undefined);
   return v as unknown as Result;
 }
 export function parseSource(v: unknown): SourceReceipt {
@@ -152,24 +153,33 @@ export function parseSource(v: unknown): SourceReceipt {
   );
   return v as unknown as SourceReceipt;
 }
-function guidedRequest(q: Record<string, unknown>): q is Record<string, unknown> & GuidedPlanningRequest {
-  if (q.contract_version !== 2 || q.fixture_context !== "guided-water-v1" ||
+function guidedRequest(q: Record<string, unknown>): q is Record<string, unknown> & ManualPlanningRequest {
+  if (!(q.contract_version === 2 ? q.fixture_context === "guided-water-v1" : q.contract_version === 3 && !Object.hasOwn(q, "fixture_context")) ||
     !["subject", "grade", "topic", "method", "language"].every(k => typeof q[k] === "string") ||
     !Number.isInteger(q.duration_minutes) ||
     !(q.context === null || (object(q.context) && typeof q.context.text === "string" && typeof q.context.hypothetical === "boolean")) ||
     !(q.formative_field === null || typeof q.formative_field === "string") ||
     !["learning_objectives", "articulating_axes"].every(k => Array.isArray(q[k]) && (q[k] as unknown[]).every(v => typeof v === "string")) ||
     !(q.reference === null || (object(q.reference) && isUuid(q.reference.source_id) && positive(q.reference.source_version) && Number(q.reference.source_version) <= 2147483646))) return false;
-  return Object.keys(validateGuidedRequest(q as unknown as GuidedPlanningRequest)).length === 0;
+  return Object.keys(validateGuidedRequest(q as unknown as ManualPlanningRequest)).length === 0;
 }
 function initialRequest(q: unknown, r: Record<string, unknown>) {
   if (!object(q)) return false;
-  if (q.contract_version === 2) return guidedRequest(q) &&
+  if (q.contract_version === 2 || q.contract_version === 3) return guidedRequest(q) &&
     (q.reference === null ? r.source_id === null :
       q.reference.source_id === r.source_id && q.reference.source_version === r.source_version);
   return q.contract_version === 1 && typeof q.prompt === "string" &&
     q.source_id === r.source_id && q.expected_source_version === r.source_version &&
     ["timing-example-v1", "water-observation-v1"].includes(String(q.fixture_context));
+}
+/** The recovery slot accepts only the bounded, explicit generation DTO. */
+export function parseGeneratedRequest(q: unknown): GeneratedPlanningRequest {
+  const fields = ["contract_version", "subject", "grade", "topic", "duration_minutes", "method", "language", "context", "learning_objectives", "formative_field", "articulating_axes", "reference"];
+  assert(object(q) && q.contract_version === 3 && Object.keys(q).length === fields.length && fields.every(k => Object.hasOwn(q, k)) && guidedRequest(q));
+  assert(q.context === null || (object(q.context) && Object.keys(q.context).length === 2));
+  assert(q.reference === null || (object(q.reference) && Object.keys(q.reference).length === 2));
+  assert(new TextEncoder().encode(JSON.stringify(q)).length <= 4096);
+  return q as unknown as GeneratedPlanningRequest;
 }
 export function parsePlanning(v: unknown): PlanningDocument {
   assert(object(v) && object(v.receipt) && object(v.request));
@@ -202,7 +212,8 @@ export function parsePlanning(v: unknown): PlanningDocument {
   if (v.initial_request !== undefined) assert(initialRequest(v.initial_request, r));
   const initial = v.initial_request ?? q;
   assert(object(v.result));
-  assert((object(initial) && initial.contract_version === 2) === (v.result.kind === "guided-planning-v1"));
+  assert((object(initial) && (initial.contract_version === 2 || initial.contract_version === 3)) === (v.result.kind === "guided-planning-v1"));
+  assert((object(initial) && initial.contract_version === 3) === (v.result.provenance === "openai-guided-v1"));
   if (v.result.kind === "guided-planning-v1") {
     if (q.kind === "edit" || q.kind === "copy") {
       assert(sameJson(q.initial_request, v.initial_request));
@@ -215,7 +226,7 @@ export function parsePlanning(v: unknown): PlanningDocument {
       assert(v.initial_request === undefined || sameJson(v.initial_request, q));
     }
   }
-  assert(r.source_id !== null || (object(initial) && initial.contract_version === 2));
+  assert(r.source_id !== null || (object(initial) && (initial.contract_version === 2 || initial.contract_version === 3)));
   parseResult(v.result);
   return v as unknown as PlanningDocument;
 }
@@ -248,6 +259,7 @@ export function parseDraft(v: unknown): DraftDocument {
   );
   const result = parseResult(v.result);
   if (result.kind === "guided-planning-v1") assert(object(v.initial_request) && guidedRequest(v.initial_request));
+  assert((object(v.initial_request) && v.initial_request.contract_version === 3) === (result.provenance === "openai-guided-v1"));
   assert(
     guidedResources(result).some(
       (r) =>
@@ -469,9 +481,14 @@ export class AcentaApi {
       (items.length > 0 && v.next_cursor === items.at(-1)!.source_id));
     return { items, next_cursor: v.next_cursor };
   }
+  async generationAvailable(): Promise<boolean> {
+    const value = await this.request("planning-generation");
+    assert(object(value) && typeof value.available === "boolean");
+    return value.available;
+  }
   async create(payload: CreationRequest, key: string) {
     return this.planning(
-      await this.request(payload.contract_version === 2 ? "guided-plannings" : "plannings", "POST", payload, key, false, 4096),
+      await this.request(payload.contract_version === 3 ? "generated-plannings" : payload.contract_version === 2 ? "guided-plannings" : "plannings", "POST", payload, key, false, 4096),
     );
   }
   async read(id: string, revision?: number) {
@@ -571,6 +588,20 @@ export function errorMessage(error: unknown): string {
     return "No se pudo completar la operación. Tu trabajo sigue aquí.";
   if (error.status === 401)
     return "La sesión no está disponible. Conservamos el trabajo pendiente.";
+  if (error.code === "generation_unavailable")
+    return "La generación con IA no está disponible. No se inició un intento. Tus datos siguen aquí.";
+  if (error.code === "generation_input_not_approved")
+    return "Estos datos todavía no están habilitados para generar con IA. No se inició un intento. Tus datos siguen aquí.";
+  if (error.code === "generation_budget_exhausted")
+    return "No hay presupuesto disponible para esta generación. No se inició un intento. Tus datos siguen aquí.";
+  if (error.code === "generation_busy")
+    return "Ya hay otra generación en curso. No se inició este intento. Consulta el estado de la anterior.";
+  if (error.code === "generation_pending")
+    return "La generación sigue pendiente. Consulta su estado; no se enviará otro intento.";
+  if (error.code === "generation_uncertain")
+    return "No se pudo confirmar el resultado de la generación. Consulta su estado; no se enviará otro intento.";
+  if (error.code === "generation_failed")
+    return "La generación terminó sin un resultado utilizable. Tus datos siguen aquí. Puedes iniciar una nueva creación de forma explícita.";
   if (error.status === 409)
     return "Hay una versión o petición diferente. Conservamos tu texto; revisa el estado antes de continuar.";
   if (error.status === 422 && error.code === "unsupported_fixture")

@@ -1,9 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
 import { GuidedServer } from "./guided-server";
-import { guidedRevised } from "./guided-fixtures";
+import { guidedPlanning, guidedRevised } from "./guided-fixtures";
+import { json } from "./acenta-fixtures";
 const evidence = process.env.ACENTA_EVIDENCE_DIR ?? "../evidence/acenta";
-async function mount(page: Page) {
-  const server = new GuidedServer();
+async function mount(page: Page, server = new GuidedServer()) {
   await page.route("**/scopes/**", async (route) => {
     const q = route.request();
     try {
@@ -28,6 +28,40 @@ async function mount(page: Page) {
     .click();
   return server;
 }
+test("available AI creation stays pending without resending and displays the recovered provenance", async ({ page }) => {
+  const server = new GuidedServer();
+  let pending = true;
+  server.after = async (call, response) => {
+    if (call.path === "planning-generation") return json({ available: true });
+    if (call.path === "generated-plannings") {
+      const input = JSON.parse(call.body!);
+      expect(input.contract_version).toBe(3);
+      expect(input).not.toHaveProperty("fixture_context");
+      const doc = guidedPlanning(call.key!);
+      doc.request = input;
+      doc.result.provenance = "openai-guided-v1";
+      doc.result.notice = "Respuesta sintética de transporte para comprobar software; no valida calidad educativa.";
+      server.put(doc);
+      return json({ detail: "generation_pending" }, 409);
+    }
+    if (pending && call.path.startsWith("planning-operations/"))
+      return json({ detail: "generation_uncertain" }, 409);
+    return response;
+  };
+  await mount(page, server);
+  await expect(page.getByRole("status")).toContainText("La generación con IA está disponible");
+  await page.getByRole("button", { name: "Usar datos del ejemplo" }).click();
+  await page.getByRole("button", { name: "Crear planeación", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Resultado sin confirmar" })).toBeVisible();
+  await page.getByRole("button", { name: "Consultar estado", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("No se pudo confirmar el resultado");
+  pending = false;
+  await page.getByRole("button", { name: "Consultar estado", exact: true }).click();
+  const reader = page.getByRole("dialog", { name: "Vista previa", exact: true });
+  await expect(reader).toBeVisible();
+  await expect(reader.locator(".guided-type")).toContainText("Generada con IA");
+  expect(server.calls.filter(call => call.path === "generated-plannings")).toHaveLength(1);
+});
 async function create(page: Page) {
   await page.getByRole("button", { name: "Usar datos del ejemplo" }).click();
   await page

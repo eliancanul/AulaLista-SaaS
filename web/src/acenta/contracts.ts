@@ -37,7 +37,11 @@ export interface GuidedPlanningRequest {
   articulating_axes: string[];
   reference: { source_id: string; source_version: number } | null;
 }
-export type CreationRequest = PlanningRequest | GuidedPlanningRequest;
+export interface GeneratedPlanningRequest extends Omit<GuidedPlanningRequest, "contract_version" | "fixture_context"> {
+  contract_version: 3;
+}
+export type ManualPlanningRequest = GuidedPlanningRequest | GeneratedPlanningRequest;
+export type CreationRequest = PlanningRequest | ManualPlanningRequest;
 export interface Receipt {
   contract_version: 1;
   namespace: "planning-v1";
@@ -67,7 +71,7 @@ export interface Resource {
   elements: Element[];
 }
 export interface Result {
-  provenance: "synthetic-fixture-v1";
+  provenance: "synthetic-fixture-v1" | "openai-guided-v1";
   title: string;
   notice: string;
   kind?: "guided-planning-v1";

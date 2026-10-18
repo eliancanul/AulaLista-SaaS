@@ -1,5 +1,6 @@
-import { isUuid } from "./api";
-import type { EditorIntent, EditorState, BackupStore } from "./controller";
+import { isUuid, parseGeneratedRequest } from "./api";
+import type { EditorIntent, EditorState, BackupStore, CreateIntent } from "./controller";
+import type { GeneratedPlanningRequest } from "./contracts";
 
 export const RECOVERY_KEY = "acenta:editor-recovery:v1";
 export const RECOVERY_TTL = 86_400_000;
@@ -56,6 +57,7 @@ export const uncertainPurgeNotice = "Si había un guardado sin confirmar, pudo c
 export const cleanupUnavailable = "No pudimos confirmar la limpieza del respaldo. Puede quedar texto en este navegador; si es compartido, borra los datos de este sitio.";
 /** One bounded slot. The UUID is a discriminator, never a credential or encryption. */
 export class EditorRecovery {
+  readonly generations: GenerationRecovery;
   warning = "";
   candidate: RecoveryEnvelope | null = null;
   private identity: RecoveryIdentity | null = null;
@@ -63,7 +65,9 @@ export class EditorRecovery {
   private episode: {created_at_ms:number; expires_at_ms:number} | null = null;
   private blocked = false;
   private writeFailed = false;
-  constructor(private storage: () => BackupStore = () => globalThis.sessionStorage, private clock = () => Date.now()) {}
+  constructor(private storage: () => BackupStore = () => globalThis.sessionStorage, private clock = () => Date.now()) {
+    this.generations = new GenerationRecovery(storage, clock);
+  }
   get enabled() { return !!this.identity?.recovery_context_id; }
   purge(uncertain = false) {
     this.candidate = null;
@@ -134,5 +138,95 @@ export class EditorRecovery {
       buffer:{text:editor.text,generation:editor.generation,draft_id:editor.draftId,draft_revision:editor.draftRevision},pending:editor.pending};
     try { const raw=JSON.stringify(e); parseRecovery(raw,now); this.storage().setItem(RECOVERY_KEY,raw); this.warning=""; }
     catch { this.writeFailed=true; this.warning=recoveryUnavailable; }
+  }
+}
+
+export const GENERATION_RECOVERY_KEY = "acenta:generation-recovery:v1";
+interface GenerationEnvelope extends RecoveryIdentity {
+  schema: 1;
+  recovery_context_id: string;
+  workspace_id: string;
+  created_at_ms: number;
+  expires_at_ms: number;
+  pending: CreateIntent & { payload: GeneratedPlanningRequest };
+}
+function parseGenerationRecovery(raw: string, now: number): GenerationEnvelope | null {
+  if (new TextEncoder().encode(raw).length > 8192) throw Error("oversize generation recovery");
+  const e: unknown = JSON.parse(raw);
+  if (record(e) && e.cleared === true) { exact(e, ["schema", "cleared"]); if (e.schema !== 1) throw Error("schema"); return null; }
+  exact(e, ["schema", "principal_id", "scope_id", "recovery_context_id", "workspace_id", "created_at_ms", "expires_at_ms", "pending"]);
+  if (e.schema !== 1 || ![e.principal_id,e.scope_id,e.recovery_context_id,e.workspace_id].every(isUuid) ||
+    !integer(e.created_at_ms) || !integer(e.expires_at_ms) || e.expires_at_ms - e.created_at_ms !== RECOVERY_TTL) throw Error("invalid generation identity");
+  if (!Number.isFinite(now) || now < e.created_at_ms || now >= e.expires_at_ms) throw Error("expired recovery");
+  exact(e.pending, ["kind", "key", "payload", "navigation"]);
+  if (e.pending.kind !== "create" || !isUuid(e.pending.key) || !integer(e.pending.navigation)) throw Error("invalid generation intent");
+  parseGeneratedRequest(e.pending.payload);
+  return e as unknown as GenerationEnvelope;
+}
+/** Independent bounded slot because an editor buffer and generation may coexist. */
+class GenerationRecovery {
+  warning = "";
+  candidate: GenerationEnvelope | null = null;
+  private identity: RecoveryIdentity | null = null;
+  private envelope: GenerationEnvelope | null = null;
+  private blocked = false;
+  constructor(private storage: () => BackupStore, private clock: () => number) {}
+  purge() {
+    this.candidate = null; this.envelope = null; this.blocked = false;
+    try { this.storage().removeItem(GENERATION_RECOVERY_KEY); this.warning = ""; return true; }
+    catch {
+      try { this.storage().setItem(GENERATION_RECOVERY_KEY, tombstone); } catch { /* Do not promise physical deletion. */ }
+      this.warning = cleanupUnavailable; return false;
+    }
+  }
+  admit(identity: RecoveryIdentity, restore: boolean) {
+    this.identity = { principal_id: identity.principal_id, scope_id: identity.scope_id, recovery_context_id: identity.recovery_context_id };
+    this.candidate = null; this.envelope = null; this.blocked = false; this.warning = "";
+    if (!identity.recovery_context_id) { this.purge(); return; }
+    if (!restore) return;
+    try {
+      const raw = this.storage().getItem(GENERATION_RECOVERY_KEY);
+      if (!raw) return;
+      const e = parseGenerationRecovery(raw, this.clock());
+      if (!e) { this.purge(); return; }
+      if (e.principal_id !== identity.principal_id || e.scope_id !== identity.scope_id || e.recovery_context_id !== identity.recovery_context_id) {
+        this.purge(); this.warning = [this.warning, uncertainPurgeNotice].filter(Boolean).join(" "); return;
+      }
+      this.candidate = this.envelope = e;
+    } catch (error) {
+      if (error instanceof Error && error.message === "expired recovery") {
+        this.purge(); this.warning = ["El respaldo de la generación ha caducado. Revisa la biblioteca antes de crear otra.", this.warning].filter(Boolean).join(" ");
+      } else this.warning = "No pudimos utilizar el respaldo de la generación. Se conserva sin reemplazar; no se iniciará otra generación.";
+      this.blocked = true;
+    }
+  }
+  take() {
+    const e = this.candidate;
+    if (!e) return null;
+    try { parseGenerationRecovery(JSON.stringify(e), this.clock()); }
+    catch { this.purge(); this.blocked = true; this.warning = "El respaldo de la generación ha caducado. Revisa la biblioteca antes de crear otra."; return null; }
+    this.candidate = null;
+    return e;
+  }
+  save(pending: CreateIntent | null) {
+    if (pending?.payload.contract_version !== 3) {
+      if (this.envelope) this.purge();
+      return true;
+    }
+    if (!this.identity?.recovery_context_id || this.blocked) {
+      this.warning ||= recoveryUnavailable; return false;
+    }
+    const now = this.clock();
+    const prior = this.envelope;
+    const e: GenerationEnvelope = {
+      schema: 1, ...this.identity, recovery_context_id: this.identity.recovery_context_id,
+      workspace_id: prior?.workspace_id ?? crypto.randomUUID(),
+      created_at_ms: prior?.created_at_ms ?? now, expires_at_ms: prior?.expires_at_ms ?? now + RECOVERY_TTL,
+      pending: pending as GenerationEnvelope["pending"],
+    };
+    try {
+      const raw = JSON.stringify(e); parseGenerationRecovery(raw, now);
+      this.storage().setItem(GENERATION_RECOVERY_KEY, raw); this.envelope = e; this.warning = ""; return true;
+    } catch { this.blocked = true; this.warning = recoveryUnavailable; return false; }
   }
 }

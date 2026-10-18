@@ -370,6 +370,27 @@ Después de 401/reautenticación sólo se reabre lo confirmado en Mis recursos.
 No se promete conservar formulario ni texto pendiente después de perder sesión.
 `guided-api.test.ts`, `guided-controller.test.ts`, `guided.browser.ts` y
 `guided.integration.ts` cubren contrato, recuperación y recorrido HTTP/PostgreSQL.
+
+### Planeación OpenAI preparada offline
+
+La capacidad autorizada `planning-generation` habilita el DTO manual v3 en
+`generated-plannings`; el factory normal devuelve disponibilidad falsa. Se
+conserva el formulario, lector y edición B3, con procedencia `openai-guided-v1`
+impuesta por servidor. El ejemplo v2 mantiene su significado.
+
+Antes del POST v3, la composición real de `AuthController` respalda la clave y
+solicitud en un slot de generación de hasta 8 KiB, separado del editor, con
+actor/ámbito/contexto y TTL fijo de hasta 24 horas. Si no consigue escribirlo,
+no inicia el envío. Al recargar bajo la misma sesión vigente sólo consulta GET;
+pendiente, incierto y 404 nunca originan otro POST automático. Un fallo definitivo
+permite una nueva operación mediante acción explícita. Logout, 401, cambio de
+cuenta/contexto y caducidad invalidan el respaldo; no se promete continuidad
+tras reautenticación. Los límites de storage y borrado físico de B3 siguen vigentes.
+
+Los casos `generated-*.test.ts` y `guided.browser.ts` usan respuestas de software
+simuladas. No llaman a OpenAI ni validan contenido educativo. El
+[contrato y preflight de activación](../docs/specs/0013-planeacion-openai.md)
+separan esta evidencia de una ejecución real.
 El nuevo caso de `auth.integration.ts` usa login/cookies/CSRF reales y sólo
 sustituye el transporte del correo de prueba, como el harness existente.
 

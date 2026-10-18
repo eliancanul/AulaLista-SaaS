@@ -34,10 +34,8 @@ class ExactReference(BaseModel):
     source_version: Annotated[int, Field(strict=True, ge=1, le=2_147_483_646)]
 
 
-class GuidedPlanningRequest(BaseModel):
+class ManualPlanningInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    contract_version: Annotated[int, Field(strict=True, ge=2, le=2)]
-    fixture_context: Literal["guided-water-v1"]
     subject: Annotated[Text, Field(max_length=120)]
     grade: Annotated[Text, Field(max_length=80)]
     topic: Annotated[Text, Field(max_length=200)]
@@ -61,6 +59,15 @@ class GuidedPlanningRequest(BaseModel):
             separators=(",", ":"),
             ensure_ascii=False,
         ).encode()
+
+
+class GuidedPlanningRequest(ManualPlanningInput):
+    contract_version: Annotated[int, Field(strict=True, ge=2, le=2)]
+    fixture_context: Literal["guided-water-v1"]
+
+
+class GeneratedPlanningRequest(ManualPlanningInput):
+    contract_version: Annotated[int, Field(strict=True, ge=3, le=3)]
 
 
 def generate_guided(request: GuidedPlanningRequest) -> dict:

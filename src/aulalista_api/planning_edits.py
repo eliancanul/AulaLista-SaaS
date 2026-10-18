@@ -262,11 +262,14 @@ class PlanningEdits:
     def write(
         self, actor_id, scope_id, planning_id, operation_id, request, *, copy=False
     ):
+        from aulalista_api.planning_generation import reject_generation_operation
+
         kind = "copy" if copy else "edit"
         digest = fingerprint(kind, planning_id, request)
         with Session(self.engine) as session, session.begin():
             actor_id = authorize(session, actor_id, scope_id)
             lock_operation(session, scope_id, operation_id)
+            reject_generation_operation(session, scope_id, operation_id)
             previous = session.scalar(
                 select(PlanningRevision).where(
                     PlanningRevision.scope_id == scope_id,

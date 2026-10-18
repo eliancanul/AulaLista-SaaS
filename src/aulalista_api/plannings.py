@@ -171,6 +171,8 @@ class Plannings:
         operation_id: UUID,
         request: PlanningRequest | GuidedPlanningRequest,
     ) -> dict:
+        from aulalista_api.planning_generation import reject_generation_operation
+
         canonical = request.canonical()
         if len(canonical) > MAX_REQUEST_BYTES:
             raise MaterialError(413, "content_too_large")
@@ -188,6 +190,7 @@ class Plannings:
         with Session(self.engine) as session, session.begin():
             actor_id = authorize(session, actor_id, scope_id)
             session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": lock})
+            reject_generation_operation(session, scope_id, operation_id)
             previous = session.scalar(
                 select(PlanningRevision).where(
                     PlanningRevision.scope_id == scope_id,
