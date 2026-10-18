@@ -1,6 +1,6 @@
 # Especificación 0010: herramientas y contexto curricular
 
-Estado: diseño aprobado por el usuario el 18 de octubre de 2026 para [#18](https://github.com/eliancanul/AulaLista-SaaS/issues/18); implementación pendiente. Programa analítico queda dentro de Planeación de clase, sin otra tarjeta. La vista previa de pantallas debe aprobarse antes de modificar Figma o implementar UI.
+Estado: diseño aprobado por el usuario el 18 de octubre de 2026 para [#18](https://github.com/eliancanul/AulaLista-SaaS/issues/18); implementación pendiente. Programa analítico queda dentro de Planeación de clase, sin otra tarjeta. Las composiciones de Planeación, lectura y reutilización aprobadas están trasladadas a Figma; la sección 11 precisa su cobertura y los pendientes. Esto no acredita implementación de UI.
 
 ## Decisiones y trazabilidad
 
@@ -48,7 +48,7 @@ Ninguna entrada se habilita por aparecer en el catálogo. Las siete futuras nece
 
 **Alcance de edición:** «resultado editable» significa que puede corregirse cuando el docente lo elija; no obliga a editar para consultar, guardar o reabrir. Se conserva la edición básica de fase 1, acotada a elementos declarados editables de sus materiales; su adaptación al nuevo tipo de Planeación todavía debe implementarse y probarse. El editor completo de texto enriquecido queda para una integración posterior y no es requisito de este primer recorrido.
 
-**Composición visual propuesta:** navegación, tipografía, color y controles propios de Acenta; formulario compacto de una columna, etiquetas persistentes y ayuda breve, sin una barra lateral explicativa. La procedencia se muestra junto al campo o material correspondiente, con el detalle de fuentes accesible en contexto. La vista previa prioriza el material. Teclado, foco y avisos accesibles forman parte de la aceptación futura, no se acreditan con este documento.
+**Composición visual aprobada para los recorridos enlazados en la sección 11:** navegación, tipografía, color y controles propios de Acenta; formulario compacto de una columna, etiquetas persistentes y ayuda breve, sin una barra lateral explicativa. La procedencia se muestra junto al campo o material correspondiente, con el detalle de fuentes accesible en contexto. La vista previa prioriza el material. En móvil se usa una composición propia de lectura y secciones, no una reducción del modal de escritorio. Teclado, foco y avisos accesibles forman parte de la aceptación futura, no se acreditan con este documento.
 
 El campo Contexto permite describir la necesidad del docente. No sustituye los campos guiados ni exige datos identificables de estudiantes. Si describe una situación hipotética, esa condición se conserva al generar, derivar y reabrir: nunca se convierte en un diagnóstico de un grupo real. No exige otra confirmación. Formularios y resultados permanecen privados en el ámbito autorizado.
 
@@ -127,11 +127,22 @@ La selección reúne marco curricular, grado/fase, campo, contenido y PDA. Se co
 
 Se conservan por separado **cita literal**, **síntesis/sugerencia** y **dato ausente**. Si se modifica una cita, la versión modificada deja de mostrarse como literal. La selección de un PDA no certifica eficacia docente, alineación completa ni aprobación institucional.
 
-### Versiones y permisos pendientes
+### Versiones identificadas y decisión pendiente
 
-La [edición 2024 de Fase 4](https://educacionbasica.sep.gob.mx/wp-content/uploads/2024/06/Programa_Sintetico_Fase_4.pdf) declara primera edición 2024. Existe además una [ruta oficial con nombre 2025](https://educacionbasica.sep.gob.mx/wp-content/uploads/2025/Plan_y_programas_de_estudio_2025/WEB%20FASE%204-2025.pdf). No se ha establecido aquí su equivalencia, diferencias ni cuál debe ofrecerse como predeterminada. Un nombre de archivo o carpeta no basta para decidirlo. Se propone identificarlas separadamente y comparar portada, metadatos, contenido y referencias antes de escoger.
+La comparación documental acotada del 18 de octubre de 2026 identifica ambas fuentes por separado:
 
-El aviso de reproducción de la edición 2024 limita la autorización indicada a fines no comerciales. **No se presume permiso para importar, redistribuir o explotar un corpus curricular en un SaaS comercial.** Esta propuesta registra enlaces y requisitos; antes de incorporar contenido al producto deberán resolverse los derechos y el destino autorizado. Tampoco autoriza copiar el banco comercial de Teachy.
+| Fuente SEP, Fase 4 | Edición declarada e ISBN | Páginas físicas | Localizadores comprobados, base 1 |
+| --- | --- | --- | --- |
+| [PDF 2024](https://educacionbasica.sep.gob.mx/wp-content/uploads/2024/06/Programa_Sintetico_Fase_4.pdf) | Primera edición 2024; ISBN en trámite | 96 | Impresa 45 = física 45; impresa 46 = física 46 |
+| [PDF 2025](https://educacionbasica.sep.gob.mx/wp-content/uploads/2025/Plan_y_programas_de_estudio_2025/WEB%20FASE%204-2025.pdf) | Primera edición 2025; ISBN 978-607-2605-36-7 | 99 | Impresa 45 = física 47; impresa 46 = física 48 |
+
+SHA-256 de los archivos consultados: 2024 `36e0c3cdbc3221cdf9c4b9f3ec9e889f98060249fc0ab1ddecd419b28bcbe734`; 2025 `84eacf026114b47a3d4cffb6e926068fe6f8cb1c5abae8fd5c063eb9b41e1e26`.
+
+Se cotejaron seis celdas de las primeras filas de las páginas impresas 45 y 46. Cinco coinciden tras normalizar espacios y cortes de renglón; la restante difiere únicamente en la puntuación del inciso sobre cera en cuarto grado. La fila de ecosistemas y sus tres PDA de tercero coinciden en ese cotejo. El ciclo del agua de la impresa 46 corresponde a cuarto, no a tercero. **No se establece equivalencia global de las ediciones ni validación curricular de una actividad.**
+
+**Recomendación pendiente de decisión:** usar la edición bibliográfica 2025 como referencia del piloto limitado, fijando URL, hash y localizador, y conservar 2024 como antecedente. Su ISBN y su inclusión en la [bibliografía oficial USICAMM 2026–2027, entrada 28](https://guias.usicamm.gob.mx/2026-2027/ADEB/primaria/) respaldan esa recomendación, no una sustitución normativa. El prototipo aprobado aún referencia SEP 2024, impresa/física 45; no cambiarlo silenciosamente ni presentar 2025 como ya seleccionada.
+
+Ambos avisos de reproducción indican fines no comerciales, conservación del material y atribución. **No se presume permiso para importar, redistribuir o explotar un corpus curricular en un SaaS comercial.** Esta especificación registra enlaces y metadatos; no incorpora los PDFs, extracciones o corpus. Antes de incorporar contenido al producto deberán resolverse los derechos y el destino autorizado. Tampoco autoriza copiar el banco comercial de Teachy.
 
 ## 7. Contratos de las otras cinco herramientas
 
@@ -241,7 +252,7 @@ Antes de generación real se fijarán límites de entrada/salida, duración, int
 
 ### Orden propuesto tras la revisión
 
-1. **Aprobar la vista previa:** revisar Planeación y su modalidad Programa analítico, con estados normal, sin currículo y error recuperable. Mantener [#11](https://github.com/eliancanul/AulaLista-SaaS/issues/11) como referencia de diseño; no cambiar Figma antes de aprobar esa vista previa.
+1. **Aplicar el diseño aprobado:** usar las composiciones y límites de la sección 11, manteniendo [#11](https://github.com/eliancanul/AulaLista-SaaS/issues/11) como referencia. La aprobación visual general ya no está pendiente; antes del corte de alta/edición del apartado analítico deberá concretarse su pantalla específica, sin reabrir lo ya aprobado.
 2. **Incorporar los contratos de #18:** matriz y fuentes identificadas, decisiones pendientes explícitas y revisión independiente del documento. El cierre documental exige evidencia del candidato en PR/CI; no certifica implementación ni resuelve derechos o equivalencia curricular pendientes.
 3. **Primer corte posterior:** Planeación desde cero con formulario guiado y contexto manual, demostración sintética claramente etiquetada, vista previa inicial, edición básica opcional y guardado/reapertura completos.
 4. **Reutilización de apartados:** Analítico → Planeación puede desarrollarse con contexto manual autorizado, sin depender de importar un corpus oficial. La selección desde un banco curricular es un corte separado, condicionado a resolver derechos, fuentes y versión aplicable. No se importa corpus por defecto.
@@ -251,8 +262,15 @@ Cada implementación posterior necesita alcance autorizado, pruebas del candidat
 
 ## 11. Pendientes de implementación y fuentes
 
-1. **Vista previa:** el usuario eligió el patrón de resultado modal con fondo oscurecido y Editar opcional; la nueva composición visual sigue pendiente de aprobación antes de tocar Figma/UI. La ubicación de Programa analítico dentro de Planeación ya está decidida. La dirección elegida no acredita móvil, teclado, foco ni comportamiento implementado.
-2. **Decisión curricular de diseño pendiente:** elegir y registrar la fuente/edición oficial exacta para la cobertura inicial de Fase 4, tras comparar los documentos 2024 y 2025. La matriz admite pendientes, pero esa selección aún no está decidida; se mantiene explícita al valorar el cierre documental de #18. Los derechos y la autorización de importar/utilizar un corpus comercial son una puerta operativa separada: no se exige una importación para cerrar el contrato ni se bloquea usar contexto manual autorizado.
+1. **Diseño visual aprobado y trasladado a Figma:** vista de lectura en escritorio con fondo oscurecido y Editar opcional; selector curricular y estado aplicado; campos/validación y generación/recuperación; lectura móvil v4; explorador ancho de apartados y clase derivada. Referencias exactas:
+   - [Lectura de material](https://www.figma.com/design/WEmZPyqYaUjBpY2fMhXItU?node-id=163-3502).
+   - [Selector curricular](https://www.figma.com/design/WEmZPyqYaUjBpY2fMhXItU?node-id=178-4522) y [contexto aplicado](https://www.figma.com/design/WEmZPyqYaUjBpY2fMhXItU?node-id=178-4521).
+   - [Campos y validación](https://www.figma.com/design/WEmZPyqYaUjBpY2fMhXItU?node-id=178-4524) y [generación/recuperación](https://www.figma.com/design/WEmZPyqYaUjBpY2fMhXItU?node-id=178-4525).
+   - [Móvil v4](https://www.figma.com/design/WEmZPyqYaUjBpY2fMhXItU?node-id=178-4526) y [lector móvil](https://www.figma.com/design/WEmZPyqYaUjBpY2fMhXItU?node-id=182-4298).
+   - [Explorador de apartados](https://www.figma.com/design/WEmZPyqYaUjBpY2fMhXItU?node-id=169-3682) y [Planeación derivada](https://www.figma.com/design/WEmZPyqYaUjBpY2fMhXItU?node-id=169-3681).
+
+   Se verificaron visualmente las capturas y la estructura editable, fuentes y conexiones declaradas del prototipo; no se realizaron pruebas de clics en navegador ni pruebas de UI implementada, teclado, foco o accesibilidad. Editar no tiene destino funcional. Búsqueda, entrada manual y Consultar estado no simulan servicios reales. No se añadió una pantalla de alta/edición de Programa analítico: su modalidad y contrato están aprobados, pero esa composición específica queda por concretar en #53. Este pendiente acotado no mantiene bloqueada toda la especificación documental.
+2. **Decisión curricular de diseño pendiente:** elegir y registrar la fuente/edición oficial exacta para la cobertura inicial de Fase 4, considerando la comparación acotada y recomendación de la sección 6. La matriz admite pendientes, pero esa selección aún no está decidida; se mantiene explícita al valorar el cierre documental de #18. Los derechos y la autorización de importar/utilizar un corpus comercial son una puerta operativa separada: no se exige una importación para cerrar el contrato ni se bloquea usar contexto manual autorizado.
 3. **Campos de las otras cinco herramientas:** contrato de diseño propio aprobado como propuesta; afinar su interfaz y límites por corte. No se atribuyen a Teachy sin comprobar sus formularios.
 4. **Generación real, archivos, web y presupuesto:** [#19](https://github.com/eliancanul/AulaLista-SaaS/issues/19) y autorizaciones propias mantienen sus puertas; sus controles aquí son contrato futuro.
 
@@ -262,4 +280,4 @@ Fuentes revisadas: issue, catálogo, instrucciones y contratos de la base indica
 
 Este diseño no acredita tests de implementación, benchmarks, generaciones de Acenta, migraciones, importaciones ni cambios de producto. La revisión documental y la CI aplicable a su candidato se registran en el PR; no certifican generación real, seguridad operativa o eficacia pedagógica. No hay migración o recuperación de datos aplicable a incorporar esta spec.
 
-**Siguiente paso:** revisar la nueva vista previa modal y registrar por separado su aprobación visual y la evidencia de cada implementación posterior.
+**Siguiente paso:** integrar la especificación sólo tras revisión y CI del candidato exacto; registrar la decisión bibliográfica pendiente y comprobar las dependencias antes de ejecutar #52/#53. La evidencia visual y la de cada implementación posterior se conservan por separado.
