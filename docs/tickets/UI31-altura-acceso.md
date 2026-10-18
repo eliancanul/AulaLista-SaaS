@@ -31,10 +31,19 @@ validación de correo, acceso a documentos legales repetido con teclado y Google
 simulado con correo deshabilitado. Los stubs sólo comprueban disposición;
 no acreditan el widget Google real ni autenticación externa.
 
-Validación local actual: 275 unitarias y comprobación TypeScript/build correctos.
-Chromium instalado no puede iniciar en este entorno por `socket() Operation not permitted`;
-no se alcanzó ninguna aserción geométrica. Las 25 pruebas nuevas de navegador,
-la regresión completa, revisión independiente y CI exacta siguen pendientes.
-No heredar las 171 unitarias/37 browser de la revisión histórica como resultado actual.
+Validación local actual: 275 unitarias y comprobación TypeScript/build correctos;
+64 recorridos Chromium correctos, incluidas las 25 pruebas nuevas. Se usó Chromium
+Headless Shell 154.0.8037.57 de Debian oficial con sus recursos de la misma versión.
+El Chromium completo abortaba antes de navegar por una restricción de socket Unix;
+no se cambiaron permisos. La contraprueba actual sobre la base falla porque el pie
+termina en y=898 a 1470×762; la misma prueba pasa con el candidato.
+
+La [primera CI](https://github.com/eliancanul/AulaLista-SaaS/actions/runs/39131653272)
+del head `f5517631fe2bbd4f671df24983c5b0a4bd9db8a7` pasó 62/64 recorridos: dos
+selectores de alerta históricos eran ambiguos al coexistir con el aviso de recuperación
+añadido en main. Se acotaron al mensaje esperado, conservando todas las comprobaciones
+geométricas y sin cambiar CSS. La nueva CI exacta y ratificación independiente se
+registran en el PR; no reutilizar el resultado del head anterior.
+El foco programático usado en dos pruebas no certifica tabulación/restauración completa.
 Firefox/WebKit, widget Google real, teclado virtual y ampliación de texto siguen
 fuera de lo acreditado; no se reintenta una descarga de navegador denegada.

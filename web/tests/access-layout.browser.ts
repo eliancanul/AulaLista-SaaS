@@ -97,7 +97,9 @@ for (const viewport of [
 test("short access scrolls naturally for errors without overlapping legal actions", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 600 });
   await openAccess(page, false, true);
-  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.getByRole("alert").filter({
+    hasText: "El acceso no está disponible ahora. Vuelve a intentarlo.",
+  })).toBeVisible();
   const layout = await accessGeometry(page);
   expect(layout.footer.top).toBeGreaterThanOrEqual(layout.selector.bottom + 31);
   expect(layout.scrollWidth).toBeLessThanOrEqual(1280);
@@ -115,7 +117,9 @@ test("email validation stays above the legal footer in a short window", async ({
   await openAccess(page);
   await page.getByRole("button", { name: "Continuar con correo" }).click();
   await page.getByRole("button", { name: "Enviar código" }).click();
-  await expect(page.getByRole("alert")).toHaveText("Escribe un correo válido para continuar.");
+  await expect(page.getByRole("alert").filter({
+    hasText: "Escribe un correo válido para continuar.",
+  })).toHaveText("Escribe un correo válido para continuar.");
   const layout = await accessGeometry(page);
   expect(layout.footer.top).toBeGreaterThanOrEqual(layout.selector.bottom + 31);
   expect(layout.scrollWidth).toBeLessThanOrEqual(1280);
