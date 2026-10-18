@@ -1,6 +1,7 @@
 """Ejemplo sintético reconocido; función pura, sin parser, persistencia ni red."""
 
 from aulalista_api import water_fixture
+from aulalista_api.planning_result import RESULT_ADAPTER
 
 FIXTURE_SOURCE = (
     b"AulaLista synthetic timing-example-v1\n"
@@ -10,6 +11,12 @@ SUPPORTED_PROMPT = "Ajusta el ejemplo a 40 minutos."
 
 
 def generate(context: str, prompt: str, source: bytes) -> dict:
+    result = _generate(context, prompt, source)
+    RESULT_ADAPTER.validate_python(result)
+    return result
+
+
+def _generate(context: str, prompt: str, source: bytes) -> dict:
     if context == water_fixture.FIXTURE_CONTEXT:
         return water_fixture.generate(prompt, source)
     if (context, prompt, source) != (

@@ -81,6 +81,11 @@ suscripción con precio pendiente e inicio limpio siguen como alcance de product
 
 ## Arranque y pruebas
 
+La [preparación Pydantic y Promptfoo](evaluation/promptfoo/README.md) valida el
+contrato de resultado existente y prueba adaptadores Python locales. La ejecución
+de Promptfoo queda bloqueada por solicitudes de red incluso con telemetría
+desactivada; este corte no instala ni ejecuta su CLI.
+
 Sigue [desarrollo y PostgreSQL desechable](docs/development.md) para instalar,
 provisionar la DB de prueba, migrar explícitamente, arrancar, ejecutar tests y
 retirar sólo ese recurso. La configuración ahora **requiere un DSN PostgreSQL**:
