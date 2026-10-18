@@ -29,6 +29,7 @@ from aulalista_api.planning_result import RESULT_ADAPTER
 from aulalista_api.plannings import (
     Planning,
     PlanningRevision,
+    analytic_origin_document,
     document,
     revision_source,
 )
@@ -234,7 +235,7 @@ def edited_result(base: PlanningRevision, request: StatementRequest) -> dict:
 
 
 def draft_document(revision: PlanningDraftRevision, base: PlanningRevision) -> dict:
-    return {
+    saved = {
         "receipt": {
             "contract_version": 1,
             "namespace": "planning-draft-v1",
@@ -253,6 +254,9 @@ def draft_document(revision: PlanningDraftRevision, base: PlanningRevision) -> d
         "result": revision.result,
         "initial_request": base.request.get("initial_request", base.request),
     }
+    if base.analytic_revision_id is not None:
+        saved["analytic_origin"] = analytic_origin_document(base)
+    return saved
 
 
 class PlanningEdits:
@@ -336,6 +340,7 @@ class PlanningEdits:
                     request=payload,
                     result=result,
                     origin_revision_id=origin_id,
+                    analytic_revision_id=base.analytic_revision_id,
                 )
                 session.add(revision)
                 session.flush()

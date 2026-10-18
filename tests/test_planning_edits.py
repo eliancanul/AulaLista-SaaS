@@ -802,6 +802,12 @@ def test_b3_migration_keeps_existing_b2_history(
         )
     command.upgrade(Config("alembic.ini"), "head")
     command.check(Config("alembic.ini"))
+    # Downgrade removed the tables and their grants; migration deliberately does
+    # not provision runtime roles. Regrant the new origin read before serving.
+    with migrated_database.begin() as connection:
+        connection.execute(
+            text("GRANT SELECT ON analytic_section_revision TO aulalista_runtime")
+        )
     monkeypatch.setenv(
         "AULALISTA_DATABASE_URL",
         runtime_database.url.render_as_string(hide_password=False),
