@@ -170,7 +170,9 @@ textarea {
 }
 .access-left {
   position: relative;
-  min-height: 960px;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
 }
 .access-brand {
   position: absolute;
@@ -180,7 +182,8 @@ textarea {
 .access-selector {
   width: 420px;
   max-width: calc(100% - 64px);
-  margin: 360px auto 130px;
+  /* Keep Figma’s y=360 at 960px; give shorter windows their space back. */
+  margin: clamp(128px, calc(100dvh - 600px), 360px) auto 32px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -206,7 +209,7 @@ textarea {
 .access-form {
   width: 420px;
   max-width: calc(100% - 64px);
-  margin: 164px auto 150px;
+  margin: 164px auto 32px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -255,10 +258,8 @@ textarea {
   height: 18px;
 }
 .access-legal {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 62px;
+  margin: auto auto 62px;
+  flex-shrink: 0;
   width: 420px;
   max-width: calc(100% - 64px);
   display: flex;
@@ -273,15 +274,15 @@ textarea {
   text-align: left;
 }
 .access-photo {
-  min-height: 960px;
+  position: relative;
   background: var(--selection);
 }
 .access-photo img {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
-  max-height: 100dvh;
-  min-height: 960px;
   object-fit: cover;
   object-position: 51% center;
 }
@@ -1048,7 +1049,7 @@ dialog::backdrop {
     margin-top: 140px;
   }
   .access-legal {
-    bottom: 32px;
+    margin-bottom: 32px;
   }
   .exit-guard {
     margin: 8vh auto;
