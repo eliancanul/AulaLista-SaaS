@@ -137,7 +137,7 @@ export class FixtureServer {
     const response = this.handle(call);
     return this.after ? this.after(call, response) : response;
   };
-  private handle(c: Call): Response {
+  protected handle(c: Call): Response {
     const { path, method, key } = c;
     const body = c.body && path !== "sources" ? JSON.parse(c.body) : null;
     const missing = () => json({ detail: "not_found" }, 404);

@@ -29,7 +29,7 @@ it("all bundled SVG, PNG and TTF files parse as their declared format and match 
     ),
   );
   expect(actual).toEqual(expected);
-  expect(actual).toHaveLength(20);
+  expect(actual).toHaveLength(29);
 });
 it("asset validation rejects HTML error pages, malformed XML, empty SVG and corrupt binary signatures", () => {
   const result = JSON.parse(

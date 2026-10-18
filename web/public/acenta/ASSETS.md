@@ -73,3 +73,28 @@ el texto de 38px del paquete anterior. El titular derecho eliminado está ausent
 
 Assets y fuentes se sirven localmente. No hay URL temporal Figma en el runtime,
 CDN de fuentes, configuración OAuth ni transmisión de marketing.
+
+## Planeación guiada (#52), 2026-10-18
+
+Nueve SVG de `planning/` exportados íntegros, sin redibujar ni cambiar estilos,
+por `exportAsync({format:'SVG_STRING'})` del conector oficial de sólo lectura.
+Las URL temporales también devolvieron HTML «Site Unavailable»; esos bytes fueron
+rechazados antes de regenerar el manifiesto (29 assets válidos en total).
+
+| Archivo | Nodo aprobado | Dimensiones |
+| --- | --- | --- |
+| back.svg | 191:5045 | 8×16 |
+| sections.svg | 191:5097 | 20×18 |
+| up.svg | 191:5103 | 12×10 |
+| edit.svg | 191:5107 | 24×24 |
+| close.svg | I164:3699;162:400 | 16×16 |
+| document.svg | I164:3699;162:394 | 22×22 |
+| marker.svg | I164:3699;162:425;162:382 | 14×50 |
+| forward.svg | 185:541 | 12×16 |
+| selected.svg | 185:546 | 6×6 |
+
+Diseños consultados: escritorio aprobado v3 163:3502, formulario/estados
+178:4524–178:4525, móvil aprobado v4 178:4526 y lectura completa 182:4298.
+El móvil tiene cabecera, documento desplazable y acciones inferiores propios.
+La UI explica el límite fixture/manual donde el diseño anticipaba generación
+general; no se atribuye adaptación ni alineación curricular a los ejemplos.

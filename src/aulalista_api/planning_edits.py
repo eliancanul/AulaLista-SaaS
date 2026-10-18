@@ -25,7 +25,13 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from aulalista_api.database import Base
 from aulalista_api.materials import MaterialError, SourceVersion, authorize
-from aulalista_api.plannings import Planning, PlanningRevision, document
+from aulalista_api.planning_result import RESULT_ADAPTER
+from aulalista_api.plannings import (
+    Planning,
+    PlanningRevision,
+    document,
+    revision_source,
+)
 
 MAX_EDIT_BYTES = 8192
 RevisionNumber = Annotated[int, Field(strict=True, ge=1, le=2_147_483_646)]
@@ -170,22 +176,61 @@ def exact_revision(session, scope_id, planning_id, number):
     return revision
 
 
+def edit_guided(result: dict, request: StatementRequest) -> bool:
+    # Virtual targets point into the canonical result, never a duplicate resource copy.
+    if request.resource_key == "planning":
+        if request.element_key in {"purpose", "formative_assessment"}:
+            result[request.element_key] = request.text
+            return True
+        for index in range(len(result["materials"])):
+            if request.element_key == f"material-{index}":
+                result["materials"][index] = request.text
+                return True
+    for activity in result["activities"]:
+        if request.resource_key != f"activity:{activity['key']}":
+            continue
+        if request.element_key == "statement":
+            activity["statement"] = request.text
+            return True
+        if request.element_key == "minutes":
+            value = request.text
+            if (
+                not value.isascii()
+                or not value.isdecimal()
+                or len(value) > 3
+                or value.startswith("0")
+                or not 1 <= int(value) <= 180
+            ):
+                raise MaterialError(422, "invalid_request")
+            activity["minutes"] = int(value)
+            result["duration_minutes"] = sum(a["minutes"] for a in result["activities"])
+            return True
+    return False
+
+
 def edited_result(base: PlanningRevision, request: StatementRequest) -> dict:
     result = deepcopy(base.result)
-    for resource in result.get("resources", []):
-        if resource["key"] != request.resource_key:
-            continue
-        for element in resource["elements"]:
-            if (
-                element["key"] == request.element_key
-                and element.get("editable") is True
-                and element["kind"] == "statement"
-            ):
-                element["text"] = request.text
-                if len(json.dumps(result, ensure_ascii=False).encode()) > 8192:
-                    raise MaterialError(413, "content_too_large")
-                return result
-    raise MaterialError(422, "unsupported_target")
+    changed = False
+    if result.get("kind") == "guided-planning-v1":
+        changed = edit_guided(result, request)
+    else:
+        for resource in result.get("resources", []):
+            if resource["key"] != request.resource_key:
+                continue
+            for element in resource["elements"]:
+                if (
+                    element["key"] == request.element_key
+                    and element.get("editable") is True
+                    and element["kind"] == "statement"
+                ):
+                    element["text"] = request.text
+                    changed = True
+    if not changed:
+        raise MaterialError(422, "unsupported_target")
+    RESULT_ADAPTER.validate_python(result)
+    if len(json.dumps(result, ensure_ascii=False).encode()) > 8192:
+        raise MaterialError(413, "content_too_large")
+    return result
 
 
 def draft_document(revision: PlanningDraftRevision, base: PlanningRevision) -> dict:
@@ -231,9 +276,7 @@ class PlanningEdits:
             if previous is not None:
                 if previous.request_fingerprint != digest:
                     raise MaterialError(409, "conflict")
-                saved = document(
-                    previous, session.get(SourceVersion, previous.source_version_id)
-                )
+                saved = document(previous, revision_source(session, previous))
             else:
                 base_number = (
                     request.base_revision if copy else request.expected_revision
@@ -277,6 +320,11 @@ class PlanningEdits:
                     if result == base.result:
                         raise MaterialError(422, "unchanged_text")
                     target_id, number = planning_id, advanced
+                if (
+                    len(json.dumps(payload, ensure_ascii=False).encode())
+                    > MAX_EDIT_BYTES
+                ):
+                    raise MaterialError(413, "content_too_large")
                 revision = PlanningRevision(
                     planning_id=target_id,
                     scope_id=scope_id,
@@ -291,9 +339,7 @@ class PlanningEdits:
                 )
                 session.add(revision)
                 session.flush()
-                saved = document(
-                    revision, session.get(SourceVersion, base.source_version_id)
-                )
+                saved = document(revision, revision_source(session, base))
         return saved
 
     def preserve_draft(
@@ -380,9 +426,7 @@ class PlanningEdits:
         with Session(self.engine) as session, session.begin():
             actor_id = authorize(session, actor_id, scope_id)
             revision = exact_revision(session, scope_id, planning_id, number)
-            return document(
-                revision, session.get(SourceVersion, revision.source_version_id)
-            )
+            return document(revision, revision_source(session, revision))
 
     def read_draft(self, actor_id, scope_id, *, draft_id=None, operation_id=None):
         with Session(self.engine) as session, session.begin():
@@ -438,7 +482,7 @@ class PlanningEdits:
                         (PlanningRevision.planning_id == Planning.id)
                         & (PlanningRevision.number == Planning.current_revision),
                     )
-                    .join(
+                    .outerjoin(
                         SourceVersion,
                         PlanningRevision.source_version_id == SourceVersion.id,
                     )

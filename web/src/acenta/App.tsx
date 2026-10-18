@@ -6,8 +6,6 @@ import React, {
   useRef,
   useState,
   useSyncExternalStore,
-  type ReactNode,
-  type RefObject,
 } from "react";
 import {
   AcentaController,
@@ -23,122 +21,10 @@ import {
   type Resource,
 } from "./contracts";
 import { AcentaNavigation, type NavigationPosition } from "./navigation";
-import { toolsMenuPosition, toolsMenuScroll } from "./tools-menu";
 import { EditorExitGuard } from "./editor-exit";
-const asset = (name: string) => `/acenta/${name}`;
-function Icon({ name, small = false }: { name: string; small?: boolean }) {
-  return (
-    <img
-      className={small ? "icon small" : "icon"}
-      src={asset(`${name}.svg`)}
-      alt=""
-    />
-  );
-}
-function Logo({ large = false }: { large?: boolean }) {
-  return (
-    <img
-      className={large ? "logo large" : "logo"}
-      src={asset("acenta-logo-reconstruido-tinta.svg")}
-      alt="Acenta"
-    />
-  );
-}
-function Dialog({
-  children,
-  title,
-  onClose,
-  className = "",
-  anchor,
-}: {
-  children: ReactNode;
-  title: string;
-  onClose: () => void;
-  className?: string;
-  anchor?: RefObject<HTMLElement | null>;
-}) {
-  const ref = useRef<HTMLDialogElement>(null);
-  useLayoutEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    const dialog = ref.current!;
-    dialog.showModal();
-    let space: HTMLDivElement | null = null;
-    const position = () => {
-      if (anchor?.current) {
-        const scroll = toolsMenuScroll(
-          anchor.current.getBoundingClientRect(),
-          window.innerHeight,
-        );
-        if (scroll > 0 && !space) {
-          // Give the page enough scroll range without moving the menu above its trigger.
-          space = document.createElement("div");
-          space.className = "tools-menu-space";
-          space.setAttribute("aria-hidden", "true");
-          document.body.append(space);
-        }
-        if (scroll) window.scrollBy({ top: scroll, behavior: "instant" });
-        Object.assign(
-          dialog.style,
-          toolsMenuPosition(anchor.current.getBoundingClientRect(), {
-            width: window.innerWidth,
-            height: window.innerHeight,
-          }),
-        );
-      }
-    };
-    position();
-    const observer = anchor ? new ResizeObserver(position) : null;
-    if (anchor) {
-      window.addEventListener("resize", position);
-      window.addEventListener("scroll", position, true);
-      if (anchor.current) {
-        observer!.observe(anchor.current);
-        if (anchor.current.parentElement)
-          observer!.observe(anchor.current.parentElement);
-        const composer = anchor.current
-          .closest(".composer-stack")
-          ?.querySelector(".composer");
-        if (composer) observer!.observe(composer);
-        // The centered composer can move without resizing while the rail animates.
-        const panel = anchor.current.closest(".home-panel");
-        if (panel) observer!.observe(panel);
-      }
-    }
-    return () => {
-      window.removeEventListener("resize", position);
-      window.removeEventListener("scroll", position, true);
-      observer?.disconnect();
-      dialog.close();
-      space?.remove();
-      if (previous?.isConnected) previous.focus();
-    };
-  }, [anchor]);
-  return (
-    <dialog
-      ref={ref}
-      className={className}
-      aria-label={title}
-      onCancel={(e) => {
-        e.preventDefault();
-        onClose();
-      }}
-      onClick={(e) => {
-        if (e.target !== e.currentTarget) return;
-        const bounds = e.currentTarget.getBoundingClientRect();
-        if (
-          !anchor ||
-          e.clientX < bounds.left ||
-          e.clientX > bounds.right ||
-          e.clientY < bounds.top ||
-          e.clientY > bounds.bottom
-        )
-          onClose();
-      }}
-    >
-      {children}
-    </dialog>
-  );
-}
+import { Dialog, Icon, Logo } from "./ui";
+import { GuidedForm, GuidedReader } from "./GuidedPlanning";
+import { fieldLabel, guidedResources, isGuided, planningReference } from "./guided-planning";
 export function AccessView() {
   const [auth] = useState(() => new AuthController());
   useEffect(() => { void auth.start(); }, [auth]);
@@ -200,7 +86,7 @@ function ResultView({
       )}
       <div className="result-columns">
         <section className="conversation-card">
-          {initial && (
+          {initial && "prompt" in initial && (
             <>
               <p className="secondary">Tú</p>
               <p className="request-text">{initial.prompt}</p>
@@ -346,6 +232,8 @@ function Editor({
   const exit = useSyncExternalStore(guard.subscribe, guard.snapshot);
   useEffect(() => () => guard.dispose(), [guard]);
   const resource = editableResource(e.document, e.resourceKey)!;
+  const guided = isGuided(e.document.result);
+  const targets = guidedResources(e.document.result);
   const close = () => exit.open ? guard.cancel() : guard.request();
   const saveText: Record<EditorState["save"], string> = {
     clean: e.draftSaved ? "Borrador privado conservado" : "Sin cambios",
@@ -357,42 +245,54 @@ function Editor({
     conflict: "Conflicto de versión",
   };
   return (
-    <Dialog title="Editar actividad" className="editor-dialog" onClose={close}>
+    <Dialog title={guided ? "Editar planeación" : "Editar actividad"} className={`editor-dialog ${guided ? "guided-editor" : ""}`} onClose={close}>
       {exit.open ? (
         <ExitGuard controller={controller} guard={guard} onContinue={() => guard.cancel()} />
       ) : (
         <>
           <header className="editor-header">
-            <h2>Editar actividad</h2>
+            <h2>{guided ? "Editar planeación" : "Editar actividad"}</h2>
             <button onClick={close}>Cerrar</button>
           </header>
           <div className="editor-body">
             <section className="preview-column">
-              <p className="preview-label">VISTA PREVIA · HOJA DEL ALUMNADO</p>
-              <Preview
+              <p className="preview-label">{guided ? "EDICIÓN BÁSICA · UN CAMPO A LA VEZ" : "VISTA PREVIA · HOJA DEL ALUMNADO"}</p>
+              {guided ? <article className="sheet guided-field-preview">
+                <h2>{e.document.result.title}</h2>
+                <h3>{fieldLabel(resource, e.elementKey)}</h3>
+                <p>{e.text}{e.elementKey === "minutes" ? " min" : ""}</p>
+                <p className="field-hint">Ejemplo sintético · Revisión {e.document.receipt.revision}</p>
+              </article> : <Preview
                 resource={resource}
                 document={e.document}
                 text={e.text}
                 elementKey={e.elementKey}
-              />
+              />}
             </section>
             <section className="elements-column">
               {s.recoveryEnabled && <p className="field-hint">El respaldo queda en claro en este navegador. Puede recuperar esta edición en la misma sesión durante un máximo de 24 horas. Al guardar intentamos borrarlo; no se recupera al volver a entrar.</p>}
               {s.recoveryWarning && <p role="alert">{s.recoveryWarning}</p>}
-              <h3>
-                Elementos de la actividad · {resource.elements.length} elementos
-              </h3>
-              {resource.elements.map((element, index) => (
+              {guided ? <>
+                <label htmlFor="planning-edit-field">Campo a corregir</label>
+                <select id="planning-edit-field" value={`${e.resourceKey}/${e.elementKey}`}
+                  disabled={!!e.pending || e.text !== e.baseline || e.draftSaved}
+                  onChange={event => { const [resourceKey, elementKey] = event.target.value.split("/"); controller.selectEditorTarget(resourceKey, elementKey); }}>
+                  {targets.map(r => <optgroup key={r.key} label={r.title}>{r.elements.map(x =>
+                    <option key={x.key} value={`${r.key}/${x.key}`}>{fieldLabel(r, x.key)}</option>)}</optgroup>)}
+                </select>
+                <p className="field-hint">Guarda o deshaz este cambio antes de elegir otro campo. Los tiempos guardados actualizan el total sin modificar las actividades.</p>
+              </> : <h3>Elementos de la actividad · {resource.elements.length} elementos</h3>}
+              {(guided ? resource.elements.filter(x => x.key === e.elementKey) : resource.elements).map((element, index) => (
                 <div className="element-card" key={element.key}>
-                  <p className="field-hint">{index + 1}　Tipo · Solo lectura</p>
+                  {!guided && <><p className="field-hint">{index + 1}　Tipo · Solo lectura</p>
                   <div className="readonly-value">
                     {element.kind === "statement"
                       ? "Enunciado"
                       : "Pregunta con líneas"}{" "}
                     ⌄
-                  </div>
+                  </div></>}
                   <label htmlFor={`element-${element.key}`}>
-                    {element.editable ? "Texto" : "Texto · Solo lectura"}
+                    {guided ? fieldLabel(resource, element.key) : element.editable ? "Texto" : "Texto · Solo lectura"}
                   </label>
                   {element.editable ? (
                     <textarea
@@ -651,8 +551,8 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
         </button>
       </aside>
       <main tabIndex={-1} className={s.view === "home" ? "home-main" : "content-main"}>
-        <AccountLinks />
-        {s.view === "home" ? (
+        {s.view !== "planning" && <AccountLinks />}
+        {s.view === "planning" ? <GuidedForm controller={controller} /> : s.view === "home" ? (
           <section className="home-panel">
             <header className="home-heading">
               <Logo />
@@ -748,10 +648,11 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
                 )}
               </form>
               <div className="tool-tray">
-                <button onClick={actionExample}>
+                <button onClick={() => controller.navigate("planning")}>
                   <Icon name="document" small />
-                  Ajustar planeación
+                  Crear planeación
                 </button>
+                <button onClick={actionExample}>Ajustar planeación</button>
                 <button onClick={() => setOverlay("attachment")}>
                   <Icon name="search-small" small />
                   Revisar recurso
@@ -793,17 +694,13 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
               Ejemplo sintético · Ctrl/⌘ + Enter para enviar
             </p>
           </section>
-        ) : s.view === "result" && s.result ? (
+        ) : s.view === "result" && s.result ? isGuided(s.result.result) ? (
+          <section className="library"><h1>Mis recursos</h1><article className="library-card"><h2>{s.result.result.title}</h2><p>Planeación de clase · Ejemplo sintético</p><p>Revisión {s.result.receipt.revision} guardada</p></article></section>
+        ) : (
           <ResultView
             document={s.result}
             onOpen={openEditor}
-            onOriginal={() =>
-              void controller.openOriginal({
-                source_id: s.result!.receipt.source_id,
-                number: s.result!.receipt.source_version,
-                sha256: s.result!.receipt.source_sha256,
-              })
-            }
+            onOriginal={() => { const reference = planningReference(s.result!); if (reference) void controller.openOriginal(reference); }}
           />
         ) : (
           <section className="library">
@@ -862,8 +759,7 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
                   {doc.result.title} · Revisión {doc.receipt.revision}
                 </p>
                 <p className="field-hint">
-                  Original conservado · Fuente versión{" "}
-                  {doc.receipt.source_version}
+                  {doc.receipt.source_id ? `Original conservado · Fuente versión ${doc.receipt.source_version}` : "Sin referencia adjunta · Contexto manual"}
                 </p>
                 <button
                   className="primary"
@@ -879,7 +775,7 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
                       setShowEditor(true);
                   }}
                 >
-                  Reabrir copia guardada
+                  {isGuided(doc.result) ? "Consultar planeación" : "Reabrir copia guardada"}
                 </button>
               </article>
             ))}
@@ -922,7 +818,7 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
             </button>
           </section>
         )}
-        {s.error && (
+        {s.error && s.view !== "planning" && (
           <p className="workspace-error" role="alert">
             {s.error}
           </p>
@@ -1105,14 +1001,11 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
             ))}
           </div>
           <p className="field-hint">
-            Catálogo propuesto · herramientas futuras
+            Planeación guiada disponible como ejemplo; las demás herramientas están pendientes
           </p>
           <div className="catalog-items">
             {toolCatalog[category].map((t) => (
-              <p key={t}>
-                {t}
-                <span className="sr-only">, todavía no disponible</span>
-              </p>
+              t === "Planeación de clase" ? <button key={t} onClick={() => { setOverlay(null); controller.navigate("planning"); }}>{t}</button> : <p key={t}>{t}<span className="sr-only">, todavía no disponible</span></p>
             ))}
           </div>
           <footer>
@@ -1124,6 +1017,10 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
             </button>
           </footer>
         </Dialog>
+      )}
+      {s.view === "result" && s.result && isGuided(s.result.result) && !(showEditor && s.editor) && !s.original && (
+        <GuidedReader document={s.result} onClose={() => controller.navigate("resources")}
+          onEdit={() => openEditor()} onOriginal={() => { const reference = planningReference(s.result!); if (reference) void controller.openOriginal(reference); }} />
       )}
       {showEditor && s.view === "result" && s.editor && (
         <Editor

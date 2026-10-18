@@ -22,8 +22,10 @@ Después de editar código local, repetir `uv sync --locked --no-editable
 --reinstall-package aulalista-api` para no probar una wheel anterior de la caché.
 
 Las migraciones requieren el rol dueño de esquema. No se ejecutan en el arranque
-ni desde endpoints. El head esperado es `0006_editor_recovery`. Su downgrade elimina sólo el UUID
-de recuperación: no revoca sesiones ni borra respaldos de navegadores. El binario
+ni desde endpoints. El head esperado es `0007_guided_planning`; sus límites de
+downgrade se describen en la sección de planeación guiada. El downgrade de
+`0006_editor_recovery` elimina sólo el UUID de recuperación: no revoca sesiones
+ni borra respaldos de navegadores. El binario
 0005 no acepta readiness0006; cualquier rollback requiere coordinación explícita.
 El downgrade de 0005 elimina identidades,
 sesiones, desafíos y contadores; los ámbitos/materiales quedan sin método de
@@ -93,7 +95,7 @@ cumplir controles equivalentes antes de usar cualquier dato privado.
 
 - `GET /health/live`: 200 `{"status":"ok"}`, independiente de DB.
 - `GET /health/ready`: 200 sólo con conexión y única revisión
-  `0006_editor_recovery`; fallo/timeout/revisión distinta: 503 sin detalle interno.
+  `0007_guided_planning`; fallo/timeout/revisión distinta: 503 sin detalle interno.
 - `AULALISTA_DB_TIMEOUT_SECONDS`: entero 2–30, predeterminado 3. Deadline HTTP de
   readiness completo, incluyendo espera, DNS, conexión y consulta; también fija
   timeouts de driver/servidor. Una sola sonda en vuelo evita acumular hilos.
@@ -122,7 +124,7 @@ export AULALISTA_TEST_ALLOW_RESET=1
 uv run --locked --no-editable ruff check .
 uv run --locked --no-editable ruff format --check .
 uv run --locked --no-editable pytest tests/test_app.py tests/test_config.py tests/test_browser_runner.py
-uv run --locked --no-editable pytest tests/test_postgres.py tests/test_materials.py tests/test_plannings.py tests/test_water_fixture.py tests/test_planning_edits.py
+uv run --locked --no-editable pytest tests/test_postgres.py tests/test_materials.py tests/test_plannings.py tests/test_water_fixture.py tests/test_planning_edits.py tests/test_guided_planning_integration.py
 docker compose -f compose.test.yml logs --no-color postgres > /tmp/aulalista-postgres.log
 uv run --locked --no-editable python tests/check_postgres_log.py /tmp/aulalista-postgres.log
 uv pip check
@@ -259,3 +261,32 @@ No habilitar proxy headers sin diseñar y probar una frontera de confianza expl�
 La adaptación [Render demo](render-demo.md) mantiene el peer TCP compartido, añade
 un presupuesto global PG y prepara UI/API same-origin; no acredita un despliegue
 ni confianza en cabeceras del edge.
+
+### Planeación guiada (corte manual/fixture #52)
+
+`POST /scopes/{scope_id}/guided-plannings` admite el DTO v2, separado del ajuste
+B2. `uv run --locked --no-editable pytest tests/test_guided_planning.py` comprueba
+contrato y fixture; `tests/test_guided_planning_integration.py` exige PostgreSQL
+real. Ambos están enumerados en backend CI. El contrato B3 sigue v1: propósito,
+actividades/tiempos, materiales y evaluación son proyecciones editables de un
+único resultado canónico, sin texto duplicado.
+
+Sólo se admite Ciencias naturales / 3.º de primaria / El cuidado del agua en la
+comunidad / active-learning / es. Es una fixture de software determinista, no
+un corpus de investigación ni una salida de IA. Contexto manual, condición
+hipotética, objetivos propios, campo y ejes manuales se guardan literalmente;
+no se usan como supuesto de adaptación ni como PDA oficiales. Sin referencia,
+los cuatro campos source del recibo son null; con referencia se conserva la
+versión exacta ya admitida aunque exista una posterior.
+
+Migración `0007_guided_planning`: permite source_version_id nulo y añade la FK
+origin_scope, preservando CAS, autorización por ámbito e idempotencia. Downgrade primero
+exige NOT NULL: falla transaccionalmente si hay planeaciones sin fuente, sin
+borrar datos. El binario anterior tampoco entiende el DTO v2 aunque incluya
+referencia; se prefiere roll-forward, nunca un rollback destructivo.
+
+Los tests del navegador para este corte son fixtures de software claramente
+rotuladas; el recorrido `guided.integration.ts` atraviesa HTTP y PostgreSQL
+reales y pierde una respuesta tras commit para comprobar recuperación por
+recibo. Una nueva sesión sólo reabre datos confirmados; no se promete recuperar
+el formulario ni texto pendiente después de 401.

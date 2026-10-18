@@ -396,3 +396,43 @@ test("same-tab reload restores only editor text and exact pending after a real P
   expect(await page.evaluate(key => sessionStorage.getItem(key), slot)).toBeNull();
   await otherTab.close();
 });
+
+test("guided planning reopens only confirmed data after 401 and a genuinely new login", async ({ page, browser, context }) => {
+  test.setTimeout(120_000);
+  await page.goto("/");
+  const account = await login(page, "guided-browser-a@example.test");
+  const loginAt = Date.now(), origin = new URL(page.url()).origin;
+  await page.getByRole("button", {name:"Crear planeación", exact:true}).click();
+  await page.getByRole("button", {name:"Usar datos del ejemplo"}).click();
+  const creating = page.waitForResponse(r => r.request().method() === "POST" && new URL(r.url()).pathname.endsWith("/guided-plannings"));
+  await page.getByRole("button", {name:"Crear planeación", exact:true}).click();
+  const created = await creating; expect(created.status()).toBe(201);
+  const doc:PlanningDocument = await created.json();
+  expect(doc.receipt.source_id).toBeNull();
+  await page.getByRole("button", {name:"Editar", exact:true}).click();
+  await page.getByLabel("Propósito", {exact:true}).fill("Corrección confirmada del ejemplo de software");
+  await page.getByRole("button", {name:"Guardar", exact:true}).click();
+  await expect(page.getByText("Guardado confirmado", {exact:true})).toBeVisible();
+  await page.getByLabel("Propósito", {exact:true}).fill("Este texto pendiente no se recupera al volver a entrar");
+  // Removing the real cookie makes the next write receive 401; it is not a fake HTTP response.
+  await context.clearCookies();
+  await page.getByRole("button", {name:"Guardar", exact:true}).click();
+  await expect(page.getByRole("button", {name:"Continuar con correo", exact:true})).toBeVisible();
+  await page.close();
+  const fresh = await browser.newContext({baseURL:origin});
+  try {
+    const restored = await fresh.newPage();await restored.goto("/");
+    expect(await restored.evaluate(() => [localStorage.length,sessionStorage.length])).toEqual([0,0]);
+    const cooldown = 61_000 - (Date.now() - loginAt);
+    if(cooldown > 0) await restored.waitForTimeout(cooldown);
+    const verified = await login(restored, "guided-browser-a@example.test");expect(verified.principal_id).toBe(account.principal_id);
+    await restored.getByRole("button", {name:"Mis recursos", exact:true}).first().click();
+    await expect(restored.getByRole("button", {name:"Consultar planeación", exact:true})).toHaveCount(1);
+    await restored.getByRole("button", {name:"Consultar planeación", exact:true}).click();
+    await expect(restored.getByRole("dialog", {name:"Vista previa", exact:true})).toBeVisible();
+    await expect(restored.locator(".guided-paper")).toContainText("Corrección confirmada del ejemplo de software");
+    await expect(restored.locator(".guided-paper")).not.toContainText("Este texto pendiente");
+    const confirmed = await restored.request.get(`/scopes/${account.scope_id}/plannings/${doc.receipt.planning_id}`);
+    expect(confirmed.status()).toBe(200);expect((await confirmed.json()).receipt.revision).toBe(2);
+  } finally {await fresh.close();}
+});

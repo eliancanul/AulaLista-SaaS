@@ -13,7 +13,7 @@ import uvicorn
 from test_materials import actor_app
 
 
-def lose_first_copy_response(app):
+def lose_first_copy_response(app, *, path_suffix="/copies"):
     """Simulate a failed delivery only after the real API has committed a copy."""
     lost = False
 
@@ -26,7 +26,7 @@ def lose_first_copy_response(app):
                 not lost
                 and scope["type"] == "http"
                 and scope["method"] == "POST"
-                and scope["path"].endswith("/copies")
+                and scope["path"].endswith(path_suffix)
                 and message["type"] == "http.response.start"
                 and message["status"] == 201
             ):
@@ -80,13 +80,15 @@ def run_process_group(command, *, timeout, **kwargs):
 
 
 @pytest.mark.parametrize(
-    "journey", ["acenta", "draft", "copy", "original", "navigation"]
+    "journey", ["acenta", "draft", "copy", "original", "navigation", "guided"]
 )
 def test_journey_through_real_api(runtime_database, actors, journey):
     actor, scope = actors[0]
     app = actor_app(actor)
     if journey == "copy":
         app = lose_first_copy_response(app)
+    if journey == "guided":
+        app = lose_first_copy_response(app, path_suffix="/guided-plannings")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]

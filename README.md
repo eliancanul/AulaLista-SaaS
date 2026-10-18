@@ -56,6 +56,17 @@ integrados en [#45](https://github.com/eliancanul/AulaLista-SaaS/pull/45),
 [#47](https://github.com/eliancanul/AulaLista-SaaS/pull/47) no habilitan documentos
 reales, parsing o IA en el producto. No hay cobro ni piloto docente acreditados.
 
+## Planeación guiada: corte manual de #52
+
+El formulario de Planeación de clase admite una fixture de software explícita
+sin adjuntar fuente: Ciencias naturales, 3.º de primaria y cuidado del agua.
+Conserva contexto manual/hipotético y referencia opcional exacta; abre primero
+un lector de escritorio o móvil y permite correcciones básicas durables con B3.
+Otros valores reciben un rechazo claro y permanecen en el formulario. No es
+un generador general, una selección curricular oficial ni validación pedagógica.
+[Contrato, pruebas y límites](web/README.md#planeación-guiada-52) describen el corte;
+su PR y CI deben acreditar el candidato exacto, sin trasladar la evidencia anterior.
+
 ## Historial técnico del primer corte
 
 T0, T1 y T2 están integrados; [PR #3](https://github.com/eliancanul/AulaLista-SaaS/pull/3)
@@ -115,7 +126,7 @@ El contrato del recorrido prioriza mínima fricción: resolver automáticamente 
 - [Contrato de fundación](docs/specs/0001-fundacion.md)
 - [Dirección UX y decisión de interpretación](docs/adr/0002-ux-interpretacion-automatica.md)
 - [Flujo automático y plan de evaluación](docs/specs/0002-flujo-automatico-material.md)
-- [Herramientas y contexto curricular](docs/specs/0010-herramientas-contexto-curricular.md): diseño aprobado de #18; implementación y vista previa pendientes.
+- [Herramientas y contexto curricular](docs/specs/0010-herramientas-contexto-curricular.md): diseño aprobado de #18; #52 implementa únicamente el corte manual/fixture de Planeación.
 - [Tareas y dependencias actuales](https://github.com/eliancanul/AulaLista-SaaS/issues)
 - [Referencias e historial de cortes](docs/tickets/README.md)
 - [Workflow y evidencia](docs/workflow.md)

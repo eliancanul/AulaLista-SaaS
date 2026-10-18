@@ -10,7 +10,10 @@ import pytest
 from browser_integration import lose_first_copy_response, run_process_group
 
 
-def test_copy_response_fault_preserves_app_execution_and_only_loses_first_success():
+@pytest.mark.parametrize("path_suffix", ["/copies", "/guided-plannings"])
+def test_copy_response_fault_preserves_app_execution_and_only_loses_first_success(
+    path_suffix,
+):
     calls = []
 
     async def app(scope, receive, send):
@@ -21,7 +24,7 @@ def test_copy_response_fault_preserves_app_execution_and_only_loses_first_succes
         await send({"type": "http.response.body", "body": b"first", "more_body": True})
         await send({"type": "http.response.body", "body": b"last"})
 
-    wrapped = lose_first_copy_response(app)
+    wrapped = lose_first_copy_response(app, path_suffix=path_suffix)
 
     async def invoke(method, path, status):
         messages = []
@@ -37,11 +40,11 @@ def test_copy_response_fault_preserves_app_execution_and_only_loses_first_succes
         return messages
 
     for method, path, status, expected in [
-        ("GET", "/scopes/test/copies", 201, 201),
+        ("GET", f"/scopes/test{path_suffix}", 201, 201),
         ("POST", "/scopes/test/revisions", 201, 201),
-        ("POST", "/scopes/test/copies", 409, 409),
-        ("POST", "/scopes/test/copies", 201, 503),
-        ("POST", "/scopes/test/copies", 201, 201),
+        ("POST", f"/scopes/test{path_suffix}", 409, 409),
+        ("POST", f"/scopes/test{path_suffix}", 201, 503),
+        ("POST", f"/scopes/test{path_suffix}", 201, 201),
     ]:
         messages = asyncio.run(invoke(method, path, status))
         assert messages[0]["status"] == expected

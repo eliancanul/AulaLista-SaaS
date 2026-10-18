@@ -21,6 +21,23 @@ export interface PlanningRequest {
   source_id: string;
   expected_source_version: number;
 }
+/** New creation contract; manual context never claims official curricular authority. */
+export interface GuidedPlanningRequest {
+  contract_version: 2;
+  fixture_context: "guided-water-v1";
+  subject: string;
+  grade: string;
+  topic: string;
+  duration_minutes: number;
+  method: string;
+  language: string;
+  context: { text: string; hypothetical: boolean } | null;
+  learning_objectives: string[];
+  formative_field: string | null;
+  articulating_axes: string[];
+  reference: { source_id: string; source_version: number } | null;
+}
+export type CreationRequest = PlanningRequest | GuidedPlanningRequest;
 export interface Receipt {
   contract_version: 1;
   namespace: "planning-v1";
@@ -31,10 +48,10 @@ export interface Receipt {
   actor_id: string;
   operation_id: string;
   created_at: string;
-  source_id: string;
-  source_version_id: string;
-  source_version: number;
-  source_sha256: string;
+  source_id: string | null;
+  source_version_id: string | null;
+  source_version: number | null;
+  source_sha256: string | null;
 }
 export interface Element {
   key: string;
@@ -46,13 +63,17 @@ export interface Element {
 export interface Resource {
   key: string;
   title: string;
-  audience: "students";
+  audience: "students" | "teacher";
   elements: Element[];
 }
 export interface Result {
   provenance: "synthetic-fixture-v1";
   title: string;
   notice: string;
+  kind?: "guided-planning-v1";
+  purpose?: string;
+  formative_assessment?: string;
+  duration_minutes?: number;
   materials?: string[];
   context?: { level: string; group: string; subject: string };
   activities: {
@@ -67,12 +88,12 @@ export interface Result {
 export interface PlanningDocument {
   receipt: Receipt;
   request:
-    | PlanningRequest
+    | CreationRequest
     | (EditRequest & { kind: "edit"; origin?: Origin })
     | (CopyRequest & { kind: "copy"; origin?: Origin });
   result: Result;
   origin?: Origin;
-  initial_request?: PlanningRequest;
+  initial_request?: CreationRequest;
 }
 export interface EditRequest {
   contract_version: 1;
@@ -123,6 +144,7 @@ export interface DraftReceipt {
   created_at: string;
 }
 export interface DraftDocument {
+  initial_request?: CreationRequest;
   receipt: DraftReceipt;
   request: DraftRequest;
   result: Result;
