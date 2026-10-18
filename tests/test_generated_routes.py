@@ -12,10 +12,11 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from test_auth_integration import ORIGIN, CapturingSender, SyntheticGoogle, login
 from test_auth_integration import auth_factory as auth_factory
-from test_generated_contract import generated_body
+from test_generated_contract import generated_body, provider_output
 from test_guided_planning import guided_body
 from test_guided_planning_integration import edit_body
 from test_materials import actor_app
+from test_openai_planning import Transport, completed, reply
 from test_planning_edits import write as edit
 from test_planning_generation import FakeProvider, profile, request
 
@@ -23,7 +24,7 @@ from aulalista_api.app import create_app
 from aulalista_api.database import SCHEMA_REVISION
 from aulalista_api.material_routes import require_actor
 from aulalista_api.materials import MaterialError
-from aulalista_api.openai_planning import ProviderError
+from aulalista_api.openai_planning import OpenAIPlanning, ProviderError
 from aulalista_api.planning_generation import GeneratedPlannings
 
 
@@ -286,3 +287,33 @@ def test_generation_accounting_is_monotone_and_admission_cannot_be_erased(
         assert connection.execute(
             text("SELECT state, input_tokens FROM planning_generation_attempt")
         ).one() == ("uncertain", 123)
+
+
+@pytest.mark.parametrize("cache_write_tokens", [0, None])
+def test_success_records_observed_zero_cache_writes_separately_from_unknown(
+    runtime_database, actors, cache_write_tokens
+):
+    import json
+
+    actor, scope = actors[0]
+    response = completed()
+    response["output"][0]["content"][0]["text"] = json.dumps(provider_output())
+    if cache_write_tokens is not None:
+        response["usage"]["input_tokens_details"] = {
+            "cache_write_tokens": cache_write_tokens
+        }
+    transport = Transport(
+        reply({"object": "response.input_tokens", "input_tokens": 120}),
+        reply(response),
+    )
+    provider = OpenAIPlanning("software-placeholder-only", transport=transport)
+    with TestClient(configured_app(actor, scope, provider)) as client:
+        assert submit(client, scope).status_code == 201
+    with runtime_database.connect() as connection:
+        assert (
+            connection.scalar(
+                text("SELECT cache_write_tokens FROM planning_generation_attempt")
+            )
+            == cache_write_tokens
+        )
+    assert len(transport.calls) == 2

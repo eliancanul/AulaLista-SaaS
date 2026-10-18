@@ -60,6 +60,7 @@ class ProviderResult:
     output_tokens: int
     cached_tokens: int | None
     reasoning_tokens: int | None
+    cache_write_tokens: int | None = None
 
 
 def prepare(request_dict: dict, output_schema: dict) -> dict:
@@ -388,4 +389,5 @@ class OpenAIPlanning:
             output_tokens,
             cached_tokens,
             reasoning_tokens,
+            write_tokens,
         )

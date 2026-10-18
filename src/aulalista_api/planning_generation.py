@@ -490,6 +490,7 @@ class GeneratedPlannings:
                     "input_tokens": result.input_tokens,
                     "output_tokens": result.output_tokens,
                     "cached_tokens": result.cached_tokens,
+                    "cache_write_tokens": result.cache_write_tokens,
                     "reasoning_tokens": result.reasoning_tokens,
                     "service_tier": "default",
                 }
