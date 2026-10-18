@@ -2,7 +2,7 @@
 
 from typing import Annotated, Literal, NotRequired, TypedDict
 
-from pydantic import ConfigDict, Field, TypeAdapter
+from pydantic import AfterValidator, ConfigDict, Field, TypeAdapter
 
 
 class ResultObject(TypedDict):
@@ -48,4 +48,46 @@ class PlanningResult(ResultObject):
     resources: NotRequired[list[Resource]]
 
 
-RESULT_ADAPTER = TypeAdapter(PlanningResult)
+def useful_text(value: str) -> str:
+    if not value.strip() or "\0" in value:
+        raise ValueError("empty_or_invalid_text")
+    value.encode("utf-8")
+    return value
+
+
+UsefulText = Annotated[str, Field(min_length=1), AfterValidator(useful_text)]
+
+
+class GuidedActivity(ResultObject):
+    key: Literal["introduction", "exploration", "closure"]
+    title: UsefulText
+    statement: UsefulText
+    minutes: Annotated[int, Field(ge=1, le=180)]
+
+
+class GuidedPlanningResult(ResultObject):
+    kind: Literal["guided-planning-v1"]
+    provenance: Literal["synthetic-fixture-v1"]
+    title: UsefulText
+    notice: UsefulText
+    purpose: UsefulText
+    formative_assessment: UsefulText
+    duration_minutes: Annotated[int, Field(ge=3, le=540)]
+    activities: Annotated[list[GuidedActivity], Field(min_length=3, max_length=3)]
+    materials: Annotated[list[UsefulText], Field(min_length=1)]
+
+
+def coherent_guided_result(result: GuidedPlanningResult) -> GuidedPlanningResult:
+    if [a["key"] for a in result["activities"]] != [
+        "introduction",
+        "exploration",
+        "closure",
+    ] or sum(a["minutes"] for a in result["activities"]) != result["duration_minutes"]:
+        raise ValueError("incoherent_activities")
+    return result
+
+
+RESULT_ADAPTER = TypeAdapter(
+    PlanningResult
+    | Annotated[GuidedPlanningResult, AfterValidator(coherent_guided_result)]
+)

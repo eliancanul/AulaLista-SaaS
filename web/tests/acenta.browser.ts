@@ -251,14 +251,13 @@ test("Planear keeps Planeación and Proyecto without a separate Secuencia action
   await expect(menu.getByRole("button", { name: "Cerrar", exact: true })).toBeFocused();
   await expect(menu.getByRole("tab", { name: "Planear", exact: true })).toHaveAttribute("aria-selected", "true");
   await expect(menu.locator(".catalog-items > p")).toHaveText([
-    "Planeación de clase, todavía no disponible",
     "Proyecto de aula, todavía no disponible",
   ]);
   await expect(menu.getByText("Secuencia didáctica", { exact: true })).toHaveCount(0);
-  await expect(menu.locator(".catalog-items button, .catalog-items a, .catalog-items input, .catalog-items img")).toHaveCount(0);
-  await expect(menu.getByText("Catálogo propuesto · herramientas futuras", { exact: true })).toBeVisible();
+  await expect(menu.locator(".catalog-items a, .catalog-items input, .catalog-items img")).toHaveCount(0);
+  await expect(menu.getByText("Planeación guiada disponible como ejemplo; las demás herramientas están pendientes", { exact: true })).toBeVisible();
   await expect(menu.getByRole("button")).toHaveText([
-    "Cerrar", "Ajustar planeación ↗", "Revisar recurso ↗",
+    "Cerrar", "Planeación de clase", "Ajustar planeación ↗", "Revisar recurso ↗",
   ]);
   await page.evaluate(() => document.fonts.ready);
   await page.screenshot({ path: `${evidence}/tools-planeacion-secuencia-1440x924.png` });

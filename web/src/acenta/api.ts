@@ -3,7 +3,8 @@ import type {
   OriginalContent,
   Session,
   SourceReceipt,
-  PlanningRequest,
+  CreationRequest,
+  GuidedPlanningRequest,
   PlanningDocument,
   EditRequest,
   CopyRequest,
@@ -12,6 +13,8 @@ import type {
   Page,
   Result,
 } from "./contracts";
+
+import { guidedResources, validateGuidedRequest } from "./guided-planning";
 
 export class ApiError extends Error {
   constructor(
@@ -34,6 +37,7 @@ export const isUuid = (v: unknown): v is string =>
 function object(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === "object" && !Array.isArray(v);
 }
+const usefulText = (v: unknown): v is string => typeof v === "string" && !!v.trim() && !/[\u0000\uD800-\uDFFF]/u.test(v);
 const positive = (v: unknown) =>
   Number.isInteger(v) && Number(v) >= 1 && Number(v) <= 2147483647;
 const date = (v: unknown) =>
@@ -59,6 +63,12 @@ function origin(v: unknown) {
     isUuid(v.revision_id) &&
     positive(v.revision)
   );
+}
+/** JSON object order is not semantic (PostgreSQL JSONB may reorder keys). */
+export function sameJson(left: unknown, right: unknown): boolean {
+  if (Array.isArray(left) || Array.isArray(right)) return Array.isArray(left) && Array.isArray(right) && left.length === right.length && left.every((x, i) => sameJson(x, right[i]));
+  if (object(left) || object(right)) return object(left) && object(right) && Object.keys(left).length === Object.keys(right).length && Object.keys(left).every(k => Object.hasOwn(right, k) && sameJson(left[k], right[k]));
+  return left === right;
 }
 export function parseResult(v: unknown): Result {
   assert(
@@ -115,6 +125,17 @@ export function parseResult(v: unknown): Result {
             ),
         )),
   );
+  if (v.kind !== undefined) {
+    assert(v.kind === "guided-planning-v1" && [v.title, v.notice, v.purpose, v.formative_assessment].every(usefulText) &&
+      Number.isInteger(v.duration_minutes) && Array.isArray(v.materials) && v.materials.length > 0 &&
+      v.materials.every(usefulText) &&
+      JSON.stringify((v.activities as Record<string, unknown>[]).map(a => a.key)) === JSON.stringify(["introduction", "exploration", "closure"]) &&
+      v.resources === undefined && v.context === undefined &&
+      (v.activities as Record<string, unknown>[]).every(a => typeof a.key === "string" && usefulText(a.title) &&
+        usefulText(a.statement) && Number(a.minutes) >= 1 && Number(a.minutes) <= 180) &&
+      new Set((v.activities as Record<string, unknown>[]).map(a => a.key)).size === (v.activities as unknown[]).length &&
+      (v.activities as Record<string, unknown>[]).reduce((sum, a) => sum + Number(a.minutes), 0) === v.duration_minutes);
+  } else assert(v.purpose === undefined && v.formative_assessment === undefined && v.duration_minutes === undefined);
   return v as unknown as Result;
 }
 export function parseSource(v: unknown): SourceReceipt {
@@ -131,6 +152,25 @@ export function parseSource(v: unknown): SourceReceipt {
   );
   return v as unknown as SourceReceipt;
 }
+function guidedRequest(q: Record<string, unknown>): q is Record<string, unknown> & GuidedPlanningRequest {
+  if (q.contract_version !== 2 || q.fixture_context !== "guided-water-v1" ||
+    !["subject", "grade", "topic", "method", "language"].every(k => typeof q[k] === "string") ||
+    !Number.isInteger(q.duration_minutes) ||
+    !(q.context === null || (object(q.context) && typeof q.context.text === "string" && typeof q.context.hypothetical === "boolean")) ||
+    !(q.formative_field === null || typeof q.formative_field === "string") ||
+    !["learning_objectives", "articulating_axes"].every(k => Array.isArray(q[k]) && (q[k] as unknown[]).every(v => typeof v === "string")) ||
+    !(q.reference === null || (object(q.reference) && isUuid(q.reference.source_id) && positive(q.reference.source_version) && Number(q.reference.source_version) <= 2147483646))) return false;
+  return Object.keys(validateGuidedRequest(q as unknown as GuidedPlanningRequest)).length === 0;
+}
+function initialRequest(q: unknown, r: Record<string, unknown>) {
+  if (!object(q)) return false;
+  if (q.contract_version === 2) return guidedRequest(q) &&
+    (q.reference === null ? r.source_id === null :
+      q.reference.source_id === r.source_id && q.reference.source_version === r.source_version);
+  return q.contract_version === 1 && typeof q.prompt === "string" &&
+    q.source_id === r.source_id && q.expected_source_version === r.source_version &&
+    ["timing-example-v1", "water-observation-v1"].includes(String(q.fixture_context));
+}
 export function parsePlanning(v: unknown): PlanningDocument {
   assert(object(v) && object(v.receipt) && object(v.request));
   const r = v.receipt,
@@ -144,13 +184,11 @@ export function parsePlanning(v: unknown): PlanningDocument {
         "scope_id",
         "actor_id",
         "operation_id",
-        "source_id",
-        "source_version_id",
       ].every((k) => isUuid(r[k])) &&
       positive(r.revision) &&
-      positive(r.source_version) &&
       date(r.created_at) &&
-      sha(r.source_sha256),
+      ((r.source_id === null && r.source_version_id === null && r.source_version === null && r.source_sha256 === null) ||
+        (isUuid(r.source_id) && isUuid(r.source_version_id) && positive(r.source_version) && sha(r.source_sha256))),
   );
   if (q.kind === "edit" || q.kind === "copy") {
     assert(
@@ -159,30 +197,25 @@ export function parsePlanning(v: unknown): PlanningDocument {
     );
     assert(q.kind !== "edit" || r.revision === Number(q.expected_revision) + 1);
     assert(q.kind !== "copy" || (r.revision === 1 && origin(v.origin)));
-  } else
-    assert(
-      q.contract_version === 1 &&
-        typeof q.prompt === "string" &&
-        q.source_id === r.source_id &&
-        q.expected_source_version === r.source_version &&
-        ["timing-example-v1", "water-observation-v1"].includes(
-          String(q.fixture_context),
-        ),
-    );
+  } else assert(initialRequest(q, r));
   assert(v.origin === undefined || origin(v.origin));
-  if (v.initial_request !== undefined) {
-    const q = v.initial_request;
-    assert(
-      object(q) &&
-        q.contract_version === 1 &&
-        typeof q.prompt === "string" &&
-        q.source_id === r.source_id &&
-        q.expected_source_version === r.source_version &&
-        ["timing-example-v1", "water-observation-v1"].includes(
-          String(q.fixture_context),
-        ),
-    );
+  if (v.initial_request !== undefined) assert(initialRequest(v.initial_request, r));
+  const initial = v.initial_request ?? q;
+  assert(object(v.result));
+  assert((object(initial) && initial.contract_version === 2) === (v.result.kind === "guided-planning-v1"));
+  if (v.result.kind === "guided-planning-v1") {
+    if (q.kind === "edit" || q.kind === "copy") {
+      assert(sameJson(q.initial_request, v.initial_request));
+      assert(sameJson(q.origin, v.origin));
+      assert(q.kind !== "copy" || (object(v.origin) && v.origin.revision === q.base_revision));
+      const target = guidedResources(parseResult(v.result)).find(x => x.key === q.resource_key)?.elements.find(x => x.key === q.element_key);
+      assert(target && target.text === q.text);
+    } else {
+      assert(r.revision === 1 && v.result.duration_minutes === q.duration_minutes);
+      assert(v.initial_request === undefined || sameJson(v.initial_request, q));
+    }
   }
+  assert(r.source_id !== null || (object(initial) && initial.contract_version === 2));
   parseResult(v.result);
   return v as unknown as PlanningDocument;
 }
@@ -214,8 +247,9 @@ export function parseDraft(v: unknown): DraftDocument {
       r.draft_revision === Number(q.expected_draft_revision) + 1,
   );
   const result = parseResult(v.result);
+  if (result.kind === "guided-planning-v1") assert(object(v.initial_request) && guidedRequest(v.initial_request));
   assert(
-    result.resources?.some(
+    guidedResources(result).some(
       (r) =>
         r.key === q.resource_key &&
         r.elements.some(
@@ -435,9 +469,9 @@ export class AcentaApi {
       (items.length > 0 && v.next_cursor === items.at(-1)!.source_id));
     return { items, next_cursor: v.next_cursor };
   }
-  async create(payload: PlanningRequest, key: string) {
+  async create(payload: CreationRequest, key: string) {
     return this.planning(
-      await this.request("plannings", "POST", payload, key, false, 4096),
+      await this.request(payload.contract_version === 2 ? "guided-plannings" : "plannings", "POST", payload, key, false, 4096),
     );
   }
   async read(id: string, revision?: number) {

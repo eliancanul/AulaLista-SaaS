@@ -197,7 +197,7 @@ servicio externo real.
 y PostgreSQL, sustituye sólo el transporte de correo existente y pierde una
 respuesta de borrador después de su commit real. Comprueba guardia/cancelación,
 recibo previo a logout, reapertura en otra sesión sin storage, fuente/base exactas
-y 404 de la cuenta B. El presupuesto del runner admite dos cooldowns reales de
+y 404 de la cuenta B. El presupuesto del runner admite los cooldowns reales de
 correo; no se relaja la política auth. La recogida local de estos tests no
 acreditaba su ejecución; la CI del SHA documentado sí los ejecutó. Un nuevo
 candidato requiere CI exacta, sin trasladar ese éxito por inferencia.
@@ -336,3 +336,43 @@ y grants; E2E auth añade recarga, respuesta perdida, texto posterior y lifecycl
 Recogida/build locales no acreditan PostgreSQL o navegador real. Esos gates deben
 pasar en CI del commit exacto junto con guardia de logout y catálogo de originales.
 Auth E2E mantiene screenshot, trace y video desactivados. #15 continúa abierto.
+
+## Planeación guiada (#52)
+
+`Crear planeación` y `Herramientas → Planear → Planeación de clase` abren el
+formulario compacto. Asignatura, grado y tema son obligatorios; duración editable
+parte de 50 minutos. Contexto y opciones agrupa método, idioma, texto manual
+con condición hipotética explícita, objetivos propios, campo/ejes manuales y una
+referencia guardada opcional. No se rellenan PDA ni supuestos de grupo.
+
+La fixture de software sólo admite Ciencias naturales / 3.º de primaria /
+El cuidado del agua en la comunidad / active-learning / es. No usa IA, servicios
+externos ni un corpus de investigación. El resto recibe `unsupported_fixture`
+sin borrar los valores. El contexto se conserva literalmente, sin afirmar que
+el resultado se adapte a él. No hay selector de currículo oficial ni carga de
+documentos reales. Una referencia T2 conserva ID, versión y hash exactos.
+
+El DTO de creación es v2 en `/scopes/{scope_id}/guided-plannings`, con clave de
+idempotencia y límite 4096 bytes. Los resultados se guardan antes de mostrar
+confirmación, con recibos scoped y campos source nulos cuando no hay fuente.
+Una respuesta incierta bloquea otra creación hasta consultar el recibo o
+repetir el intento exacto. B2 permanece en su endpoint y DTO v1.
+
+`GuidedPlanning.tsx` implementa la lectura primero: modal desktop y composición
+móvil completa con cabecera propia, documento desplazable, acciones inferiores
+y hoja de secciones. `Editar` es opcional. El editor B3 corrige un campo a la vez
+(propósito, actividad, tiempo, material o evaluación) sin duplicar texto en el
+resultado. Guardar/deshacer libera el selector; las guardias, CAS, borradores,
+copias e idempotencia siguen vigentes. Los tiempos son enteros 1–180 por fase;
+el total se recalcula sin alterar la duración solicitada original.
+
+Después de 401/reautenticación sólo se reabre lo confirmado en Mis recursos.
+No se promete conservar formulario ni texto pendiente después de perder sesión.
+`guided-api.test.ts`, `guided-controller.test.ts`, `guided.browser.ts` y
+`guided.integration.ts` cubren contrato, recuperación y recorrido HTTP/PostgreSQL.
+El nuevo caso de `auth.integration.ts` usa login/cookies/CSRF reales y sólo
+sustituye el transporte del correo de prueba, como el harness existente.
+
+Los assets proceden de los nodos Figma aprobados; [ASSETS.md](public/acenta/ASSETS.md)
+registra cada exportación. Las capturas de pruebas son evidencia técnica del
+candidato, no nueva aprobación de diseño ni aceptación docente.

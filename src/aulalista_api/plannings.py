@@ -22,6 +22,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from aulalista_api.database import Base
+from aulalista_api.guided_planning import GuidedPlanningRequest, generate_guided
 from aulalista_api.materials import MaterialError, Source, SourceVersion, authorize
 from aulalista_api.planning_fixture import generate
 
@@ -79,6 +80,12 @@ class PlanningRevision(Base):
             ],
             name="fk_planning_origin_source",
         ),
+        ForeignKeyConstraint(
+            ["origin_revision_id", "scope_id"],
+            ["planning_revision.id", "planning_revision.scope_id"],
+            name="fk_planning_origin_scope",
+        ),
+        UniqueConstraint("id", "scope_id", name="uq_planning_revision_scope"),
         UniqueConstraint(
             "id", "scope_id", "source_version_id", name="uq_planning_revision_source"
         ),
@@ -104,7 +111,7 @@ class PlanningRevision(Base):
     planning_id: Mapped[UUID]
     scope_id: Mapped[UUID]
     number: Mapped[int]
-    source_version_id: Mapped[UUID]
+    source_version_id: Mapped[UUID | None]
     actor_id: Mapped[UUID] = mapped_column(ForeignKey("principal.id"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -116,7 +123,17 @@ class PlanningRevision(Base):
     origin_revision_id: Mapped[UUID | None]
 
 
-def document(revision: PlanningRevision, source: SourceVersion) -> dict:
+def revision_source(
+    session: Session, revision: PlanningRevision
+) -> SourceVersion | None:
+    return (
+        session.get(SourceVersion, revision.source_version_id)
+        if revision.source_version_id is not None
+        else None
+    )
+
+
+def document(revision: PlanningRevision, source: SourceVersion | None) -> dict:
     saved = {
         "receipt": {
             "contract_version": 1,
@@ -128,10 +145,10 @@ def document(revision: PlanningRevision, source: SourceVersion) -> dict:
             "actor_id": str(revision.actor_id),
             "operation_id": str(revision.operation_id),
             "created_at": revision.created_at.astimezone(UTC).isoformat(),
-            "source_id": str(source.source_id),
-            "source_version_id": str(source.id),
-            "source_version": source.number,
-            "source_sha256": source.content_sha256,
+            "source_id": str(source.source_id) if source is not None else None,
+            "source_version_id": str(source.id) if source is not None else None,
+            "source_version": source.number if source is not None else None,
+            "source_sha256": source.content_sha256 if source is not None else None,
         },
         "request": revision.request,
         "result": revision.result,
@@ -152,13 +169,14 @@ class Plannings:
         actor_id: UUID,
         scope_id: UUID,
         operation_id: UUID,
-        request: PlanningRequest,
+        request: PlanningRequest | GuidedPlanningRequest,
     ) -> dict:
         canonical = request.canonical()
         if len(canonical) > MAX_REQUEST_BYTES:
             raise MaterialError(413, "content_too_large")
         fingerprint = hashlib.sha256(
-            b"aulalista-planning-request-v1\0" + canonical
+            f"aulalista-planning-request-v{request.contract_version}\0".encode()
+            + canonical
         ).hexdigest()
         lock = int.from_bytes(
             hashlib.sha256(
@@ -179,35 +197,53 @@ class Plannings:
             if previous is not None:
                 if previous.request_fingerprint != fingerprint:
                     raise MaterialError(409, "conflict")
-                saved = document(
-                    previous, session.get(SourceVersion, previous.source_version_id)
-                )
+                saved = document(previous, revision_source(session, previous))
             else:
-                # Serialize the expected source revision against T2's conditional UPDATE.
-                source = session.scalar(
-                    select(Source)
-                    .where(Source.id == request.source_id, Source.scope_id == scope_id)
-                    .with_for_update()
-                )
-                if source is None:
-                    raise MaterialError(404, "not_found")
-                if source.current_version != request.expected_source_version:
-                    raise MaterialError(409, "conflict")
-                version = session.scalar(
-                    select(SourceVersion).where(
-                        SourceVersion.source_id == source.id,
-                        SourceVersion.scope_id == scope_id,
-                        SourceVersion.number == request.expected_source_version,
+                version = None
+                if isinstance(request, GuidedPlanningRequest):
+                    if request.reference is not None:
+                        version = session.scalar(
+                            select(SourceVersion).where(
+                                SourceVersion.source_id == request.reference.source_id,
+                                SourceVersion.scope_id == scope_id,
+                                SourceVersion.number
+                                == request.reference.source_version,
+                            )
+                        )
+                        if version is None:
+                            raise MaterialError(404, "not_found")
+                    try:
+                        result = generate_guided(request)
+                    except ValueError:
+                        raise MaterialError(422, "unsupported_fixture") from None
+                else:
+                    # Serialize the expected source revision against T2's conditional UPDATE.
+                    source = session.scalar(
+                        select(Source)
+                        .where(
+                            Source.id == request.source_id, Source.scope_id == scope_id
+                        )
+                        .with_for_update()
                     )
-                )
-                if version is None:
-                    raise MaterialError(404, "not_found")
-                try:
-                    result = generate(
-                        request.fixture_context, request.prompt, version.content
+                    if source is None:
+                        raise MaterialError(404, "not_found")
+                    if source.current_version != request.expected_source_version:
+                        raise MaterialError(409, "conflict")
+                    version = session.scalar(
+                        select(SourceVersion).where(
+                            SourceVersion.source_id == source.id,
+                            SourceVersion.scope_id == scope_id,
+                            SourceVersion.number == request.expected_source_version,
+                        )
                     )
-                except ValueError:
-                    raise MaterialError(422, "unsupported_fixture") from None
+                    if version is None:
+                        raise MaterialError(404, "not_found")
+                    try:
+                        result = generate(
+                            request.fixture_context, request.prompt, version.content
+                        )
+                    except ValueError:
+                        raise MaterialError(422, "unsupported_fixture") from None
                 planning = Planning(scope_id=scope_id, current_revision=1)
                 session.add(planning)
                 session.flush()
@@ -215,7 +251,7 @@ class Plannings:
                     planning_id=planning.id,
                     scope_id=scope_id,
                     number=1,
-                    source_version_id=version.id,
+                    source_version_id=version.id if version is not None else None,
                     actor_id=actor_id,
                     operation_id=operation_id,
                     request_fingerprint=fingerprint,
@@ -240,7 +276,7 @@ class Plannings:
             actor_id = authorize(session, actor_id, scope_id)
             query = (
                 select(PlanningRevision, SourceVersion)
-                .join(
+                .outerjoin(
                     SourceVersion,
                     PlanningRevision.source_version_id == SourceVersion.id,
                 )

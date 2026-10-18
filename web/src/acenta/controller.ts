@@ -7,6 +7,7 @@ import {
   parseDraft,
   parseSource,
   isUuid,
+  sameJson,
 } from "./api";
 import {
   waterPrompt,
@@ -15,7 +16,8 @@ import {
   type SourceReference,
   type OriginalContent,
   type PlanningDocument,
-  type PlanningRequest,
+  type CreationRequest,
+  type GuidedPlanningRequest,
   type SourceReceipt,
   type EditRequest,
   type CopyRequest,
@@ -23,6 +25,8 @@ import {
   type DraftDocument,
   type Resource,
 } from "./contracts";
+import { emptyGuidedRequest, guidedResources, isGuided, validateGuidedRequest } from "./guided-planning";
+
 export type SaveState =
   | "clean"
   | "dirty"
@@ -31,11 +35,11 @@ export type SaveState =
   | "error"
   | "unknown"
   | "conflict";
-export type View = "home" | "result" | "resources";
+export type View = "home" | "result" | "resources" | "planning";
 type CreateIntent = {
   kind: "create";
   key: string;
-  payload: PlanningRequest;
+  payload: CreationRequest;
   navigation: number;
 };
 type EditIntent = {
@@ -94,6 +98,7 @@ export interface State {
   sourceName: string;
   view: View;
   prompt: string;
+  guided: GuidedPlanningRequest;
   source: SourceReceipt | null;
   attaching: boolean;
   sourcePending: boolean;
@@ -125,6 +130,7 @@ const fresh = (): State => ({
   sourceName: "Planeación de ciencias · ejemplo",
   view: "home",
   prompt: "",
+  guided: emptyGuidedRequest(),
   source: null,
   attaching: false,
   sourcePending: false,
@@ -150,7 +156,7 @@ export function editableResource(
   doc: PlanningDocument,
   key?: string,
 ): Resource | undefined {
-  return doc.result.resources?.find(
+  return guidedResources(doc.result).find(
     (r) => (!key || r.key === key) && r.elements.some((e) => e.editable),
   );
 }
@@ -211,6 +217,7 @@ export class AcentaController {
           navigation: this.navigation,
           view: this.state.view,
           prompt: this.state.prompt,
+          guided: this.state.guided,
           source: this.state.source,
           result: this.state.result,
           editor: this.state.editor,
@@ -268,18 +275,15 @@ export class AcentaController {
               (isUuid(i.draftId) &&
                 Number.isInteger(i.payload.expected_draft_revision) &&
                 i.payload.expected_draft_revision >= 0)));
-      if (
-        s.pending &&
-        (s.pending.kind !== "create" ||
-          !isUuid(s.pending.key) ||
-          !Number.isInteger(s.pending.navigation) ||
-          s.pending.payload?.contract_version !== 1 ||
-          s.pending.payload.fixture_context !== "water-observation-v1" ||
-          typeof s.pending.payload.prompt !== "string" ||
-          !isUuid(s.pending.payload.source_id) ||
-          !Number.isInteger(s.pending.payload.expected_source_version))
-      )
-        throw Error("create intent");
+      if (s.pending) {
+        const q = s.pending.payload;
+        if (s.pending.kind !== "create" || !isUuid(s.pending.key) || !Number.isInteger(s.pending.navigation) ||
+          !(q?.contract_version === 2 ? this.validGuidedBackup(q) :
+            q?.contract_version === 1 && q.fixture_context === "water-observation-v1" &&
+            typeof q.prompt === "string" && isUuid(q.source_id) && Number.isInteger(q.expected_source_version)))
+          throw Error("create intent");
+      }
+      if (s.guided !== undefined && !this.validGuidedBackup(s.guided, true)) throw Error("guided form");
       if (
         s.sourceIntent &&
         (!isUuid(s.sourceIntent.key) ||
@@ -347,11 +351,12 @@ export class AcentaController {
           ? s.navigation
           : s.pending
             ? s.pending.navigation +
-              (s.prompt !== s.pending.payload.prompt ? 1 : 0)
+              (s.pending.payload.contract_version === 1 && s.prompt !== s.pending.payload.prompt ? 1 : 0)
             : 0;
       this.state = {
         ...fresh(),
         prompt: typeof s.prompt === "string" ? s.prompt : "",
+        guided: s.guided ?? emptyGuidedRequest(),
         source,
         sourceName:
           sourceSamples.find((sample) => sample.name === s.sourceName)?.name ??
@@ -361,7 +366,7 @@ export class AcentaController {
         editor: editor ?? null,
         pending: s.pending ?? null,
         submit: s.pending ? "unknown" : "idle",
-        view: ["home", "resources"].includes(s.view)
+        view: ["home", "resources", "planning"].includes(s.view)
           ? s.view
           : editor || result
             ? "result"
@@ -376,6 +381,35 @@ export class AcentaController {
       };
       this.storage = null;
     }
+  }
+  private validGuidedBackup(value: unknown, allowEmpty = false): value is GuidedPlanningRequest {
+    if (!value || typeof value !== "object") return false;
+    const q = value as GuidedPlanningRequest;
+    if (q.contract_version !== 2 || q.fixture_context !== "guided-water-v1" ||
+      ![q.subject, q.grade, q.topic, q.method, q.language].every(v => typeof v === "string") ||
+      !Array.isArray(q.learning_objectives) || !q.learning_objectives.every(v => typeof v === "string") ||
+      !Array.isArray(q.articulating_axes) || !q.articulating_axes.every(v => typeof v === "string") ||
+      !(q.formative_field === null || typeof q.formative_field === "string") ||
+      !(q.context === null || (typeof q.context?.text === "string" && typeof q.context?.hypothetical === "boolean")) ||
+      !(q.reference === null || (isUuid(q.reference?.source_id) && Number.isInteger(q.reference?.source_version) && q.reference.source_version > 0))) return false;
+    return allowEmpty || !Object.keys(validateGuidedRequest(q)).length;
+  }
+  setGuided(value: GuidedPlanningRequest) {
+    if (this.state.closed || this.suspended) return;
+    this.navigation++;
+    this.emit({guided: value, error: ""});
+  }
+  async submitGuided() {
+    if (this.state.closed || this.suspended || this.busy) return;
+    if (this.state.pending) return this.recoverCreate();
+    if (Object.keys(validateGuidedRequest(this.state.guided)).length) {
+      this.emit({error: "Revisa los campos marcados antes de crear la planeación."});
+      return;
+    }
+    const intent: CreateIntent = {kind: "create", key: crypto.randomUUID(), navigation: this.navigation,
+      payload: structuredClone(this.state.guided)};
+    this.emit({pending: intent, submit: "sending", error: ""});
+    await this.runCreate(intent, false);
   }
   /** Suspend callback admission without deleting the in-memory buffer or its pending key. */
   suspend() {
@@ -647,7 +681,7 @@ export class AcentaController {
     }
   }
   async submit() {
-    if (this.state.closed || this.busy) return;
+    if (this.state.closed || this.suspended || this.busy) return;
     if (this.state.pending) {
       await this.recoverCreate();
       return;
@@ -696,10 +730,7 @@ export class AcentaController {
       if (epoch !== this.epoch || this.suspended || this.state.closed || this.state.pending?.key !== intent.key) return;
       if (
         doc.receipt.operation_id !== intent.key ||
-        Object.entries(intent.payload).some(
-          ([k, v]) =>
-            (doc.request as unknown as Record<string, unknown>)[k] !== v,
-        )
+        Object.entries(intent.payload).some(([k, value]) => !sameJson((doc.request as unknown as Record<string, unknown>)[k], value))
       )
         throw new ApiError(0, "invalid_response");
       this.emit({
@@ -717,7 +748,8 @@ export class AcentaController {
         (replayed && rejectedReplay(e, "create"));
       this.emit({
         submit: certain ? "error" : "unknown",
-        error: errorMessage(e),
+        error: intent.payload.contract_version === 2 && e instanceof ApiError && e.code === "unsupported_fixture"
+          ? "Este ejemplo sólo admite Ciencias naturales, 3.º de primaria, el cuidado del agua en la comunidad, aprendizaje activo y español. Tus datos siguen aquí para corregirlos." : errorMessage(e),
         pending: certain ? null : intent,
       });
     } finally {
@@ -739,12 +771,12 @@ export class AcentaController {
       ),
     ];
   }
-  openEditor(doc = this.state.result, resourceKey?: string) {
+  openEditor(doc = this.state.result, resourceKey?: string, elementKey?: string) {
     if (this.state.closed || this.suspended || !doc) return;
     if (this.recovery?.candidate) { this.emit({error:"Recupera o descarta primero el respaldo pendiente."}); return; }
     this.navigation++;
     const resource = editableResource(doc, resourceKey),
-      element = resource?.elements.find((e) => e.editable);
+      element = resource?.elements.find((e) => e.editable && (!elementKey || e.key === elementKey));
     if (!resource || !element) {
       this.emit({
         error: "Este resultado no tiene un campo editable disponible.",
@@ -755,7 +787,8 @@ export class AcentaController {
     if (
       old &&
       old.document.receipt.planning_id === doc.receipt.planning_id &&
-      old.document.receipt.revision === doc.receipt.revision
+      old.document.receipt.revision === doc.receipt.revision &&
+      old.resourceKey === resource.key && old.elementKey === element.key
     ) {
       this.emit({ view: "result", result: doc });
       return;
@@ -787,6 +820,11 @@ export class AcentaController {
         draftSaved: false,
       },
     });
+  }
+  selectEditorTarget(resourceKey: string, elementKey: string) {
+    const e = this.state.editor;
+    if (!e || e.pending || e.text !== e.baseline || e.draftSaved) return;
+    this.openEditor(e.document, resourceKey, elementKey);
   }
   edit(text: string) {
     const e = this.state.editor;
@@ -1093,7 +1131,7 @@ export class AcentaController {
       const doc = await this.api.read(id);
       if (this.state.closed || nav !== this.navigation) return;
       this.emit({ result: doc, view: "result", error: "" });
-      this.openEditor(doc);
+      if (!isGuided(doc.result)) this.openEditor(doc);
     } catch (e) {
       if (!this.state.closed && nav === this.navigation)
         this.emit({ error: errorMessage(e) });
@@ -1127,7 +1165,7 @@ export class AcentaController {
         draft.receipt.base_revision,
       );
       if (this.state.closed || nav !== this.navigation) return;
-      this.openEditor(base, draft.request.resource_key);
+      this.openEditor(base, draft.request.resource_key, draft.request.element_key);
       const e = this.state.editor;
       if (
         e &&
