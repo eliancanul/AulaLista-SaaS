@@ -167,17 +167,35 @@ for (const width of [320, 390, 700, 701, 1440]) {
     expect(submissions).toBe(2);
     const reader = page.getByRole("dialog", { name: width <= 700 ? "Lectura de planeación" : "Vista previa", exact: true });
     await expect(reader).toBeVisible();
-    await expect(reader.getByRole("button", { name: width <= 700 ? "Mis recursos" : "Editar", exact: true })).toBeFocused();
-    await page.keyboard.press("Tab");
-    await expect(width <= 700 ? reader.locator("summary") : reader.getByRole("button", { name: "Cerrar vista previa", exact: true })).toBeFocused();
-    await page.keyboard.press("Shift+Tab");
-    await expect(reader.getByRole("button", { name: width <= 700 ? "Mis recursos" : "Editar", exact: true })).toBeFocused();
+    const first = reader.getByRole("button", { name: width <= 700 ? "Mis recursos" : "Editar", exact: true });
+    const details = reader.locator("summary");
+    const print = reader.getByRole("button", { name: "Imprimir", exact: true });
+    // Assert named controls in both directions; printing is an optional feature
+    // on this base, but its button must participate whenever it is present.
+    const route = [
+      first,
+      ...(width > 700 ? [reader.getByRole("button", { name: "Cerrar vista previa", exact: true })] : []),
+      ...(await print.count() ? [print] : []),
+      details,
+    ];
+    await expect(first).toBeFocused();
+    for (const [key, stops] of [
+      ["Tab", route.slice(1)],
+      ["Shift+Tab", route.slice(0, -1).reverse()],
+    ] as const) {
+      for (const stop of stops) {
+        await page.keyboard.press(key);
+        expect(await reader.evaluate((el) => el.contains(globalThis.document.activeElement))).toBe(true);
+        await expect(stop).toBeFocused();
+        await expect(stop).toBeVisible();
+        await expect(stop).toBeInViewport({ ratio: 1 });
+      }
+    }
     const layout = await reflow(page, reader, true);
     const layoutPath = test.info().outputPath(`reader-layout-${width}.json`);
     await writeFile(layoutPath, JSON.stringify(layout, null, 2));
     await test.info().attach(`reader-layout-${width}`, { path: layoutPath, contentType: "application/json" });
 
-    const details = reader.locator("summary");
     await tabTo(page, details);
     await page.keyboard.press("Enter");
     await expect(reader.locator(".guided-context")).toContainText(`Situación hipotética. ${context}`);
