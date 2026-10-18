@@ -7,6 +7,7 @@ import {
   waterSource,
 } from "./contracts";
 import { Dialog, Logo } from "./ui";
+import { PrintPlanningButton } from "./PrintPlanning";
 import {
   guidedExample,
   guidedInput,
@@ -673,6 +674,7 @@ export function GuidedReader({
               <span className="desktop-subject"> · {q.subject}</span> ·{" "}
               {r.duration_minutes} minutos
             </p>
+            <PrintPlanningButton document={document} />
           </header>
           <section>
             <h2 tabIndex={-1} data-section="purpose">
