@@ -115,6 +115,7 @@ El contrato del recorrido prioriza mínima fricción: resolver automáticamente 
 - [Contrato de fundación](docs/specs/0001-fundacion.md)
 - [Dirección UX y decisión de interpretación](docs/adr/0002-ux-interpretacion-automatica.md)
 - [Flujo automático y plan de evaluación](docs/specs/0002-flujo-automatico-material.md)
+- [Herramientas y contexto curricular](docs/specs/0010-herramientas-contexto-curricular.md): diseño aprobado de #18; implementación y vista previa pendientes.
 - [Tareas y dependencias actuales](https://github.com/eliancanul/AulaLista-SaaS/issues)
 - [Referencias e historial de cortes](docs/tickets/README.md)
 - [Workflow y evidencia](docs/workflow.md)
