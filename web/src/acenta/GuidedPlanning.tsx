@@ -6,7 +6,8 @@ import {
   knownSourceSample,
   waterSource,
 } from "./contracts";
-import { Dialog, Logo } from "./ui";
+import { Dialog, Icon, Logo } from "./ui";
+import { AnalyticContent } from "./AnalyticPlanning";
 import { PrintPlanningButton } from "./PrintPlanning";
 import {
   guidedExample,
@@ -91,8 +92,9 @@ export function GuidedForm({ controller }: { controller: AcentaController }) {
           Volver al inicio
         </button>
       </header>
-      <div className="guided-intro">
+      <div className="guided-intro analytic-derived-intro">
         <h1>Planeación de clase</h1>
+        <button className="quiet text-action" disabled={pending} onClick={() => void controller.analyticExplorer.open()}><Icon name="folder-small" small />Usar un apartado guardado</button>
         <p>Organiza actividades, tiempos y evaluación para tu grupo.</p>
       </div>
       <div className="guided-mode">
@@ -593,6 +595,7 @@ function ContextDetails({
         ) : (
           <p>Sin referencia adjunta</p>
         )}
+        {document.analytic_origin && <details className="guided-analytic-origin"><summary>Apartado de origen · Revisión {document.analytic_origin.receipt.revision}</summary><AnalyticContent document={document.analytic_origin} /></details>}
         <p>{document.result.notice}</p>
         <p>Revisión {document.receipt.revision} · Guardado confirmado</p>
       </div>

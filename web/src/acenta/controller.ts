@@ -29,6 +29,9 @@ import {
 } from "./contracts";
 import { emptyGuidedRequest, guidedResources, isGuided, validateGuidedRequest } from "./guided-planning";
 import { AnalyticSectionController } from "./analytic-controller";
+import { AnalyticExplorerController } from "./analytic-explorer";
+import { AnalyticDerivationController } from "./analytic-derivation";
+import type { AnalyticSectionDocument } from "./analytic-sections";
 
 export type SaveState =
   | "clean"
@@ -169,10 +172,13 @@ export function editableResource(
 }
 export class AcentaController {
   readonly analytic: AnalyticSectionController;
+  readonly analyticExplorer: AnalyticExplorerController;
+  readonly analyticDerivation: AnalyticDerivationController;
   state: State = fresh();
   private listeners = new Set<() => void>();
   private navigation = 0;
   private listGeneration = 0;
+  private resourceRead: { generation: number; derived: PlanningDocument[] } | null = null;
   private listLoaded = false;
   private busy = false;
   private originalGeneration = 0;
@@ -196,6 +202,8 @@ export class AcentaController {
   ) {
     if (!isUuid(workspaceId)) throw Error("Invalid workspace identity");
     this.analytic = new AnalyticSectionController(api);
+    this.analyticExplorer = new AnalyticExplorerController(api);
+    this.analyticDerivation = new AnalyticDerivationController(api);
     this.backupKey = `acenta:work:v1:${api.session.actorId}:${api.session.scopeId}:${workspaceId}`;
     this.restore();
     this.state = {...this.state, ...this.recoveryWarnings(), recoveryEnabled:!!this.recovery?.enabled, recoveryAvailable:!!this.recovery?.candidate};
@@ -450,6 +458,9 @@ export class AcentaController {
   /** Suspend callback admission without deleting the in-memory buffer or its pending key. */
   suspend() {
     this.analytic.suspend();
+    this.analyticExplorer.suspend();
+    this.analyticDerivation.suspend();
+    this.resourceRead = null;
     this.suspended = true;
     this.epoch++;
     this.navigation++;
@@ -462,7 +473,24 @@ export class AcentaController {
       submit:this.state.pending ? "unknown" : this.state.submit,
       editor:this.state.editor?.pending ? {...this.state.editor,save:"unknown"} : this.state.editor};
   }
-  resume() { this.suspended = false; this.analytic.resume(); }
+  resume() { this.suspended = false; this.analytic.resume(); this.analyticExplorer.resume(); this.analyticDerivation.resume(); }
+  useAnalyticSection(section: AnalyticSectionDocument) {
+    if (this.state.closed || this.suspended || this.state.pending || !this.analyticDerivation.choose(section)) return false;
+    this.analyticExplorer.close();
+    this.navigate("planning");
+    return true;
+  }
+  async submitDerived(recover = false, openResult = true) {
+    if (this.state.closed || this.suspended) return false;
+    const navigation = this.navigation;
+    const document = await (recover ? this.analyticDerivation.recover() : this.analyticDerivation.submit());
+    if (!document || this.state.closed || this.suspended) return false;
+    // Preserve this confirmation if a catalog snapshot started before the commit.
+    if (this.resourceRead?.generation === this.listGeneration) this.resourceRead.derived.push(document);
+    this.emit({ items: this.upsert(document),
+      ...(openResult && this.navigation === navigation ? { result: document, view: "result" as const } : {}) });
+    return true;
+  }
   async restoreGenerationRecovery() {
     if (this.state.closed || this.suspended) return;
     const envelope = this.recovery?.generations.take();
@@ -551,6 +579,7 @@ export class AcentaController {
     this.setPrompt(waterPrompt);
   }
   private leaveReads() {
+    this.resourceRead = null;
     this.navigation++;
     this.listGeneration++;
     return this.state.listState === "loading"
@@ -559,6 +588,7 @@ export class AcentaController {
   }
   navigate(view: View) {
     if (this.state.closed) return;
+    this.analyticExplorer.close();
     const listState = this.leaveReads();
     this.closeOriginal();
     this.emit({ view, listState, error: "" });
@@ -566,6 +596,7 @@ export class AcentaController {
   }
   restoreNavigation(location: { view: View; result: PlanningDocument | null }) {
     if (this.state.closed) return;
+    this.analyticExplorer.close();
     const listState = this.leaveReads();
     this.closeOriginal();
     // Navigation never replaces the editor buffer or the next request's source.
@@ -1247,6 +1278,8 @@ export class AcentaController {
   async loadResources(more = false) {
     if (this.state.closed || this.state.listState === "loading") return;
     const generation = ++this.listGeneration;
+    const read = { generation, derived: [] as PlanningDocument[] };
+    this.resourceRead = read;
     this.emit({ listState: "loading", error: "" });
     try {
       const [page, drafts, sources] = await Promise.all([
@@ -1266,8 +1299,17 @@ export class AcentaController {
       ]);
       if (this.state.closed || generation !== this.listGeneration) return;
       this.listLoaded = true;
+      let items = more ? [...this.state.items, ...page.items] : page.items;
+      if (more || read.derived.length) {
+        const confirmed = new Map(read.derived.map(doc => [doc.receipt.planning_id, doc]));
+        for (const doc of items) {
+          const prior = confirmed.get(doc.receipt.planning_id);
+          if (!prior || doc.receipt.revision > prior.receipt.revision) confirmed.set(doc.receipt.planning_id, doc);
+        }
+        items = [...confirmed.values()];
+      }
       this.emit({
-          items: more ? [...this.state.items, ...page.items] : page.items,
+          items,
           drafts: more ? [...this.state.drafts, ...drafts.items] : drafts.items,
           sources: more ? [...this.state.sources, ...sources.items] : sources.items,
           cursor: page.next_cursor,
@@ -1278,10 +1320,15 @@ export class AcentaController {
     } catch (e) {
       if (!this.state.closed && generation === this.listGeneration)
         this.emit({ listState: "error", error: errorMessage(e) });
+    } finally {
+      if (this.resourceRead === read) this.resourceRead = null;
     }
   }
   closeSession() {
     this.analytic.close();
+    this.analyticExplorer.dispose();
+    this.analyticDerivation.close();
+    this.resourceRead = null;
     this.epoch++;
     this.navigation++;
     this.listGeneration++;
