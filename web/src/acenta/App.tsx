@@ -24,6 +24,7 @@ import { AcentaNavigation, type NavigationPosition } from "./navigation";
 import { EditorExitGuard } from "./editor-exit";
 import { Dialog, Icon, Logo } from "./ui";
 import { GuidedForm, GuidedReader } from "./GuidedPlanning";
+import { AnalyticForm } from "./AnalyticForm";
 import { fieldLabel, guidedResources, isGuided, planningReference } from "./guided-planning";
 export function AccessView() {
   const [auth] = useState(() => new AuthController());
@@ -261,7 +262,6 @@ function Editor({
                 <h2>{e.document.result.title}</h2>
                 <h3>{fieldLabel(resource, e.elementKey)}</h3>
                 <p>{e.text}{e.elementKey === "minutes" ? " min" : ""}</p>
-                <p className="field-hint">{e.document.result.provenance === "openai-guided-v1" ? "Generada con IA" : "Ejemplo de software"} · Revisión {e.document.receipt.revision}</p>
               </article> : <Preview
                 resource={resource}
                 document={e.document}
@@ -270,6 +270,7 @@ function Editor({
               />}
             </section>
             <section className="elements-column">
+              {guided && <p className="field-hint">{e.document.result.provenance === "openai-guided-v1" ? "Generada con IA" : "Ejemplo de software"} · Revisión {e.document.receipt.revision}</p>}
               {s.recoveryEnabled && <p className="field-hint">El respaldo queda en claro en este navegador. Puede recuperar esta edición en la misma sesión durante un máximo de 24 horas. Al guardar intentamos borrarlo; no se recupera al volver a entrar.</p>}
               {s.recoveryWarning && <p role="alert">{s.recoveryWarning}</p>}
               {guided ? <>
@@ -410,6 +411,13 @@ export function AcentaApp({
 }
 function Workspace({ controller, onLogout }: { controller: AcentaController; onLogout?: () => void }) {
   const s = useSyncExternalStore(controller.subscribe, controller.snapshot);
+  const analytic = useSyncExternalStore(controller.analytic.subscribe, controller.analytic.snapshot);
+  const [analyticExit, setAnalyticExit] = useState(false);
+  const analyticExitGeneration = useRef(0);
+  const dismissAnalyticExit = () => {
+    analyticExitGeneration.current++;
+    setAnalyticExit(false);
+  };
   const [expanded, setExpanded] = useState(false);
   const [overlay, setOverlay] = useState<
     "context" | "attachment" | "tools" | null
@@ -431,6 +439,7 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
       focus: (document.activeElement as HTMLElement | null)?.dataset.navigationFocus ?? null,
     }), (value) => {
       logoutGuard.cancel();
+      dismissAnalyticExit();
       setOverlay(null);
       setShowEditor(false);
       setPosition({ value });
@@ -470,6 +479,7 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
       const state = controller.snapshot();
       if (
         state.pending ||
+        controller.analytic.hasUnsavedChanges() ||
         state.sourcePending ||
         (state.editor &&
           (state.editor.pending ||
@@ -496,6 +506,14 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
   const dismissAttachment = () => {
     controller.cancelAttachment();
     setOverlay(null);
+  };
+  const saveAnalyticBeforeExit = async (recover = false) => {
+    const generation = analyticExitGeneration.current;
+    const saved = await (recover ? controller.analytic.recover() : controller.analytic.save());
+    if (saved && generation === analyticExitGeneration.current) {
+      dismissAnalyticExit();
+      logoutGuard.request();
+    }
   };
   return (
     <div className={`workspace ${expanded ? "expanded" : ""}`}>
@@ -544,15 +562,20 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
         </button>
         <button
           aria-label="Cerrar sesión"
-          onClick={() => logoutGuard.request()}
+          onClick={() => {
+            if (controller.analytic.hasUnsavedChanges()) {
+              analyticExitGeneration.current++;
+              setAnalyticExit(true);
+            } else logoutGuard.request();
+          }}
         >
           <Icon name="chat" />
           {expanded && <span>Cerrar sesión</span>}
         </button>
       </aside>
       <main tabIndex={-1} className={s.view === "home" ? "home-main" : "content-main"}>
-        {s.view !== "planning" && <AccountLinks />}
-        {s.view === "planning" ? <GuidedForm controller={controller} /> : s.view === "home" ? (
+        {s.view !== "planning" && s.view !== "analytic" && <AccountLinks />}
+        {s.view === "analytic" ? <AnalyticForm controller={controller} /> : s.view === "planning" ? <GuidedForm controller={controller} /> : s.view === "home" ? (
           <section className="home-panel">
             <header className="home-heading">
               <Logo />
@@ -819,7 +842,7 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
             </button>
           </section>
         )}
-        {s.error && s.view !== "planning" && (
+        {s.error && s.view !== "planning" && s.view !== "analytic" && (
           <p className="workspace-error" role="alert">
             {s.error}
           </p>
@@ -837,6 +860,22 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
           </p>
         )}
       </main>
+      {analyticExit && <Dialog title="¿Salir con cambios en el apartado?" onClose={dismissAnalyticExit} className="analytic-exit-dialog">
+        <section className="exit-guard">
+          <h2>¿Salir con cambios en el apartado?</h2>
+          <p>Guarda el apartado antes de cerrar sesión. Los cambios que no guardes se perderán al salir.</p>
+          {analytic.error && <p role="alert">{analytic.error}</p>}
+          <div className="actions">
+            <button autoFocus onClick={() => { dismissAnalyticExit(); controller.navigate("analytic"); }}>Seguir editando</button>
+            {analytic.pending ? <button disabled={analytic.status === "saving"} onClick={() => void saveAnalyticBeforeExit(true)}>Comprobar guardado</button> : <>
+              <button className="primary" disabled={analytic.status === "conflict"} onClick={() => void saveAnalyticBeforeExit()}>Guardar apartado y salir</button>
+              <button onClick={() => {
+                if (controller.analytic.discardChanges()) { dismissAnalyticExit(); logoutGuard.request(); }
+              }}>Descartar cambios y salir</button>
+            </>}
+          </div>
+        </section>
+      </Dialog>}
       {logoutExit.open && s.editor && (
         <Dialog title="¿Salir con cambios?" className="editor-dialog" onClose={() => logoutGuard.cancel()}>
           <ExitGuard controller={controller} guard={logoutGuard} logout onContinue={() => {

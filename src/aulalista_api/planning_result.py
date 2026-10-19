@@ -96,14 +96,14 @@ RESULT_ADAPTER = TypeAdapter(
 class GeneratedActivity(ResultObject):
     key: Literal["introduction", "exploration", "closure"]
     title: Annotated[UsefulText, Field(max_length=200)]
-    statement: Annotated[UsefulText, Field(max_length=1600)]
+    statement: Annotated[UsefulText, Field(max_length=1000)]
     minutes: Annotated[int, Field(ge=1, le=180)]
 
 
 class GeneratedOutput(ResultObject):
     title: Annotated[UsefulText, Field(max_length=200)]
-    purpose: Annotated[UsefulText, Field(max_length=1200)]
-    formative_assessment: Annotated[UsefulText, Field(max_length=1200)]
+    purpose: Annotated[UsefulText, Field(max_length=1000)]
+    formative_assessment: Annotated[UsefulText, Field(max_length=1000)]
     duration_minutes: Annotated[int, Field(ge=15, le=180)]
     activities: Annotated[list[GeneratedActivity], Field(min_length=3, max_length=3)]
     materials: Annotated[

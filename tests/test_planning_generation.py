@@ -3,13 +3,14 @@
 import hashlib
 import json
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import select, update
+from sqlalchemy import event, select, text, update
 from sqlalchemy.orm import Session
 from test_guided_planning import guided_body
 
@@ -150,8 +151,11 @@ def test_unknown_consumption_blocks_every_new_operation_without_retry(
     assert len(provider.calls) == 1
 
 
+@pytest.mark.parametrize(
+    "invalid_field", ["duration", "purpose", "formative_assessment", "statement"]
+)
 def test_invalid_output_retains_observed_usage_and_never_retries(
-    runtime_database, actors
+    runtime_database, actors, invalid_field
 ):
     actor, scope = actors[0]
     body, key = request(), uuid4()
@@ -160,7 +164,12 @@ def test_invalid_output_retains_observed_usage_and_never_retries(
         def generate(self, payload):
             self.calls.append(("generate", payload))
             invalid = output()
-            invalid["activities"][0]["minutes"] = 7
+            if invalid_field == "duration":
+                invalid["activities"][0]["minutes"] = 7
+            elif invalid_field == "statement":
+                invalid["activities"][0]["statement"] = "A" * 1001
+            else:
+                invalid[invalid_field] = "A" * 1001
             return ProviderResult(
                 invalid, MODEL, "synthetic-invalid", 500, 100, None, None
             )
@@ -178,6 +187,8 @@ def test_invalid_output_retains_observed_usage_and_never_retries(
             select(GenerationAttempt).where(GenerationAttempt.operation_id == key)
         )
         assert ledger.state == "failed"
+        assert ledger.error_code == "provider_invalid_output"
+        assert ledger.reserved_usd == Decimal("0.0008168")
         assert (ledger.count_requests, ledger.generation_requests) == (1, 1)
         assert ledger.counted_input_tokens == 500
         assert (ledger.input_tokens, ledger.output_tokens) == (500, 100)
@@ -237,6 +248,94 @@ def test_count_limit_and_failures_consume_global_reservation_without_refund(
             for item in records
         )
         assert sum(item.reserved_usd for item in records) == Decimal("0.0016336")
+
+
+def test_overlapping_admissions_share_one_global_budget_reservation(
+    runtime_database, migrated_database, actors
+):
+    body, provider = request(), FakeProvider()
+    budget = Decimal("0.0008168")  # One count reserve plus maximum generation cost.
+    release = threading.Event()
+    first_insert, second_started, second_insert = (threading.Event() for _ in range(3))
+    worker = threading.local()
+    pids = {}
+
+    def pause_admission(connection, cursor, statement, parameters, context, many):
+        number = getattr(worker, "number", None)
+        if number is None:
+            return
+        if number not in pids:
+            pids[number] = connection.connection.driver_connection.info.backend_pid
+            if number == 1:
+                second_started.set()
+        if statement.startswith("INSERT INTO planning_generation_attempt "):
+            # Pause after the budget read and before the reservation can commit.
+            (first_insert if number == 0 else second_insert).set()
+            assert release.wait(5), "admission test did not release its transactions"
+
+    def write(number):
+        worker.number = number
+        actor, scope = actors[number]
+        service = GeneratedPlannings(
+            runtime_database,
+            provider,
+            profile(body, actor=actor, scope=scope, budget=str(budget)),
+        )
+        try:
+            return service.write(actor, scope, uuid4(), body)
+        except MaterialError as error:
+            return error
+
+    event.listen(runtime_database, "before_cursor_execute", pause_admission)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(write, 0)
+            try:
+                assert first_insert.wait(5)
+                second = pool.submit(write, 1)
+                assert second_started.wait(5)
+                assert pids[0] != pids[1]
+                # Observe actual overlap: the second connection is blocked by the
+                # first, or (without serialization) has also passed admission.
+                deadline = time.monotonic() + 1.5
+                with migrated_database.connect() as observer:
+                    while not second_insert.is_set():
+                        if observer.scalar(
+                            text("SELECT :first = ANY(pg_blocking_pids(:second))"),
+                            {"first": pids[0], "second": pids[1]},
+                        ):
+                            break
+                        assert time.monotonic() < deadline, "admissions did not overlap"
+                        time.sleep(0.005)
+                assert not first.done()
+            finally:
+                release.set()
+            outcomes = [first.result(timeout=5), second.result(timeout=5)]
+    finally:
+        release.set()
+        event.remove(runtime_database, "before_cursor_execute", pause_admission)
+
+    saved = [item for item in outcomes if isinstance(item, dict)]
+    denied = [item for item in outcomes if isinstance(item, MaterialError)]
+    assert len(saved) == 1
+    assert len(denied) == 1
+    assert denied[0].detail in {"generation_busy", "generation_budget_exhausted"}
+    assert [kind for kind, _ in provider.calls] == ["count", "generate"]
+    with Session(runtime_database) as session:
+        attempts = session.scalars(select(GenerationAttempt)).all()
+        assert len(attempts) == 1
+        assert attempts[0].state == "succeeded"
+        assert sum(item.reserved_usd for item in attempts) == budget
+        assert sum(item.reserved_usd for item in attempts) <= budget
+    for actor, scope in actors:
+        with pytest.raises(MaterialError) as exhausted:
+            GeneratedPlannings(
+                runtime_database,
+                provider,
+                profile(body, actor=actor, scope=scope, budget=str(budget)),
+            ).write(actor, scope, uuid4(), body)
+        assert exhausted.value.detail == "generation_budget_exhausted"
+    assert [kind for kind, _ in provider.calls] == ["count", "generate"]
 
 
 def test_input_permission_and_exact_reference_are_checked_without_transmission(

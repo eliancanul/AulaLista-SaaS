@@ -16,6 +16,14 @@ import type {
 } from "./contracts";
 
 import { guidedResources, validateGuidedRequest } from "./guided-planning";
+import {
+  isAnalyticSectionData,
+  MAX_ANALYTIC_DATA_BYTES,
+  prefillAnalyticPlanning,
+  type AnalyticSectionData,
+  type AnalyticSectionDocument,
+  type DeriveAnalyticPlanningRequest,
+} from "./analytic-sections";
 
 export class ApiError extends Error {
   constructor(
@@ -181,6 +189,30 @@ export function parseGeneratedRequest(q: unknown): GeneratedPlanningRequest {
   assert(new TextEncoder().encode(JSON.stringify(q)).length <= 4096);
   return q as unknown as GeneratedPlanningRequest;
 }
+export function parseAnalyticSection(v: unknown): AnalyticSectionDocument {
+  assert(object(v) && object(v.receipt) && isAnalyticSectionData(v.data) && v.provenance === "manual-v1");
+  const r = v.receipt, reference = v.data.reference;
+  assert(r.contract_version === 1 && r.namespace === "analytic-section-v1" &&
+    ["section_id", "revision_id", "scope_id", "actor_id", "operation_id"].every(k => isUuid(r[k])) &&
+    positive(r.revision) && date(r.created_at));
+  assert(reference === null
+    ? r.source_id === null && r.source_version_id === null && r.source_version === null && r.source_sha256 === null
+    : r.source_id === reference.source_id && r.source_version === reference.source_version && isUuid(r.source_version_id) && sha(r.source_sha256));
+  return v as unknown as AnalyticSectionDocument;
+}
+function validateAnalyticOrigin(v: Record<string, unknown>, initial: unknown) {
+  if (v.analytic_origin === undefined) return;
+  const section = parseAnalyticSection(v.analytic_origin);
+  assert(object(v.receipt) && object(initial) && initial.contract_version === 2 &&
+    section.receipt.scope_id === v.receipt.scope_id && section.receipt.actor_id === v.receipt.actor_id);
+  const expected = prefillAnalyticPlanning(section);
+  for (const key of ["grade", "topic", "language", "context", "learning_objectives", "formative_field", "articulating_axes", "reference"] as const)
+    assert(sameJson(initial[key], expected[key]));
+  if (v.receipt.namespace === "planning-v1") {
+    for (const key of ["source_id", "source_version_id", "source_version", "source_sha256"] as const)
+      assert(v.receipt[key] === section.receipt[key]);
+  }
+}
 export function parsePlanning(v: unknown): PlanningDocument {
   assert(object(v) && object(v.receipt) && object(v.request));
   const r = v.receipt,
@@ -211,6 +243,7 @@ export function parsePlanning(v: unknown): PlanningDocument {
   assert(v.origin === undefined || origin(v.origin));
   if (v.initial_request !== undefined) assert(initialRequest(v.initial_request, r));
   const initial = v.initial_request ?? q;
+  validateAnalyticOrigin(v, initial);
   assert(object(v.result));
   assert((object(initial) && (initial.contract_version === 2 || initial.contract_version === 3)) === (v.result.kind === "guided-planning-v1"));
   assert((object(initial) && initial.contract_version === 3) === (v.result.provenance === "openai-guided-v1"));
@@ -258,6 +291,7 @@ export function parseDraft(v: unknown): DraftDocument {
       r.draft_revision === Number(q.expected_draft_revision) + 1,
   );
   const result = parseResult(v.result);
+  validateAnalyticOrigin(v, v.initial_request);
   if (result.kind === "guided-planning-v1") assert(object(v.initial_request) && guidedRequest(v.initial_request));
   assert((object(v.initial_request) && v.initial_request.contract_version === 3) === (result.provenance === "openai-guided-v1"));
   assert(
@@ -360,6 +394,64 @@ export class AcentaApi {
     this.scoped(source);
     assert(source.operation_id === key);
     return source;
+  }
+  private analyticSection(value: unknown) {
+    const doc = parseAnalyticSection(value);
+    this.scoped(doc.receipt);
+    return doc;
+  }
+  private checkAnalyticData(data: AnalyticSectionData) {
+    if (!isAnalyticSectionData(data)) throw new ApiError(422, "invalid_request");
+    if (new TextEncoder().encode(JSON.stringify(data)).length > MAX_ANALYTIC_DATA_BYTES)
+      throw new ApiError(413, "content_too_large");
+  }
+  async createAnalyticSection(data: AnalyticSectionData, key: string) {
+    this.checkAnalyticData(data);
+    const doc = this.analyticSection(await this.request("analytic-sections", "POST", data, key));
+    assert(doc.receipt.operation_id === key && doc.receipt.revision === 1 && sameJson(doc.data, data));
+    return doc;
+  }
+  async saveAnalyticSection(id: string, expected: number, data: AnalyticSectionData, key: string) {
+    this.checkAnalyticData(data);
+    if (!positive(expected) || expected >= 2147483647) throw new ApiError(422, "invalid_request");
+    const doc = this.analyticSection(await this.request(`analytic-sections/${this.id(id)}/revisions`, "POST", { contract_version: 1, expected_revision: expected, data }, key));
+    assert(doc.receipt.section_id === id && doc.receipt.revision === expected + 1 && doc.receipt.operation_id === key && sameJson(doc.data, data));
+    return doc;
+  }
+  async readAnalyticSection(id: string, revision?: number) {
+    if (revision !== undefined && !positive(revision)) throw new ApiError(422, "invalid_request");
+    const doc = this.analyticSection(await this.request(`analytic-sections/${this.id(id)}${revision === undefined ? "" : `/revisions/${revision}`}`));
+    assert(doc.receipt.section_id === id && (revision === undefined || doc.receipt.revision === revision));
+    return doc;
+  }
+  async analyticSectionOperation(key: string) {
+    const doc = this.analyticSection(await this.request(`analytic-section-operations/${this.id(key)}`));
+    assert(doc.receipt.operation_id === key);
+    return doc;
+  }
+  async listAnalyticSections(cursor?: string, limit = 50): Promise<Page<AnalyticSectionDocument>> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new ApiError(422, "invalid_request");
+    const v = await this.request(`analytic-sections?${cursor === undefined ? "" : `after=${this.id(cursor)}&`}limit=${limit}`);
+    assert(object(v) && Array.isArray(v.items) && v.items.length <= limit && (v.next_cursor === null || isUuid(v.next_cursor)));
+    let previous = cursor?.toLowerCase() ?? "";
+    const items = v.items.map(value => {
+      const doc = this.analyticSection(value), id = doc.receipt.section_id.toLowerCase();
+      assert(id > previous);
+      previous = id;
+      return doc;
+    });
+    assert(v.next_cursor === null || (items.length > 0 && v.next_cursor === items.at(-1)!.receipt.section_id));
+    return { items, next_cursor: v.next_cursor };
+  }
+  async deriveAnalyticPlanning(section: AnalyticSectionDocument, data: DeriveAnalyticPlanningRequest, key: string) {
+    const { section_id: id, revision } = section.receipt;
+    this.scoped(section.receipt);
+    if (!positive(revision)) throw new ApiError(422, "invalid_request");
+    const doc = this.planning(await this.request(`analytic-sections/${this.id(id)}/revisions/${revision}/plannings`, "POST", data, key, false, 4096));
+    assert(doc.receipt.operation_id === key && doc.receipt.revision === 1 && sameJson(doc.analytic_origin, section) &&
+      doc.request.contract_version === 2 && doc.request.subject === data.subject &&
+      doc.request.duration_minutes === data.duration_minutes && doc.request.method === data.method);
+    return doc;
   }
   async createSource(bytes: string, key: string) {
     return this.source(

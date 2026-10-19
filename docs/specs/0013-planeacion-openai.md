@@ -1,9 +1,12 @@
 # Especificación 0013: Planeación manual con OpenAI
 
-Candidato offline sobre `e48b3ba52023bc1afdfb97c53a307fc3403cdc4f`, 18 de octubre
-de 2026. Implementación autorizada en rama aislada; sin activación, llamadas reales,
-merge ni despliegue. La creación del issue de seguimiento fue rechazada por la
-revisión automática de permisos: no hay issue publicado para este candidato.
+Preparación offline iniciada sobre `e48b3ba52023bc1afdfb97c53a307fc3403cdc4f` el
+18 de octubre de 2026, reconciliada con `50dadcccc7b26b8431bec1128d9c2d2e77b7516a`
+el 19 de octubre. Implementación autorizada en rama aislada; sin activación,
+llamadas reales, integración en main ni despliegue. Seguimiento autorizado:
+[issue #62](https://github.com/eliancanul/AulaLista-SaaS/issues/62), ligado a la
+[PR #60](https://github.com/eliancanul/AulaLista-SaaS/pull/60). Regulariza la
+trazabilidad de esta preparación offline, sin autorizar activación.
 
 ## Contrato
 
@@ -18,7 +21,11 @@ procedencia `openai-guided-v1` y aviso impuesto por el servidor. El proveedor no
 elige autoridad, procedencia, destinatario ni herramientas. Pydantic comprueba
 campos, tipos, texto útil, tres etapas ordenadas y suma exacta de la duración
 solicitada; no repara ni acepta salida parcial. Esa validación no acredita
-calidad pedagógica, verdad curricular o evaluación con datos reales.
+calidad pedagógica, verdad curricular o evaluación con datos reales. Los campos
+editables de propósito, evaluación y actividades se limitan a 1000 caracteres,
+tanto en el esquema enviado como en la validación, para conservar edición B3.
+Una salida que excede ese límite falla sin publicar resultado, conserva reserva
+y consumo observado y no se reenvía con la misma operación.
 
 `GET /scopes/{scope}/planning-generation` informa disponibilidad autorizada.
 Sin proveedor y perfil explícitos es falsa. El factory normal no obtiene una
@@ -94,6 +101,10 @@ Los metadatos de consumo no incluyen prompt, respuesta cruda o cabeceras privada
 Tests de software con transporte falso y PostgreSQL real desechable: duplicados,
 respuesta perdida, carreras de presupuesto, límite contado, reinicio/timeout,
 revocación, validación de salida, conservación de edición/copia y aislamiento.
+La carrera usa dos conexiones y propietarios distintos, retiene la primera
+admisión antes de su commit y observa el bloqueo real de la segunda. Con un
+presupuesto para una reserva, sólo una operación cuenta y genera; la prueba
+debe fallar al retirar la serialización global.
 Esas fixtures no se enviarán a la API ni se presentarán como prueba educativa.
 
 Antes de una llamada real: verificar en metadatos seguros `OPENAI_API_KEY` de tipo
@@ -104,9 +115,12 @@ dentro de MXN 100 totales ya recargados; revisión independiente y límite de ga
 efectivo. Sin esos datos, no activar ni recargar. `store=false` no promete cero
 retención del proveedor.
 
-La migración nueva parte de `0007_guided_planning`. La PR #57 tiene otra migración
-0008 y cambios en integración compartida: rebase y revisión del grafo, readiness,
-permisos runtime y rutas serán obligatorios antes de integrar ambos candidatos.
+Las dos revisiones 0008 conservan su padre `0007_guided_planning` y se reúnen
+en `0009_planning_branches`, el único head admitido por readiness. La actualización
+desde cualquiera de las dos ramas aplica la hermana faltante sin reescribir
+historia. Se conservan los grants, rutas, DTOs y procedencia de apartados,
+así como impresión y foco. Los downgrades de cada rama mantienen sus guardas
+para no eliminar intentos o apartados retenidos.
 
 Fuentes oficiales consultadas: [modelo](https://developers.openai.com/api/docs/models/gpt-6-luna),
 [precios](https://developers.openai.com/api/docs/pricing),

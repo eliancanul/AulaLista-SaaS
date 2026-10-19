@@ -126,7 +126,9 @@ def runtime_database(migrated_database, actors, monkeypatch):
             GRANT UPDATE (state, finished_at, counted_input_tokens, generation_requests,
                 model, service_tier, provider_request_id, input_tokens, output_tokens,
                 cached_tokens, cache_write_tokens, reasoning_tokens, error_code, planning_revision_id)
-                ON planning_generation_attempt TO aulalista_runtime
+                ON planning_generation_attempt TO aulalista_runtime;
+            GRANT SELECT, INSERT ON analytic_section, analytic_section_revision TO aulalista_runtime;
+            GRANT UPDATE (current_revision) ON analytic_section TO aulalista_runtime
         """)
         )
     settings = load_settings()

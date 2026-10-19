@@ -28,7 +28,9 @@ async function mount(page: Page, server = new GuidedServer()) {
     .click();
   return server;
 }
-for (const trigger of ["click", "Enter"] as const) test(`available AI creation through ${trigger} stays pending without resending and displays the recovered provenance`, async ({ page }) => {
+for (const width of [320, 390, 700, 701, 1280])
+for (const trigger of ["click", "Enter"] as const) test(`available AI creation through ${trigger} at ${width}px stays pending without resending and displays the recovered provenance`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
   const server = new GuidedServer();
   let pending = true;
   server.after = async (call, response) => {
@@ -59,13 +61,16 @@ for (const trigger of ["click", "Enter"] as const) test(`available AI creation t
   await expect(page.getByRole("alert")).toContainText("No se pudo confirmar el resultado");
   pending = false;
   await page.getByRole("button", { name: "Consultar estado", exact: true }).click();
-  const reader = page.getByRole("dialog", { name: "Vista previa", exact: true });
+  const reader = page.getByRole("dialog", { name: width <= 700 ? "Lectura de planeación" : "Vista previa", exact: true });
   await expect(reader).toBeVisible();
   await expect(reader.locator(".guided-type")).toContainText("Generada con IA");
   await reader.getByRole("button", { name: "Editar", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Editar planeación", exact: true }).locator(".guided-field-preview")).toContainText("Generada con IA");
+  const provenance = page.getByRole("dialog", { name: "Editar planeación", exact: true }).getByText("Generada con IA · Revisión 1", { exact: true });
+  await expect(provenance).toBeVisible();
+  await expect(provenance).toBeInViewport();
+  await geometry(page);
   await page.getByRole("dialog", { name: "Editar planeación", exact: true }).getByRole("button", { name: "Cerrar", exact: true }).click();
-  await reader.getByRole("button", { name: "Cerrar", exact: true }).click();
+  await reader.getByRole("button", { name: width <= 700 ? "Mis recursos" : "Cerrar", exact: true }).click();
   await expect(page.locator(".library-card")).toContainText("Generada con IA");
   expect(server.calls.filter(call => call.path === "generated-plannings")).toHaveLength(1);
 });
@@ -185,6 +190,9 @@ for (const width of [320, 390, 700, 701, 1440])
     await expect(
       page.getByRole("dialog", { name: "Editar planeación", exact: true }),
     ).toBeVisible();
+    const provenance = page.getByRole("dialog", { name: "Editar planeación", exact: true }).getByText("Ejemplo de software · Revisión 1", { exact: true });
+    await expect(provenance).toBeVisible();
+    await expect(provenance).toBeInViewport();
     await geometry(page);
     await page
       .getByLabel("Propósito", { exact: true })

@@ -7,6 +7,7 @@ import {
   waterSource,
 } from "./contracts";
 import { Dialog, Logo } from "./ui";
+import { PrintPlanningButton } from "./PrintPlanning";
 import {
   guidedExample,
   guidedInput,
@@ -96,7 +97,7 @@ export function GuidedForm({ controller }: { controller: AcentaController }) {
       </div>
       <div className="guided-mode">
         <span aria-current="page">Clase</span>
-        <span className="secondary">Programa analítico · Próximamente</span>
+        <button className="quiet" onClick={() => controller.navigate("analytic")}>Programa analítico</button>
       </div>
       <form
         className="guided-form"
@@ -689,6 +690,7 @@ export function GuidedReader({
               <span className="desktop-subject"> · {q.subject}</span> ·{" "}
               {r.duration_minutes} minutos
             </p>
+            <PrintPlanningButton document={document} />
           </header>
           <section>
             <h2 tabIndex={-1} data-section="purpose">

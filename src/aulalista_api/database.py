@@ -11,7 +11,7 @@ from sqlalchemy.pool import NullPool
 
 from aulalista_api.config import Settings
 
-SCHEMA_REVISION = "0008_openai_planning"
+SCHEMA_REVISION = "0009_planning_branches"
 
 
 class Base(DeclarativeBase):

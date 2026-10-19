@@ -6,6 +6,7 @@ from typing import Literal
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+from aulalista_api.analytic_section_routes import install_analytic_section_routes
 from aulalista_api.auth_routes import install_auth_routes
 from aulalista_api.config import load_settings
 from aulalista_api.database import Readiness, make_engine
@@ -53,5 +54,6 @@ def create_app(*, planning_provider=None, generation_profile=None) -> FastAPI:
         app, engine, provider=planning_provider, profile=generation_profile
     )
     install_planning_edit_routes(app, engine)
+    install_analytic_section_routes(app, engine)
     install_web(app)
     return app

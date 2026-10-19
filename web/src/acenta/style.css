@@ -1118,6 +1118,7 @@ dialog::backdrop {
 .guided-intro p, .guided-session-limit { color: var(--secondary); font-size: 15px; }
 .guided-mode { display: flex; gap: 28px; font-size: 14px; border-bottom: 1px solid #d9ddda; margin-bottom: 20px; }
 .guided-mode span { padding: 0 0 12px; }
+.guided-mode button { border: 0; border-radius: 0; padding: 0 0 12px; font-size: inherit; color: var(--secondary); }
 .guided-mode [aria-current] { color: var(--action); border-bottom: 2px solid var(--action); }
 .guided-form { background: white; border: 1px solid #d9ddda; border-radius: 12px; padding: 24px; }
 .guided-form fieldset { padding: 0; margin: 0; border: 0; min-width: 0; display: flex; flex-direction: column; gap: 28px; }
@@ -1139,6 +1140,13 @@ dialog::backdrop {
 .guided-options-summary dt { color: var(--secondary); }
 .guided-options-summary dd { margin: 0; }
 .guided-options-fields { padding-top: 22px; display: flex; flex-direction: column; gap: 24px; }
+.analytic-page [hidden] { display: none; }
+.analytic-entry { display: flex; flex-direction: column; gap: 28px; }
+.analytic-entry + .analytic-entry { border-top: 1px solid #d9ddda; padding-top: 24px; }
+.analytic-more { text-align: left; align-self: flex-start; }
+.analytic-save-status { color: var(--secondary); font-size: 14px; margin-top: 12px; }
+.analytic-save-status:empty { display: none; }
+.analytic-exit-dialog { width: 620px; max-width: calc(100vw - 32px); padding: 24px; }
 .guided-check { display: flex; align-items: center; gap: 10px; min-height: 44px; }
 .guided-check input { width: 18px; min-height: 18px; accent-color: var(--action); }
 .guided-form-footer { margin-top: 24px; padding-top: 18px; border-top: 1px solid #d9ddda; display: flex; align-items: center; justify-content: space-between; gap: 16px; }

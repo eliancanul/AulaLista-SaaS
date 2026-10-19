@@ -1,0 +1,32 @@
+@page {
+  size: letter portrait;
+  margin: 0.6in;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #fff;
+  color: #111;
+  font: 11pt/1.45 Arial, Helvetica, sans-serif;
+}
+
+* { box-sizing: border-box; }
+.planning-print-document { overflow-wrap: anywhere; }
+.planning-print-heading { border-bottom: 1px solid #777; padding-bottom: 9pt; }
+.planning-print-heading .logo { display: block; width: 80pt; height: auto; filter: grayscale(1); }
+.planning-print-heading p { margin: 5pt 0; }
+h1 { font-size: 20pt; line-height: 1.2; margin: 12pt 0 8pt; }
+h2 { font-size: 13pt; margin: 16pt 0 5pt; }
+h3 { font-size: 11pt; margin: 10pt 0 4pt; }
+h1, h2, h3, dt { break-after: avoid-page; page-break-after: avoid; }
+p { margin: 0 0 7pt; white-space: pre-wrap; }
+p, li, dd { orphans: 3; widows: 3; }
+ul { margin: 4pt 0 8pt; padding-left: 18pt; }
+li { white-space: pre-wrap; }
+dt { font-weight: bold; margin-top: 7pt; }
+dd { margin: 0; white-space: pre-wrap; }
+dd ul { white-space: normal; }
+.planning-print-context { border-top: 1px solid #777; margin-top: 16pt; }
+/* Long activities and manual context may span pages; never clip or shrink them. */
+.planning-print-activity, .planning-print-context { break-inside: auto; }

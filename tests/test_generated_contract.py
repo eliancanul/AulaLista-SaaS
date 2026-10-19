@@ -66,6 +66,23 @@ def test_provider_cannot_choose_provenance_and_duration_is_exact():
             validate_generated_output({**raw, field: "untrusted"}, 50)
 
 
+@pytest.mark.parametrize("field", ["purpose", "formative_assessment", "statement"])
+def test_generated_editable_fields_fit_b3_and_provider_schema(field):
+    raw = provider_output()
+    target = raw["activities"][0] if field == "statement" else raw
+    target[field] = "á" * 1000
+    assert validate_generated_output(raw, 50)
+    target[field] += "á"
+    with pytest.raises(ValidationError):
+        validate_generated_output(raw, 50)
+    properties = (
+        OUTPUT_SCHEMA["$defs"]["GeneratedActivity"]["properties"]
+        if field == "statement"
+        else OUTPUT_SCHEMA["properties"]
+    )
+    assert properties[field]["maxLength"] == 1000
+
+
 @pytest.mark.parametrize("change", ["order", "sum", "type", "empty", "material"])
 def test_provider_output_rejects_invalid_structure_without_repair(change):
     raw = provider_output()

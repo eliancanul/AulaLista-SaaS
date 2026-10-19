@@ -28,6 +28,7 @@ import {
   type Resource,
 } from "./contracts";
 import { emptyGuidedRequest, guidedResources, isGuided, validateGuidedRequest } from "./guided-planning";
+import { AnalyticSectionController } from "./analytic-controller";
 
 export type SaveState =
   | "clean"
@@ -37,7 +38,7 @@ export type SaveState =
   | "error"
   | "unknown"
   | "conflict";
-export type View = "home" | "result" | "resources" | "planning";
+export type View = "home" | "result" | "resources" | "planning" | "analytic";
 export type CreateIntent = {
   kind: "create";
   key: string;
@@ -167,6 +168,7 @@ export function editableResource(
   );
 }
 export class AcentaController {
+  readonly analytic: AnalyticSectionController;
   state: State = fresh();
   private listeners = new Set<() => void>();
   private navigation = 0;
@@ -193,6 +195,7 @@ export class AcentaController {
     private recovery: EditorRecovery | null = null,
   ) {
     if (!isUuid(workspaceId)) throw Error("Invalid workspace identity");
+    this.analytic = new AnalyticSectionController(api);
     this.backupKey = `acenta:work:v1:${api.session.actorId}:${api.session.scopeId}:${workspaceId}`;
     this.restore();
     this.state = {...this.state, ...this.recoveryWarnings(), recoveryEnabled:!!this.recovery?.enabled, recoveryAvailable:!!this.recovery?.candidate};
@@ -446,6 +449,7 @@ export class AcentaController {
   }
   /** Suspend callback admission without deleting the in-memory buffer or its pending key. */
   suspend() {
+    this.analytic.suspend();
     this.suspended = true;
     this.epoch++;
     this.navigation++;
@@ -458,7 +462,7 @@ export class AcentaController {
       submit:this.state.pending ? "unknown" : this.state.submit,
       editor:this.state.editor?.pending ? {...this.state.editor,save:"unknown"} : this.state.editor};
   }
-  resume() { this.suspended = false; }
+  resume() { this.suspended = false; this.analytic.resume(); }
   async restoreGenerationRecovery() {
     if (this.state.closed || this.suspended) return;
     const envelope = this.recovery?.generations.take();
@@ -1277,6 +1281,7 @@ export class AcentaController {
     }
   }
   closeSession() {
+    this.analytic.close();
     this.epoch++;
     this.navigation++;
     this.listGeneration++;
