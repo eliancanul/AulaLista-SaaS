@@ -37,6 +37,7 @@ test("explorer searches the whole catalog, combines exact filters, paginates and
   await mount(page, server); await open(page);
   const modal = explorer(page), rows = modal.locator(".analytic-result");
   await expect(rows).toHaveCount(6);
+  await expect(modal.getByLabel("Buscar por título o tema")).toBeFocused();
   await expect(modal.getByText("Página 1 · 6 mostrados", { exact: true })).toBeVisible();
   await modal.getByRole("button", { name: "Página siguiente", exact: true }).click();
   await expect(rows).toHaveCount(3);
@@ -57,7 +58,7 @@ test("explorer searches the whole catalog, combines exact filters, paginates and
   await expect(preview).toContainText("Sin referencia adjunta");
   expect(await preview.getByText(" Primer PDA manual. ", { exact: true }).textContent()).toBe(" Primer PDA manual. ");
   await page.evaluate(() => document.fonts.ready);
-  await page.screenshot({ path: `${evidence}/analytic-explorer-desktop.png`, fullPage: true });
+  await page.screenshot({ path: `${evidence}/analytic-explorer-desktop.png`, fullPage: false });
   expect(server.calls.filter(call => call.method === "POST")).toHaveLength(0);
   await page.keyboard.press("Escape");
   await expect(modal).toHaveCount(0);
@@ -68,7 +69,7 @@ test("readonly derivation uses the selected revision, then editing and reopening
   await page.setViewportSize({ width: 1440, height: 1000 });
   const server = new AnalyticServer(), original = server.putSection(canonical());
   await mount(page, server);
-  await page.getByLabel("Tema", { exact: true }).fill("Mi preparación independiente");
+  await page.getByLabel("Tema", { exact: false }).fill("Mi preparación independiente");
   await use(page);
   await expect(page.getByLabel("Tema del apartado")).toHaveAttribute("readonly", "");
   await expect(page.getByText("PDA 2 · Sólo lectura", { exact: true })).toBeVisible();
@@ -146,7 +147,7 @@ test("lost creation response recovers once and cannot discard or replace the unc
 test("cancel and session exit preserve the independent form until an explicit discard", async ({ page }) => {
   const server = new AnalyticServer(); server.putSection(canonical());
   await mount(page, server);
-  await page.getByLabel("Tema", { exact: true }).fill("Texto independiente");
+  await page.getByLabel("Tema", { exact: false }).fill("Texto independiente");
   await use(page);
   await page.getByLabel("Asignatura").fill("Mi asignatura");
   await page.getByRole("button", { name: "Cerrar sesión", exact: true }).click();
@@ -156,7 +157,7 @@ test("cancel and session exit preserve the independent form until an explicit di
   await expect(page.getByLabel("Asignatura")).toHaveValue("Mi asignatura");
   await page.getByRole("button", { name: "Cancelar", exact: true }).click();
   await page.getByRole("button", { name: "Descartar preparación", exact: true }).click();
-  await expect(page.getByLabel("Tema", { exact: true })).toHaveValue("Texto independiente");
+  await expect(page.getByLabel("Tema", { exact: false })).toHaveValue("Texto independiente");
   expect(server.docs.size).toBe(0);
 });
 

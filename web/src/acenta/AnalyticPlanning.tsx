@@ -34,6 +34,9 @@ export function AnalyticExplorer({ controller }: { controller: AcentaController 
   const state = useSyncExternalStore(explorer.subscribe, explorer.snapshot);
   const workspace = useSyncExternalStore(controller.subscribe, controller.snapshot);
   const derived = useSyncExternalStore(controller.analyticDerivation.subscribe, controller.analyticDerivation.snapshot);
+  const search = useRef<HTMLInputElement>(null);
+  // Dialog opens in its layout effect; focus only after it is modal, never on a query response.
+  useEffect(() => { if (state.open) search.current?.focus(); }, [state.open]);
   if (!state.open) return null;
   const filter = (key: keyof AnalyticSectionFilters, value: string) => {
     const next = { ...state.filters };
@@ -43,7 +46,7 @@ export function AnalyticExplorer({ controller }: { controller: AcentaController 
   return <Dialog title="Usar un apartado guardado" className="analytic-explorer" onClose={() => explorer.close()}>
     <header className="guided-reader-header"><Icon name="folder-small" small /><h2>Usar un apartado guardado</h2><button className="quiet guided-icon-button" aria-label="Cerrar explorador" onClick={() => explorer.close()}>×</button></header>
     <div className="analytic-search-fields">
-      <div className="analytic-search-name"><Icon name="search-small" small /><label className="sr-only" htmlFor="analytic-search">Buscar por título o tema</label><input autoFocus id="analytic-search" type="search" value={state.filters.q ?? ""} maxLength={400} placeholder="Buscar por título o tema" onChange={event => filter("q", event.target.value)} /></div>
+      <div className="analytic-search-name"><Icon name="search-small" small /><label className="sr-only" htmlFor="analytic-search">Buscar por título o tema</label><input ref={search} id="analytic-search" type="search" value={state.filters.q ?? ""} maxLength={400} placeholder="Buscar por título o tema" onChange={event => filter("q", event.target.value)} /></div>
       <div><label className="sr-only" htmlFor="analytic-filter-grade">Filtrar por grado exacto</label><input id="analytic-filter-grade" list="analytic-grade-options" placeholder="Todos los grados" value={state.filters.grade ?? ""} maxLength={160} onChange={event => filter("grade", event.target.value)} /><datalist id="analytic-grade-options">{[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={`${n}.º de primaria`} />)}</datalist></div>
       <div><label className="sr-only" htmlFor="analytic-filter-field">Filtrar por campo formativo exacto</label><input id="analytic-filter-field" placeholder="Todos los campos formativos" value={state.filters.formative_field ?? ""} maxLength={240} onChange={event => filter("formative_field", event.target.value)} /></div>
       <p className="field-hint">Búsqueda literal en el nombre. Grado y campo: escribe el valor exacto o déjalo vacío para ver todos.</p>

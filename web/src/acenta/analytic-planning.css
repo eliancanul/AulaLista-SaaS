@@ -38,6 +38,7 @@
 .analytic-content.compact section:last-child { margin-bottom: 0; }
 .analytic-content.compact .analytic-content-pair { gap: 12px; }
 .guided-page.analytic-derived-page { max-width: 880px; }
+.analytic-derived-page .guided-intro h1 { font: 400 32px/1.2 "Instrument Serif", serif; }
 .analytic-derived-intro { display: grid; grid-template-columns: 1fr auto; gap: 0 16px; align-items: center; }
 .analytic-derived-intro p { grid-column: 1 / -1; }
 .analytic-derived-intro button { display: flex; align-items: center; gap: 6px; font-size: 14px; }
