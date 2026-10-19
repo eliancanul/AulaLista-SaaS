@@ -1,0 +1,4 @@
+.planning-print-action { margin-top: 16px; }
+.planning-print-action button { min-height: 44px; padding: 8px 18px; border-radius: 8px; }
+.planning-print-action p { font-size: 13px; line-height: 1.45; margin: 6px 0 0; color: var(--muted, #555); }
+.planning-print-action [role="alert"] { color: #842121; }
