@@ -10,7 +10,7 @@ from alembic.config import Config
 from conftest import DISPOSABLE_MARKER, TEST_URL, disposable_engine
 from fastapi.testclient import TestClient
 from sqlalchemy import inspect, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
 from aulalista_api.app import create_app
@@ -66,10 +66,92 @@ def test_empty_database_migrates_and_upgrade_is_repeatable(empty_database):
         "planning_revision",
         "planning_draft",
         "planning_draft_revision",
+        "planning_generation_attempt",
         "analytic_section",
         "analytic_section_revision",
     }
     command.check(Config("alembic.ini"))
+
+
+@pytest.mark.parametrize("branch", ["0008_analytic_sections", "0008_openai_planning"])
+def test_each_existing_branch_upgrades_to_one_head_without_losing_history(
+    empty_database, branch
+):
+    config = Config("alembic.ini")
+    command.upgrade(config, branch)
+    owner, scope, record, operation = (uuid4() for _ in range(4))
+    with empty_database.begin() as connection:
+        connection.execute(
+            text("INSERT INTO principal (id) VALUES (:id)"), {"id": owner}
+        )
+        connection.execute(
+            text(
+                "INSERT INTO personal_scope (id, owner_principal_id) VALUES (:id, :owner)"
+            ),
+            {"id": scope, "owner": owner},
+        )
+        values = {"id": record, "scope": scope, "owner": owner, "operation": operation}
+        if branch == "0008_analytic_sections":
+            table = "analytic_section_revision"
+            connection.execute(
+                text(
+                    "INSERT INTO analytic_section (id, scope_id, current_revision) VALUES (:id, :scope, 1)"
+                ),
+                values,
+            )
+            connection.execute(
+                text("""
+                INSERT INTO analytic_section_revision
+                    (id, section_id, scope_id, number, actor_id, operation_id,
+                     request_fingerprint, data)
+                VALUES (:id, :id, :scope, 1, :owner, :operation, repeat('a', 64),
+                        '{"synthetic": "retained manual history"}'::jsonb)
+                """),
+                values,
+            )
+        else:
+            table = "planning_generation_attempt"
+            connection.execute(
+                text("""
+                INSERT INTO planning_generation_attempt
+                    (id, scope_id, actor_id, operation_id, request_fingerprint,
+                     request, configuration, payload_sha256, profile_fingerprint,
+                     state, reserved_usd, count_requests, generation_requests,
+                     created_at, deadline_at, finished_at)
+                VALUES (:id, :scope, :owner, :operation, repeat('a', 64),
+                        '{"synthetic": "retained request"}'::jsonb, '{}'::jsonb,
+                        repeat('b', 64), repeat('c', 64), 'failed', 0.0008168, 1, 0,
+                        now(), now() + interval '75 seconds', now())
+                """),
+                values,
+            )
+        before = connection.scalar(
+            text(f"SELECT to_jsonb(retained) FROM {table} retained")
+        )
+    assert not schema_is_ready(empty_database)
+    command.upgrade(config, "head")
+    command.upgrade(config, "head")
+    with empty_database.connect() as connection:
+        assert connection.execute(
+            text("SELECT version_num FROM alembic_version")
+        ).scalars().all() == [SCHEMA_REVISION]
+        assert (
+            connection.scalar(text(f"SELECT to_jsonb(retained) FROM {table} retained"))
+            == before
+        )
+    assert schema_is_ready(empty_database)
+    assert {"analytic_section_revision", "planning_generation_attempt"} <= set(
+        inspect(empty_database).get_table_names()
+    )
+    command.check(config)
+    with pytest.raises(DBAPIError):
+        command.downgrade(config, "0007_guided_planning")
+    assert schema_is_ready(empty_database)
+    with empty_database.connect() as connection:
+        assert (
+            connection.scalar(text(f"SELECT to_jsonb(retained) FROM {table} retained"))
+            == before
+        )
 
 
 @pytest.mark.parametrize(

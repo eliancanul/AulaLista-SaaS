@@ -8,6 +8,17 @@ import { guidedDraft, guidedPlanning, guidedRequest, guidedRevised } from "./gui
 const render = (document: PlanningDocument) => renderToStaticMarkup(createElement(PlanningPrintDocument, { document }));
 
 describe("confirmed planning print document", () => {
+  it("preserves generated provenance and notice without labeling it a software fixture", () => {
+    const document = guidedPlanning();
+    const { fixture_context: _fixture, ...manual } = guidedRequest();
+    document.request = { ...manual, contract_version: 3 };
+    document.result.provenance = "openai-guided-v1";
+    document.result.notice = "Contenido generado: revisar antes de usar.";
+    const html = render(document);
+    expect(html).toContain("Generada con IA");
+    expect(html).toContain(document.result.notice);
+    expect(html).not.toMatch(/Fixture conservado|Ejemplo sintético de software/);
+  });
   it("prints the selected confirmed revision, its full result and original manual context", () => {
     const base = guidedPlanning(undefined, guidedRequest({
       context: { text: "CONTEXTO MANUAL CONSERVADO", hypothetical: true },

@@ -30,7 +30,11 @@ async function tabTo(page: Page, target: Locator, reverse = false) {
   await expect(target).toBeVisible();
   for (let count = 0; count < 60; count++) {
     if (await target.evaluate((el) => el === document.activeElement)) {
-      await expect(target).toBeInViewport({ ratio: 1 });
+      const geometry = await target.evaluate((el) => ({
+        box: el.getBoundingClientRect().toJSON(),
+        viewport: { width: innerWidth, height: innerHeight },
+      }));
+      await expect(target, `Focused control geometry: ${JSON.stringify(geometry)}`).toBeInViewport({ ratio: 1 });
       return;
     }
     await page.keyboard.press(reverse ? "Shift+Tab" : "Tab");
@@ -88,10 +92,11 @@ for (const width of [320, 390, 700, 701, 1440]) {
         submissions++;
     });
     const scope = await login(page, width);
-    const create = page.getByRole("button", { name: "Crear planeación", exact: true });
-    await tabTo(page, create);
+    const openPlanning = page.getByRole("button", { name: "Crear planeación", exact: true });
+    await tabTo(page, openPlanning);
     await page.keyboard.press("Enter");
     const form = page.locator(".guided-page");
+    const create = form.getByRole("button", { name: "Crear ejemplo de software", exact: true });
     await expect(form.getByRole("heading", { name: "Planeación de clase" })).toBeVisible();
     await tabTo(page, create);
     await page.keyboard.press("Enter");

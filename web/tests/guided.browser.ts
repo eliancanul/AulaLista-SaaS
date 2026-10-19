@@ -1,9 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
 import { GuidedServer } from "./guided-server";
-import { guidedRevised } from "./guided-fixtures";
+import { guidedPlanning, guidedRevised } from "./guided-fixtures";
+import { json } from "./acenta-fixtures";
 const evidence = process.env.ACENTA_EVIDENCE_DIR ?? "../evidence/acenta";
-async function mount(page: Page) {
-  const server = new GuidedServer();
+async function mount(page: Page, server = new GuidedServer()) {
   await page.route("**/scopes/**", async (route) => {
     const q = route.request();
     try {
@@ -28,10 +28,56 @@ async function mount(page: Page) {
     .click();
   return server;
 }
+for (const width of [320, 390, 700, 701, 1280])
+for (const trigger of ["click", "Enter"] as const) test(`available AI creation through ${trigger} at ${width}px stays pending without resending and displays the recovered provenance`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  const server = new GuidedServer();
+  let pending = true;
+  server.after = async (call, response) => {
+    if (call.path === "planning-generation") return json({ available: true });
+    if (call.path === "generated-plannings") {
+      const input = JSON.parse(call.body!);
+      expect(input.contract_version).toBe(3);
+      expect(input).not.toHaveProperty("fixture_context");
+      const doc = guidedPlanning(call.key!);
+      doc.request = input;
+      doc.result.provenance = "openai-guided-v1";
+      doc.result.notice = "Respuesta sintética de transporte para comprobar software; no valida calidad educativa.";
+      server.put(doc);
+      return json({ detail: "generation_pending" }, 409);
+    }
+    if (pending && call.path.startsWith("planning-operations/"))
+      return json({ detail: "generation_uncertain" }, 409);
+    return response;
+  };
+  await mount(page, server);
+  await expect(page.getByRole("status")).toContainText("La generación con IA está disponible");
+  await page.getByRole("button", { name: "Usar datos del ejemplo" }).click();
+  await expect(page.getByRole("button", { name: "Generar con IA", exact: true })).toBeVisible();
+  if (trigger === "click") await page.getByRole("button", { name: "Generar con IA", exact: true }).click();
+  else await page.getByLabel("Tema").press("Enter");
+  await expect(page.getByRole("heading", { name: "Resultado sin confirmar" })).toBeVisible();
+  await page.getByRole("button", { name: "Consultar estado", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("No se pudo confirmar el resultado");
+  pending = false;
+  await page.getByRole("button", { name: "Consultar estado", exact: true }).click();
+  const reader = page.getByRole("dialog", { name: width <= 700 ? "Lectura de planeación" : "Vista previa", exact: true });
+  await expect(reader).toBeVisible();
+  await expect(reader.locator(".guided-type")).toContainText("Generada con IA");
+  await reader.getByRole("button", { name: "Editar", exact: true }).click();
+  const provenance = page.getByRole("dialog", { name: "Editar planeación", exact: true }).getByText("Generada con IA · Revisión 1", { exact: true });
+  await expect(provenance).toBeVisible();
+  await expect(provenance).toBeInViewport();
+  await geometry(page);
+  await page.getByRole("dialog", { name: "Editar planeación", exact: true }).getByRole("button", { name: "Cerrar", exact: true }).click();
+  await reader.getByRole("button", { name: width <= 700 ? "Mis recursos" : "Cerrar", exact: true }).click();
+  await expect(page.locator(".library-card")).toContainText("Generada con IA");
+  expect(server.calls.filter(call => call.path === "generated-plannings")).toHaveLength(1);
+});
 async function create(page: Page) {
   await page.getByRole("button", { name: "Usar datos del ejemplo" }).click();
   await page
-    .getByRole("button", { name: "Crear planeación", exact: true })
+    .getByRole("button", { name: "Crear ejemplo de software", exact: true })
     .click();
   await expect(
     page.getByRole("dialog", { name: /Vista previa|Lectura de planeación/ }),
@@ -66,7 +112,7 @@ test("guided form validates in place, preserves optional manual provenance and p
 }) => {
   const server = await mount(page);
   await page
-    .getByRole("button", { name: "Crear planeación", exact: true })
+    .getByRole("button", { name: "Crear ejemplo de software", exact: true })
     .click();
   await expect(page.getByLabel("Asignatura")).toBeFocused();
   expect(server.docs.size).toBe(0);
@@ -84,7 +130,7 @@ test("guided form validates in place, preserves optional manual provenance and p
     fullPage: true,
   });
   await page
-    .getByRole("button", { name: "Crear planeación", exact: true })
+    .getByRole("button", { name: "Crear ejemplo de software", exact: true })
     .dblclick();
   const dialog = page.getByRole("dialog", {
     name: "Vista previa",
@@ -144,6 +190,9 @@ for (const width of [320, 390, 700, 701, 1440])
     await expect(
       page.getByRole("dialog", { name: "Editar planeación", exact: true }),
     ).toBeVisible();
+    const provenance = page.getByRole("dialog", { name: "Editar planeación", exact: true }).getByText("Ejemplo de software · Revisión 1", { exact: true });
+    await expect(provenance).toBeVisible();
+    await expect(provenance).toBeInViewport();
     await geometry(page);
     await page
       .getByLabel("Propósito", { exact: true })
@@ -182,7 +231,7 @@ test("unknown creation is recovered without duplicates; CAS conflict preserves t
   };
   await page.getByRole("button", { name: "Usar datos del ejemplo" }).click();
   await page
-    .getByRole("button", { name: "Crear planeación", exact: true })
+    .getByRole("button", { name: "Crear ejemplo de software", exact: true })
     .click();
   await expect(
     page.getByRole("heading", { name: "Resultado sin confirmar" }),

@@ -198,6 +198,8 @@ class Plannings:
         *,
         analytic_origin: tuple[UUID, int] | None = None,
     ) -> dict:
+        from aulalista_api.planning_generation import reject_generation_operation
+
         canonical = (
             json.dumps(
                 [
@@ -232,6 +234,7 @@ class Plannings:
         with Session(self.engine) as session, session.begin():
             actor_id = authorize(session, actor_id, scope_id)
             session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": lock})
+            reject_generation_operation(session, scope_id, operation_id)
             previous = session.scalar(
                 select(PlanningRevision).where(
                     PlanningRevision.scope_id == scope_id,

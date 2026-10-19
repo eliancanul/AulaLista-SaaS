@@ -25,6 +25,7 @@ from aulalista_api.analytic_sections import (
     AnalyticSections,
     DerivePlanningRequest,
 )
+from aulalista_api.database import SCHEMA_REVISION
 from aulalista_api.materials import MaterialError
 from aulalista_api.plannings import Plannings
 from aulalista_api.water_fixture import FIXTURE_SOURCE
@@ -692,7 +693,7 @@ def test_section_history_is_immutable_for_owner_and_runtime(
         for mutation in [
             "UPDATE analytic_section_revision SET number=number",
             "DELETE FROM analytic_section_revision",
-            "TRUNCATE analytic_section_revision, planning_revision, planning_draft_revision",
+            "TRUNCATE analytic_section_revision, planning_revision, planning_draft_revision, planning_generation_attempt",
         ]:
             with pytest.raises(DBAPIError) as rejected, engine.begin() as connection:
                 connection.execute(text(mutation))
@@ -933,7 +934,7 @@ def test_migration_roundtrip_or_safe_refusal_preserves_confirmed_history(
         with migrated_database.connect() as connection:
             assert (
                 connection.scalar(text("SELECT version_num FROM alembic_version"))
-                == "0008_analytic_sections"
+                == SCHEMA_REVISION
             )
     else:
         command.downgrade(Config("alembic.ini"), "0007_guided_planning")

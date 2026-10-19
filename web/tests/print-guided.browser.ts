@@ -30,7 +30,7 @@ async function mount(page: Page) {
   await page.goto("/tests/acenta.html");
   await page.getByRole("button", { name: "Crear planeación", exact: true }).click();
   await page.getByRole("button", { name: "Usar datos del ejemplo" }).click();
-  await page.getByRole("button", { name: "Crear planeación", exact: true }).click();
+  await page.getByRole("button", { name: "Crear ejemplo de software", exact: true }).click();
   return server;
 }
 

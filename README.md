@@ -67,6 +67,12 @@ un generador general, una selección curricular oficial ni validación pedagógi
 [Contrato, pruebas y límites](web/README.md#planeación-guiada-52) describen el corte;
 su PR y CI deben acreditar el candidato exacto, sin trasladar la evidencia anterior.
 
+El [adaptador de Planeación con OpenAI](docs/specs/0013-planeacion-openai.md)
+está preparado para comprobaciones offline: entrada manual v3, intento durable,
+reserva de presupuesto y recuperación sin reenvío. El factory normal lo mantiene
+deshabilitado y no lee una credencial. Su transporte simulado y pruebas de
+software no acreditan una llamada real, calidad docente ni activación del producto.
+
 ## Historial técnico del primer corte
 
 T0, T1 y T2 están integrados; [PR #3](https://github.com/eliancanul/AulaLista-SaaS/pull/3)

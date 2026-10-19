@@ -29,6 +29,9 @@ export function GuidedForm({ controller }: { controller: AcentaController }) {
   const [options, setOptions] = useState(false);
   const form = useRef<HTMLFormElement>(null);
   useEffect(() => {
+    void controller.loadGenerationAvailability();
+  }, [controller]);
+  useEffect(() => {
     if (s.listState === "idle") void controller.loadResources();
   }, [controller, s.listState]);
   const change = <K extends keyof GuidedPlanningRequest>(
@@ -55,6 +58,8 @@ export function GuidedForm({ controller }: { controller: AcentaController }) {
   });
   const pending = !!s.pending;
   const sending = s.submit === "sending";
+  const generatingWithAI = s.pending?.payload.contract_version === 3;
+  const creationMode = s.generationAvailable ? "ai" : "example";
   const reference = s.sources.find(
     (source) =>
       source.source_id === q.reference?.source_id &&
@@ -76,7 +81,7 @@ export function GuidedForm({ controller }: { controller: AcentaController }) {
           ?.querySelector<HTMLElement>("[aria-invalid=true]")
           ?.focus(),
       );
-    } else void controller.submitGuided();
+    } else void controller.submitGuided(creationMode);
   };
   return (
     <section className="guided-page">
@@ -104,11 +109,10 @@ export function GuidedForm({ controller }: { controller: AcentaController }) {
         }}
       >
         <div className="guided-example-note">
-          <p>
-            Ejemplo sintético de software. Admite Ciencias naturales, 3.º de
-            primaria, el cuidado del agua, aprendizaje activo y español. El
-            contexto manual se conserva; no adapta el ejemplo ni acredita
-            alineación NEM.
+          <p role="status">
+            {s.generationAvailable
+              ? "La generación con IA está disponible. Se preparará una planeación con los datos que escribas. Revisa el resultado antes de usarlo."
+              : "La generación con IA no está disponible. Puedes crear un ejemplo de software de Ciencias naturales, 3.º de primaria, el cuidado del agua, aprendizaje activo y español. El contexto manual se conserva; no adapta el ejemplo ni acredita alineación NEM."}
           </p>
           <button
             type="button"
@@ -496,7 +500,11 @@ export function GuidedForm({ controller }: { controller: AcentaController }) {
             aria-label="Estado de creación"
           >
             <h2>
-              {sending ? "Preparando tu planeación" : "Resultado sin confirmar"}
+              {sending
+                ? generatingWithAI
+                  ? "Preparando tu planeación"
+                  : "Preparando tu ejemplo"
+                : "Resultado sin confirmar"}
             </h2>
             <p>
               {sending
@@ -509,7 +517,11 @@ export function GuidedForm({ controller }: { controller: AcentaController }) {
               disabled={sending}
               onClick={() => void controller.recoverCreate()}
             >
-              {sending ? "Preparando ejemplo…" : "Consultar estado"}
+              {sending
+                ? generatingWithAI
+                  ? "Preparando planeación…"
+                  : "Preparando ejemplo…"
+                : "Consultar estado"}
             </button>
           </section>
         ) : (
@@ -520,7 +532,7 @@ export function GuidedForm({ controller }: { controller: AcentaController }) {
               type="submit"
               disabled={s.attaching || s.sourcePending}
             >
-              Crear planeación
+              {creationMode === "ai" ? "Generar con IA" : "Crear ejemplo de software"}
             </button>
           </footer>
         )}
@@ -613,6 +625,10 @@ export function GuidedReader({
   const r = document.result,
     q = guidedInput(document);
   if (!isGuided(r) || !q) return null;
+  const provenance =
+    r.provenance === "openai-guided-v1"
+      ? "Generada con IA"
+      : "Ejemplo de software";
   const index = [
     { id: "purpose", label: "Propósito" },
     ...r.activities.map((a) => ({
@@ -665,7 +681,7 @@ export function GuidedReader({
         <article className="guided-paper">
           <header className="guided-paper-header">
             <p className="guided-type">
-              Planeación de clase <span>Ejemplo</span>
+              Planeación de clase <span>{provenance}</span>
             </p>
             <h1>{r.title}</h1>
             <p className="guided-subject">{q.subject}</p>
@@ -732,7 +748,7 @@ export function GuidedReader({
       ) : (
         <footer className="guided-reader-footer">
           <p>
-            Ejemplo sintético · Revisión {document.receipt.revision} guardada
+            {provenance} · Revisión {document.receipt.revision} guardada
           </p>
           <button onClick={onClose}>Cerrar</button>
         </footer>

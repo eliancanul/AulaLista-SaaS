@@ -29,7 +29,7 @@ export function PlanningPrintDocument({ document }: { document: PlanningDocument
         <p>Planeación de clase · Revisión {document.receipt.revision} · Guardado confirmado</p>
         <h1>{r.title}</h1>
         <p>{q.subject} · {q.grade} · {r.duration_minutes} minutos</p>
-        <p>Ejemplo sintético de software · Fixture conservado</p>
+        <p>{r.provenance === "openai-guided-v1" ? "Generada con IA" : "Ejemplo sintético de software · Fixture conservado"}</p>
       </header>
       <section>
         <h2>Propósito</h2>

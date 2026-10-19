@@ -622,7 +622,7 @@ def test_single_huge_chunk_is_never_accumulated():
     [
         "UPDATE source_version SET number = 4",
         "DELETE FROM source_version",
-        "TRUNCATE source_version, planning_revision, planning_draft_revision, analytic_section_revision",
+        "TRUNCATE source_version, planning_revision, planning_draft_revision, planning_generation_attempt, analytic_section_revision",
     ],
 )
 def test_runtime_cannot_mutate_history_and_trigger_is_defense_in_depth(

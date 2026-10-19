@@ -1,5 +1,6 @@
 import type {
   GuidedPlanningRequest,
+  ManualPlanningRequest,
   PlanningDocument,
   Resource,
   Result,
@@ -38,7 +39,7 @@ export const guidedExample = (): GuidedPlanningRequest => ({
   topic: "El cuidado del agua en la comunidad",
 });
 export function validateGuidedRequest(
-  q: GuidedPlanningRequest,
+  q: ManualPlanningRequest,
 ): Record<string, string> {
   const errors: Record<string, string> = {};
   const bounded = (v: string, max: number) =>
@@ -119,9 +120,9 @@ export function fieldLabel(resource: Resource, key: string) {
 }
 export function guidedInput(
   doc: PlanningDocument,
-): GuidedPlanningRequest | null {
+): ManualPlanningRequest | null {
   const request = doc.initial_request ?? doc.request;
-  return request.contract_version === 2 ? request : null;
+  return request.contract_version === 2 || request.contract_version === 3 ? request : null;
 }
 export function planningReference(
   doc: PlanningDocument,

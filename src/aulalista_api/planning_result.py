@@ -67,7 +67,7 @@ class GuidedActivity(ResultObject):
 
 class GuidedPlanningResult(ResultObject):
     kind: Literal["guided-planning-v1"]
-    provenance: Literal["synthetic-fixture-v1"]
+    provenance: Literal["synthetic-fixture-v1", "openai-guided-v1"]
     title: UsefulText
     notice: UsefulText
     purpose: UsefulText
@@ -91,3 +91,46 @@ RESULT_ADAPTER = TypeAdapter(
     PlanningResult
     | Annotated[GuidedPlanningResult, AfterValidator(coherent_guided_result)]
 )
+
+
+class GeneratedActivity(ResultObject):
+    key: Literal["introduction", "exploration", "closure"]
+    title: Annotated[UsefulText, Field(max_length=200)]
+    statement: Annotated[UsefulText, Field(max_length=1000)]
+    minutes: Annotated[int, Field(ge=1, le=180)]
+
+
+class GeneratedOutput(ResultObject):
+    title: Annotated[UsefulText, Field(max_length=200)]
+    purpose: Annotated[UsefulText, Field(max_length=1000)]
+    formative_assessment: Annotated[UsefulText, Field(max_length=1000)]
+    duration_minutes: Annotated[int, Field(ge=15, le=180)]
+    activities: Annotated[list[GeneratedActivity], Field(min_length=3, max_length=3)]
+    materials: Annotated[
+        list[Annotated[UsefulText, Field(max_length=200)]],
+        Field(min_length=1, max_length=10),
+    ]
+
+
+OUTPUT_ADAPTER = TypeAdapter(GeneratedOutput)
+OUTPUT_SCHEMA = OUTPUT_ADAPTER.json_schema()
+GENERATED_NOTICE = (
+    "Planeación generada automáticamente a partir de información manual. "
+    "Revisa su pertinencia antes de usarla: no acredita validez curricular ni "
+    "un diagnóstico de un grupo real. La referencia adjunta, si existe, "
+    "se conserva sin interpretar."
+)
+
+
+def validate_generated_output(output: dict, duration_minutes: int) -> dict:
+    validated = OUTPUT_ADAPTER.validate_python(output)
+    if validated["duration_minutes"] != duration_minutes:
+        raise ValueError("wrong_duration")
+    return RESULT_ADAPTER.validate_python(
+        {
+            **validated,
+            "kind": "guided-planning-v1",
+            "provenance": "openai-guided-v1",
+            "notice": GENERATED_NOTICE,
+        }
+    )

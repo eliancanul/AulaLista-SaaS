@@ -451,7 +451,7 @@ test("guided planning reopens only confirmed data after 401 and a genuinely new 
   await page.getByRole("button", {name:"Crear planeación", exact:true}).click();
   await page.getByRole("button", {name:"Usar datos del ejemplo"}).click();
   const creating = page.waitForResponse(r => r.request().method() === "POST" && new URL(r.url()).pathname.endsWith("/guided-plannings"));
-  await page.getByRole("button", {name:"Crear planeación", exact:true}).click();
+  await page.getByRole("button", {name:"Crear ejemplo de software", exact:true}).click();
   const created = await creating; expect(created.status()).toBe(201);
   const doc:PlanningDocument = await created.json();
   expect(doc.receipt.source_id).toBeNull();

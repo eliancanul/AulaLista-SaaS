@@ -16,7 +16,7 @@ from aulalista_api.planning_routes import install_planning_routes
 from aulalista_api.web import install_web
 
 
-def create_app() -> FastAPI:
+def create_app(*, planning_provider=None, generation_profile=None) -> FastAPI:
     settings = load_settings()
     engine = make_engine(settings)
     readiness = Readiness(engine, settings.db_timeout_seconds)
@@ -50,7 +50,9 @@ def create_app() -> FastAPI:
 
     install_auth_routes(app, engine)
     install_material_routes(app, engine)
-    install_planning_routes(app, engine)
+    install_planning_routes(
+        app, engine, provider=planning_provider, profile=generation_profile
+    )
     install_planning_edit_routes(app, engine)
     install_analytic_section_routes(app, engine)
     install_web(app)

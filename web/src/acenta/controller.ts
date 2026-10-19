@@ -18,6 +18,8 @@ import {
   type PlanningDocument,
   type CreationRequest,
   type GuidedPlanningRequest,
+  type GeneratedPlanningRequest,
+  type ManualPlanningRequest,
   type SourceReceipt,
   type EditRequest,
   type CopyRequest,
@@ -37,7 +39,7 @@ export type SaveState =
   | "unknown"
   | "conflict";
 export type View = "home" | "result" | "resources" | "planning" | "analytic";
-type CreateIntent = {
+export type CreateIntent = {
   kind: "create";
   key: string;
   payload: CreationRequest;
@@ -100,6 +102,7 @@ export interface State {
   view: View;
   prompt: string;
   guided: GuidedPlanningRequest;
+  generationAvailable: boolean;
   source: SourceReceipt | null;
   attaching: boolean;
   sourcePending: boolean;
@@ -117,6 +120,7 @@ export interface State {
   pending: CreateIntent | null;
   backupError: boolean;
   recoveryWarning: string;
+  generationRecoveryWarning: string;
   recoveryEnabled: boolean;
   recoveryAvailable: boolean;
   closed: boolean;
@@ -132,6 +136,7 @@ const fresh = (): State => ({
   view: "home",
   prompt: "",
   guided: emptyGuidedRequest(),
+  generationAvailable: false,
   source: null,
   attaching: false,
   sourcePending: false,
@@ -149,6 +154,7 @@ const fresh = (): State => ({
   pending: null,
   backupError: false,
   recoveryWarning: "",
+  generationRecoveryWarning: "",
   recoveryEnabled: false,
   recoveryAvailable: false,
   closed: false,
@@ -170,6 +176,7 @@ export class AcentaController {
   private listLoaded = false;
   private busy = false;
   private originalGeneration = 0;
+  private availabilityGeneration = 0;
   private selections: Record<string, SourceReceipt> = {};
   private sourceIntent: {
     base?: SourceReceipt;
@@ -191,7 +198,7 @@ export class AcentaController {
     this.analytic = new AnalyticSectionController(api);
     this.backupKey = `acenta:work:v1:${api.session.actorId}:${api.session.scopeId}:${workspaceId}`;
     this.restore();
-    this.state = {...this.state, recoveryWarning:this.recovery?.warning ?? "", recoveryEnabled:!!this.recovery?.enabled, recoveryAvailable:!!this.recovery?.candidate};
+    this.state = {...this.state, ...this.recoveryWarnings(), recoveryEnabled:!!this.recovery?.enabled, recoveryAvailable:!!this.recovery?.candidate};
   }
   subscribe = (fn: () => void) => {
     this.listeners.add(fn);
@@ -200,12 +207,17 @@ export class AcentaController {
     };
   };
   snapshot = () => this.state;
+  private recoveryWarnings() {
+    return { recoveryWarning: this.recovery?.warning ?? "", generationRecoveryWarning: this.recovery?.generations.warning ?? "" };
+  }
   private emit(patch: Partial<State> = {}) {
     const previous = this.state.editor;
+    const previousPending = this.state.pending;
     this.state = { ...this.state, ...patch };
     this.persist();
     if (previous !== this.state.editor && !this.restoring && !this.suspended && !this.state.closed) this.recovery?.save(this.state.editor);
-    this.state = {...this.state, recoveryWarning: this.recovery?.warning ?? "", recoveryAvailable: !!this.recovery?.candidate};
+    if (previousPending !== this.state.pending && !this.suspended && !this.state.closed) this.recovery?.generations.save(this.state.pending);
+    this.state = {...this.state, ...this.recoveryWarnings(), recoveryAvailable: !!this.recovery?.candidate};
     for (const fn of this.listeners) fn();
   }
   private persist() {
@@ -281,7 +293,7 @@ export class AcentaController {
       if (s.pending) {
         const q = s.pending.payload;
         if (s.pending.kind !== "create" || !isUuid(s.pending.key) || !Number.isInteger(s.pending.navigation) ||
-          !(q?.contract_version === 2 ? this.validGuidedBackup(q) :
+          !(q?.contract_version === 2 || q?.contract_version === 3 ? this.validGuidedBackup(q) :
             q?.contract_version === 1 && q.fixture_context === "water-observation-v1" &&
             typeof q.prompt === "string" && isUuid(q.source_id) && Number.isInteger(q.expected_source_version)))
           throw Error("create intent");
@@ -385,10 +397,11 @@ export class AcentaController {
       this.storage = null;
     }
   }
-  private validGuidedBackup(value: unknown, allowEmpty = false): value is GuidedPlanningRequest {
+  private validGuidedBackup(value: unknown, allowEmpty = false): value is ManualPlanningRequest {
     if (!value || typeof value !== "object") return false;
-    const q = value as GuidedPlanningRequest;
-    if (q.contract_version !== 2 || q.fixture_context !== "guided-water-v1" ||
+    const q = value as ManualPlanningRequest;
+    if (!(q.contract_version === 2 ? q.fixture_context === "guided-water-v1" :
+      !allowEmpty && q.contract_version === 3 && !Object.hasOwn(q, "fixture_context")) ||
       ![q.subject, q.grade, q.topic, q.method, q.language].every(v => typeof v === "string") ||
       !Array.isArray(q.learning_objectives) || !q.learning_objectives.every(v => typeof v === "string") ||
       !Array.isArray(q.articulating_axes) || !q.articulating_axes.every(v => typeof v === "string") ||
@@ -402,15 +415,35 @@ export class AcentaController {
     this.navigation++;
     this.emit({guided: value, error: ""});
   }
-  async submitGuided() {
+  async loadGenerationAvailability() {
+    if (this.state.closed || this.suspended) return;
+    const epoch = this.epoch, generation = ++this.availabilityGeneration;
+    this.emit({generationAvailable: false});
+    let available = false;
+    try { available = await this.api.generationAvailable(); } catch { /* Unavailable or malformed capability stays closed. */ }
+    if (epoch === this.epoch && generation === this.availabilityGeneration && !this.state.closed && !this.suspended)
+      this.emit({generationAvailable: available});
+  }
+  async submitGuided(mode: "example" | "ai") {
     if (this.state.closed || this.suspended || this.busy) return;
     if (this.state.pending) return this.recoverCreate();
+    if (mode === "ai" && !this.state.generationAvailable) {
+      this.emit({error: "La generación con IA no está disponible. No se inició un intento. Tus datos siguen aquí."});
+      return;
+    }
     if (Object.keys(validateGuidedRequest(this.state.guided)).length) {
       this.emit({error: "Revisa los campos marcados antes de crear la planeación."});
       return;
     }
+    const { fixture_context: _fixture, ...manual } = this.state.guided;
+    const payload: GuidedPlanningRequest | GeneratedPlanningRequest = mode === "ai"
+      ? {...manual, contract_version: 3} : this.state.guided;
     const intent: CreateIntent = {kind: "create", key: crypto.randomUUID(), navigation: this.navigation,
-      payload: structuredClone(this.state.guided)};
+      payload: structuredClone(payload)};
+    if (payload.contract_version === 3 && this.recovery && !this.recovery.generations.save(intent)) {
+      this.emit({error: "No se inició la generación porque no pudimos conservar su operación para recuperarla. " + this.recovery.generations.warning});
+      return;
+    }
     this.emit({pending: intent, submit: "sending", error: ""});
     await this.runCreate(intent, false);
   }
@@ -430,6 +463,15 @@ export class AcentaController {
       editor:this.state.editor?.pending ? {...this.state.editor,save:"unknown"} : this.state.editor};
   }
   resume() { this.suspended = false; this.analytic.resume(); }
+  async restoreGenerationRecovery() {
+    if (this.state.closed || this.suspended) return;
+    const envelope = this.recovery?.generations.take();
+    if (!envelope) return;
+    this.navigation = envelope.pending.navigation;
+    this.emit({ pending: envelope.pending, guided: {...envelope.pending.payload, contract_version: 2, fixture_context: "guided-water-v1"},
+      view: "planning", submit: "unknown", error: "Consultando el estado de la generación pendiente." });
+    await this.recoverCreate();
+  }
   discardRecovery() {
     this.restoring = false;
     this.recovery?.purge();
@@ -460,6 +502,7 @@ export class AcentaController {
       if (!element || base.receipt.revision_id !== envelope.base.revision_id || (draft && (draft.receipt.planning_id !== envelope.base.planning_id))) throw new ApiError(0,"invalid_response");
       const changed=latest.receipt.revision_id !== base.receipt.revision_id || (!!draft && (draft.receipt.draft_revision !== envelope.buffer.draft_revision || draft.receipt.base_revision_id !== envelope.base.revision_id || draft.request.resource_key !== envelope.base.resource_key || draft.request.element_key !== envelope.base.element_key));
       this.recovery!.adopted();
+      if (this.state.pending) this.navigation++; // A restored editor supersedes the generation's original view.
       this.emit({view:"result",result:base,editor:{document:base,resourceKey:envelope.base.resource_key,elementKey:envelope.base.element_key,
         text:envelope.buffer.text,baseline:element.text,generation:envelope.buffer.generation,
         draftId:envelope.buffer.draft_id,draftRevision:envelope.buffer.draft_revision,
@@ -727,6 +770,7 @@ export class AcentaController {
           doc = await this.api.operation(intent.key);
         } catch (e) {
           if (!(e instanceof ApiError) || e.status !== 404) throw e;
+          if (intent.payload.contract_version === 3) throw e;
           replayed = true;
           doc = await this.api.create(intent.payload, intent.key);
         }
@@ -747,14 +791,20 @@ export class AcentaController {
       });
     } catch (e) {
       if (epoch !== this.epoch || this.suspended || this.state.closed) return;
-      const certain =
+      const generated = intent.payload.contract_version === 3;
+      const generationPending = generated && e instanceof ApiError &&
+        ["generation_pending", "generation_uncertain"].includes(e.code);
+      const generationFailed = generated && e instanceof ApiError && e.code === "generation_failed";
+      const unavailable = generated && !recover && e instanceof ApiError && e.code === "generation_unavailable";
+      const certain = !generationPending && (generationFailed || unavailable ||
         (!recover && e instanceof ApiError && !e.uncertain) ||
-        (replayed && rejectedReplay(e, "create"));
+        (replayed && rejectedReplay(e, "create")));
       this.emit({
         submit: certain ? "error" : "unknown",
         error: intent.payload.contract_version === 2 && e instanceof ApiError && e.code === "unsupported_fixture"
           ? "Este ejemplo sólo admite Ciencias naturales, 3.º de primaria, el cuidado del agua en la comunidad, aprendizaje activo y español. Tus datos siguen aquí para corregirlos." : errorMessage(e),
         pending: certain ? null : intent,
+        ...(unavailable ? {generationAvailable: false} : {}),
       });
     } finally {
       if (epoch === this.epoch) this.busy = false;
@@ -1241,6 +1291,7 @@ export class AcentaController {
     this.listLoaded = false;
     // The narrow runtime recovery slot and any test/legacy store are purged.
     this.recovery?.purge();
+    this.recovery?.generations.purge();
     try { this.storage?.removeItem(this.backupKey); } catch { /* Never retain visible private state if browser storage fails. */ }
     this.storage = null;
     this.state = { ...fresh(), closed: true };

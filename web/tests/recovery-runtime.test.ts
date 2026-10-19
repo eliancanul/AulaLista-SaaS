@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { AuthApi, AuthController } from "../src/acenta/auth";
-import { EditorRecovery, RECOVERY_KEY, RECOVERY_TTL } from "../src/acenta/editor-recovery";
+import { EditorRecovery, GENERATION_RECOVERY_KEY, RECOVERY_KEY, RECOVERY_TTL } from "../src/acenta/editor-recovery";
 import { FixtureServer, planning, revised, session, json } from "./acenta-fixtures";
 import type { Transport } from "../src/acenta/api";
 
@@ -9,9 +9,10 @@ function harness() {
   let active:any={principal_id:session.actorId,scope_id:session.scopeId,csrf_token:"CSRF-MUST-NOT-PERSIST",recovery_context_id:crypto.randomUUID()};
   const server=new FixtureServer(), doc=server.put(planning());
   let raw:string|null=null, failRead=false, failWrite=false, failDelete=false, reads=0, writes=0;
-  const store={getItem:(key:string)=>{expect(key).toBe(RECOVERY_KEY);reads++;if(failRead)throw Error("read");return raw;},
-    setItem:(key:string,value:string)=>{expect(key).toBe(RECOVERY_KEY);writes++;if(failWrite)throw Error("quota");raw=value;},
-    removeItem:(key:string)=>{expect(key).toBe(RECOVERY_KEY);if(failDelete)throw Error("delete");raw=null;}};
+  let generationRaw:string|null=null;
+  const store={getItem:(key:string)=>{expect([RECOVERY_KEY,GENERATION_RECOVERY_KEY]).toContain(key);reads++;if(failRead)throw Error("read");return key===RECOVERY_KEY?raw:generationRaw;},
+    setItem:(key:string,value:string)=>{expect([RECOVERY_KEY,GENERATION_RECOVERY_KEY]).toContain(key);writes++;if(failWrite)throw Error("quota");if(key===RECOVERY_KEY)raw=value;else generationRaw=value;},
+    removeItem:(key:string)=>{expect([RECOVERY_KEY,GENERATION_RECOVERY_KEY]).toContain(key);if(failDelete)throw Error("delete");if(key===RECOVERY_KEY)raw=null;else generationRaw=null;}};
   const transport=vi.fn<Transport>(async(input,init)=>{
     if (input==="/auth/session") return active?json(active):json({detail:"unauthorized"},401);
     if (input==="/auth/bootstrap") return json({csrf_token:"pre",google_nonce:"nonce",google_client_id:null,email_available:true});

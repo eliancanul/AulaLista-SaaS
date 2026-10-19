@@ -175,18 +175,18 @@ export class AuthController {
     };
   };
   private emit(patch: Partial<AuthState>) {
-    this.state = { ...this.state, ...patch, recoveryWarning: this.recovery.warning };
+    this.state = { ...this.state, ...patch, recoveryWarning: [this.recovery.warning, this.recovery.generations.warning].filter(Boolean).join(" ") };
     for (const fn of this.listeners) fn();
   }
   private clear(purge = true) {
     this.state.controller?.closeSession();
-    if (purge) this.recovery.purge();
+    if (purge) { this.recovery.purge(); this.recovery.generations.purge(); }
     this.recovering = false;
     this.session = null;
     this.emit({ controller: null, bootstrap: null, challenge: null });
   }
   private async accept(session: AuthSession, generation: number, restore = false) {
-    const uncertain = !!this.state.controller?.snapshot().editor?.pending || !!this.recovery.candidate?.pending;
+    const uncertain = !!this.state.controller?.snapshot().editor?.pending || !!this.recovery.candidate?.pending || !!this.state.controller?.snapshot().pending || !!this.recovery.generations.candidate;
     this.clear(!restore);
     this.session = session;
     const transport: Transport = async (input, init) => {
@@ -202,10 +202,12 @@ export class AuthController {
       return response;
     };
     this.recovery.admit(session, restore);
+    this.recovery.generations.admit(session, restore);
     if (uncertain) this.recovery.warning = [this.recovery.warning, uncertainPurgeNotice].filter(Boolean).join(" ");
     const controller=new AcentaController(new AcentaApi({actorId:session.principal_id,scopeId:session.scope_id},transport),null,crypto.randomUUID(),this.recovery);
     this.emit({phase:"loading", controller, workspaceVersion:this.state.workspaceVersion+1, busy:true, error:""});
     this.recovering=true;
+    await controller.restoreGenerationRecovery();
     await controller.restoreRecovery();
     if (generation !== this.generation || this.session !== session) return;
     this.recovering=false;
@@ -243,6 +245,7 @@ export class AuthController {
         return;
       }
       this.recovery.purge(true);
+      this.recovery.generations.purge();
       await this.prepare(generation);
     } finally { if (generation === this.generation) this.checking=false; }
   }
@@ -303,6 +306,7 @@ export class AuthController {
         const controller=this.state.controller;
         controller?.resume();
         this.recovering=true;
+        await controller?.restoreGenerationRecovery();
         await controller?.restoreRecovery();
         if (this.session !== session || generation !== this.generation) return;
         this.recovering=false;
@@ -392,12 +396,13 @@ export class AuthController {
   async logout() {
     const session = this.session ?? this.logoutSession;
     if (this.state.busy || !session) return;
-    const uncertain = !!this.state.controller?.snapshot().editor?.pending || !!this.recovery.candidate?.pending;
+    const uncertain = !!this.state.controller?.snapshot().editor?.pending || !!this.recovery.candidate?.pending || !!this.state.controller?.snapshot().pending || !!this.recovery.generations.candidate;
     this.logoutSession = session;
     this.session = null;
     const generation = ++this.generation;
     this.state.controller?.closeSession();
     this.recovery.purge(uncertain);
+    this.recovery.generations.purge();
     this.recovering=false;
     this.checking=false;
     this.emit({
