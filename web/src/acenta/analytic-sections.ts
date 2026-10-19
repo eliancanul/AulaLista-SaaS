@@ -47,6 +47,13 @@ export interface DeriveAnalyticPlanningRequest {
   method: string;
 }
 
+/** Applied to all current revisions by the server, before cursor pagination. */
+export interface AnalyticSectionFilters {
+  q?: string;
+  grade?: string;
+  formative_field?: string;
+}
+
 const object = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
 const bounded = (v: unknown, max: number): v is string =>

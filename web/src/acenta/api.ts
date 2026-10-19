@@ -22,6 +22,7 @@ import {
   prefillAnalyticPlanning,
   type AnalyticSectionData,
   type AnalyticSectionDocument,
+  type AnalyticSectionFilters,
   type DeriveAnalyticPlanningRequest,
 } from "./analytic-sections";
 
@@ -429,9 +430,19 @@ export class AcentaApi {
     assert(doc.receipt.operation_id === key);
     return doc;
   }
-  async listAnalyticSections(cursor?: string, limit = 50): Promise<Page<AnalyticSectionDocument>> {
+  async listAnalyticSections(cursor?: string, limit = 50, filters: AnalyticSectionFilters = {}): Promise<Page<AnalyticSectionDocument>> {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new ApiError(422, "invalid_request");
-    const v = await this.request(`analytic-sections?${cursor === undefined ? "" : `after=${this.id(cursor)}&`}limit=${limit}`);
+    const params = new URLSearchParams();
+    if (cursor !== undefined) params.set("after", this.id(cursor));
+    params.set("limit", String(limit));
+    for (const field of ["q", "grade", "formative_field"] as const) {
+      const value = filters[field], maximum = { q: 200, grade: 80, formative_field: 120 }[field];
+      if (value === undefined) continue;
+      if (typeof value !== "string" || [...value].length > maximum || /[\u0000\uD800-\uDFFF]/u.test(value) || (field !== "q" && !value.trim()))
+        throw new ApiError(422, "invalid_request");
+      params.set(field, value);
+    }
+    const v = await this.request(`analytic-sections?${params}`);
     assert(object(v) && Array.isArray(v.items) && v.items.length <= limit && (v.next_cursor === null || isUuid(v.next_cursor)));
     let previous = cursor?.toLowerCase() ?? "";
     const items = v.items.map(value => {

@@ -56,8 +56,21 @@ def install_analytic_section_routes(app: FastAPI, engine):
         actor: Actor,
         after: UUID | None = None,
         limit: Annotated[int, Query(ge=1, le=100)] = 50,
+        q: str = "",
+        grade: str | None = None,
+        formative_field: str | None = None,
     ):
-        return response(sections.list_items(actor, scope_id, after=after, limit=limit))
+        return response(
+            sections.list_items(
+                actor,
+                scope_id,
+                after=after,
+                limit=limit,
+                q=q,
+                grade=grade,
+                formative_field=formative_field,
+            )
+        )
 
     @app.get("/scopes/{scope_id}/analytic-sections/{section_id}")
     def read_section(scope_id: UUID, section_id: UUID, actor: Actor):

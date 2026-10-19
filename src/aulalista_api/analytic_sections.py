@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
@@ -28,6 +28,7 @@ from aulalista_api.guided_planning import (
     GuidedPlanningRequest,
     ManualContext,
     Text,
+    safe_text,
 )
 from aulalista_api.materials import MaterialError, SourceVersion, authorize
 
@@ -72,6 +73,18 @@ class DerivePlanningRequest(BaseModel):
     subject: Annotated[Text, Field(max_length=120)]
     duration_minutes: Annotated[int, Field(strict=True, ge=15, le=180)] = 50
     method: Annotated[Text, Field(max_length=80)] = "active-learning"
+
+
+class AnalyticSectionFilters(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    q: Annotated[str, Field(strict=True, max_length=200)] = ""
+    grade: Annotated[Text, Field(max_length=80)] | None = None
+    formative_field: Annotated[Text, Field(max_length=120)] | None = None
+
+    @field_validator("q")
+    @classmethod
+    def search_text(cls, value: str) -> str:
+        return safe_text(value).strip() if value.strip() else ""
 
 
 class AnalyticSection(Base):
@@ -325,7 +338,23 @@ class AnalyticSections:
                 raise MaterialError(404, "not_found")
             return render_section(session, revision)
 
-    def list_items(self, actor_id, scope_id, *, after=None, limit=50):
+    def list_items(
+        self,
+        actor_id,
+        scope_id,
+        *,
+        after=None,
+        limit=50,
+        q="",
+        grade=None,
+        formative_field=None,
+    ):
+        try:
+            filters = AnalyticSectionFilters(
+                q=q, grade=grade, formative_field=formative_field
+            )
+        except ValidationError:
+            raise MaterialError(422, "invalid_request") from None
         with Session(self.engine) as session, session.begin():
             authorize(session, actor_id, scope_id)
             query = (
@@ -339,6 +368,18 @@ class AnalyticSections:
                     AnalyticSectionRevision.number == AnalyticSection.current_revision,
                 )
             )
+            if filters.q:
+                query = query.where(
+                    AnalyticSectionRevision.data["name"]
+                    .as_string()
+                    .icontains(filters.q, autoescape=True)
+                )
+            for field in ("grade", "formative_field"):
+                value = getattr(filters, field)
+                if value is not None:
+                    query = query.where(
+                        AnalyticSectionRevision.data[field].as_string() == value
+                    )
             if after is not None:
                 if (
                     session.scalar(
