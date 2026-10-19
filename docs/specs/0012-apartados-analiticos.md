@@ -5,22 +5,20 @@ sobre `e48b3ba52023bc1afdfb97c53a307fc3403cdc4f`, que ya integra #52 mediante
 PR #56. Complementa [0010](0010-herramientas-contexto-curricular.md) y conserva
 los contratos de [fundación](0001-fundacion.md) y [edición](0003-edicion-durable.md).
 
-Este corte proporciona API, contratos del consumidor y el formulario de
-alta/edición de escritorio C. **No completa #53:** el explorador, lector,
-derivación visual y composición móvil A quedan pendientes. El formulario C se
-materializó e inspeccionó; en ese incremento las otras tres referencias no estaban accesibles.
-El alcance permite avanzar ese formulario de forma independiente, sin sustituir
-las pantallas pendientes. El usuario eligió escritorio C y móvil A con la
-condición de mantener código limpio,
-reutilizar controles/estilos de GuidedForm y GuidedReader y separar la lógica del
-apartado de la de Planeación. Las cuatro referencias cubren formulario y
-guardado de escritorio C, e inicio y contenidos de móvil A. No se incorporan
-sus archivos ni identificadores privados al repositorio.
+El incremento inicial añadió API, contratos y formulario de alta/edición de
+escritorio C. El corte de consulta de PR #63 añadió búsqueda global y filtros;
+la UI posterior se construye sobre su merge `4172980fe9f9f9424c1222121016bfe153c05088`.
+**No completa #53:** siguen pendientes el lector específico tras guardar el
+apartado, reabrir su formulario de edición y la composición móvil A. El reflow
+no acredita ese diseño móvil ni el recorrido completo del issue.
 
-El explorador y la derivación conservan las composiciones de Figma enlazadas en
-0010 §11. Este incremento no escribe Figma. Las pruebas de foco, teclado,
-reflow e interrupción del formulario no acreditan las pantallas pendientes ni
-el recorrido completo de #53.
+El usuario eligió escritorio C y móvil A, con reutilización de controles y estilos
+de GuidedForm/GuidedReader y lógica del apartado separada de Planeación. El
+explorador conserva la [composición aprobada](https://www.figma.com/design/WEmZPyqYaUjBpY2fMhXItU?node-id=169-3682).
+La [derivación con datos heredados de sólo lectura](https://www.figma.com/design/WEmZPyqYaUjBpY2fMhXItU?node-id=199-5014)
+fue aprobada el 19 de octubre de 2026: sólo asignatura, duración y método son
+editables antes de crear. El original de diseño permanece conservado. No se
+incorporan capturas ni datos privados al repositorio.
 
 ## Formulario de escritorio
 
@@ -32,9 +30,9 @@ La ausencia de una referencia oficial permanece explícita.
 
 **Guardar apartado** es una acción explícita. Una confirmación conserva abierto
 el formulario y permite guardar revisiones posteriores del mismo apartado.
-No se abre un lector provisional ni se ofrece todavía la derivación visual.
-El explorador pendiente permitirá elegir y reabrir otros apartados confirmados;
-este formulario retiene únicamente el apartado actual durante la sesión.
+No se abre un lector provisional tras guardar. El explorador permite consultar
+y usar otros apartados confirmados, sin cargar ni sobrescribir este formulario;
+éste retiene únicamente el apartado actual durante la sesión.
 
 Su controlador mantiene datos e intención separados del editor de Planeación.
 Una respuesta incierta bloquea cambios y ofrece **Comprobar guardado**: consulta
@@ -147,8 +145,65 @@ escala de biblioteca aún no medida.
 La regresión incluye búsqueda más allá de la primera página, combinación de
 filtros, revisiones, caracteres literales, límites y errores seguros, cursores,
 aislamiento y revocación de sesión. PostgreSQL real acredita la semántica SQL;
-el cliente se comprueba además atravesando HTTP. La UI pendiente deberá resolver
-selección, respuestas tardías, estados vacíos/error y accesibilidad del recorrido.
+el cliente se comprueba además atravesando HTTP. La UI descrita a continuación
+resuelve selección, respuestas tardías y estados vacíos/error sin ampliar la API.
+
+## Explorador y preparación visual
+
+Desde Planeación, **Usar un apartado guardado** abre el modal con seis filas por
+página y vista previa de la selección. Búsqueda y filtros llaman a la consulta
+scoped completa; no filtran una página local. Grado y campo aceptan su texto
+manual exacto: no hay facetas completas ni vocabulario oficial inventado.
+Los grados comunes son sugerencias editables. El mensaje visible explica la
+igualdad exacta y el alcance literal del nombre. Se indica página y cantidad
+mostrada, nunca un total que la API no devuelve.
+
+Cambiar criterios reinicia el cursor y retira inmediatamente la selección vieja.
+Anterior vuelve a consultar un cursor conocido; cada página refleja el estado
+confirmado actual. Respuestas o errores de consultas anteriores no repueblan el
+modal. Cerrar, navegar, suspender o cerrar sesión invalida su consulta. Carga,
+vacío y error son estados distintos; el error admite reintento. No se escribe ni
+se crea una clase al buscar, seleccionar, previsualizar o cancelar.
+
+La vista previa muestra nombre, grado, periodo, situación, todos los pares
+contenido/PDA en su orden, contexto/condición hipotética, campo/ejes, idioma y
+referencia exacta o ausencia. El texto manual se presenta literalmente, sin HTML
+ni reinterpretación curricular. **Usar apartado** conserva una copia inmutable
+de la revisión seleccionada y abre la preparación de la clase. **Ver apartado**
+consulta esa misma copia, no la revisión vigente. No ofrece Editar el apartado.
+
+La preparación mantiene tema y todos los datos heredados de sólo lectura. Sólo
+asignatura, duración y método se envían a la ruta de derivación existente. El
+formulario guiado independiente y el editor manual del apartado conservan sus
+buffers. Elegir explícitamente otro apartado conserva los tres datos de clase;
+cancelar el explorador no sustituye el origen. Descartar una preparación exige
+confirmación y devuelve al formulario guiado anterior.
+
+**Crear ejemplo** es la única creación. La disponibilidad limitada del fixture
+está explicada antes de enviar; no se habilita IA. Un intento incierto bloquea
+cambios, descarte y sustitución del origen. **Comprobar creación** consulta la
+operación y sólo ante 404 reenvía la misma clave, origen y solicitud. Se correlacionan
+operación, revisión inicial, solicitud y origen completos antes de confirmar.
+Un rechazo cierto conserva la preparación editable. La confirmación tardía se
+conserva en recursos, sin cambiar una navegación posterior. Suspensión/cierre
+invalida respuestas tardías; no reaparece contenido de una sesión cerrada.
+
+El resultado usa GuidedReader y la edición básica existente. Su procedencia
+permite desplegar el apartado y revisión exactos incluso después de editar o
+reabrir la clase. No sincroniza correcciones del apartado con clases anteriores.
+La guardia de salida protege la preparación: un intento incierto debe resolverse;
+descartar requiere acción explícita. Comprobar desde la guardia nunca cierra la
+sesión automáticamente ni reactiva una salida cancelada. Recarga/cierre avisa de
+trabajo pendiente. No añade almacenamiento local ni amplía recuperación tras 401.
+
+`analytic-explorer.test.ts`, `analytic-derivation.test.ts` y
+`analytic-workspace.test.ts` prueban estas fronteras. Los recorridos de
+`analytic-explorer.browser.ts` cubren búsqueda, readonly, errores, recuperación,
+resultado editable, foco, cancelación y reflow genérico. `analytic.integration.ts`
+añade el recorrido visual con HTTP/PostgreSQL y una edición concurrente del
+apartado posterior a su selección. La aprobación visual de implementación exige
+inspeccionar las capturas del candidato exacto; compilar o listar tests no ejecuta
+Chromium. El PR debe distinguir lo ejecutado de las puertas aún pendientes.
 
 ## Derivación e independencia
 

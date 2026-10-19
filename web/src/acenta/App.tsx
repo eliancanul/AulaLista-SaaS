@@ -25,6 +25,7 @@ import { EditorExitGuard } from "./editor-exit";
 import { Dialog, Icon, Logo } from "./ui";
 import { GuidedForm, GuidedReader } from "./GuidedPlanning";
 import { AnalyticForm } from "./AnalyticForm";
+import { AnalyticDerivedForm, AnalyticExplorer } from "./AnalyticPlanning";
 import { fieldLabel, guidedResources, isGuided, planningReference } from "./guided-planning";
 export function AccessView() {
   const [auth] = useState(() => new AuthController());
@@ -412,6 +413,8 @@ export function AcentaApp({
 function Workspace({ controller, onLogout }: { controller: AcentaController; onLogout?: () => void }) {
   const s = useSyncExternalStore(controller.subscribe, controller.snapshot);
   const analytic = useSyncExternalStore(controller.analytic.subscribe, controller.analytic.snapshot);
+  const derived = useSyncExternalStore(controller.analyticDerivation.subscribe, controller.analyticDerivation.snapshot);
+  const [derivedExit, setDerivedExit] = useState(false);
   const [analyticExit, setAnalyticExit] = useState(false);
   const analyticExitGeneration = useRef(0);
   const dismissAnalyticExit = () => {
@@ -440,6 +443,7 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
     }), (value) => {
       logoutGuard.cancel();
       dismissAnalyticExit();
+      setDerivedExit(false);
       setOverlay(null);
       setShowEditor(false);
       setPosition({ value });
@@ -480,6 +484,7 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
       if (
         state.pending ||
         controller.analytic.hasUnsavedChanges() ||
+        controller.analyticDerivation.hasUnsavedChanges() ||
         state.sourcePending ||
         (state.editor &&
           (state.editor.pending ||
@@ -506,6 +511,13 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
   const dismissAttachment = () => {
     controller.cancelAttachment();
     setOverlay(null);
+  };
+  const continueLogout = () => {
+    setDerivedExit(false);
+    if (controller.analytic.hasUnsavedChanges()) {
+      analyticExitGeneration.current++;
+      setAnalyticExit(true);
+    } else logoutGuard.request();
   };
   const saveAnalyticBeforeExit = async (recover = false) => {
     const generation = analyticExitGeneration.current;
@@ -563,10 +575,8 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
         <button
           aria-label="Cerrar sesión"
           onClick={() => {
-            if (controller.analytic.hasUnsavedChanges()) {
-              analyticExitGeneration.current++;
-              setAnalyticExit(true);
-            } else logoutGuard.request();
+            if (controller.analyticDerivation.hasUnsavedChanges()) setDerivedExit(true);
+            else continueLogout();
           }}
         >
           <Icon name="chat" />
@@ -575,7 +585,7 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
       </aside>
       <main tabIndex={-1} className={s.view === "home" ? "home-main" : "content-main"}>
         {s.view !== "planning" && s.view !== "analytic" && <AccountLinks />}
-        {s.view === "analytic" ? <AnalyticForm controller={controller} /> : s.view === "planning" ? <GuidedForm controller={controller} /> : s.view === "home" ? (
+        {s.view === "analytic" ? <AnalyticForm controller={controller} /> : s.view === "planning" ? (derived.origin ? <AnalyticDerivedForm controller={controller} /> : <GuidedForm controller={controller} />) : s.view === "home" ? (
           <section className="home-panel">
             <header className="home-heading">
               <Logo />
@@ -860,6 +870,20 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
           </p>
         )}
       </main>
+      <AnalyticExplorer controller={controller} />
+      {derivedExit && <Dialog title="¿Salir con una clase pendiente?" onClose={() => setDerivedExit(false)} className="analytic-exit-dialog">
+        <section className="exit-guard">
+          <h2>¿Salir con una clase pendiente?</h2>
+          <p>La preparación sólo permanece en esta pestaña. El apartado guardado se conserva.</p>
+          {derived.error && <p role="alert">{derived.error}</p>}
+          <div className="actions">
+            <button autoFocus onClick={() => { setDerivedExit(false); controller.navigate("planning"); }}>Seguir preparando</button>
+            {derived.pending ? <button disabled={derived.status === "sending"} onClick={() => void controller.submitDerived(true, false)}>Comprobar creación</button> :
+              <button onClick={() => { if (controller.analyticDerivation.cancel()) continueLogout(); }}>{derived.status === "saved" ? "Continuar salida" : "Descartar preparación y salir"}</button>}
+          </div>
+          {derived.status === "saved" && <p role="status">Clase confirmada y conservada. Puedes continuar la salida.</p>}
+        </section>
+      </Dialog>}
       {analyticExit && <Dialog title="¿Salir con cambios en el apartado?" onClose={dismissAnalyticExit} className="analytic-exit-dialog">
         <section className="exit-guard">
           <h2>¿Salir con cambios en el apartado?</h2>

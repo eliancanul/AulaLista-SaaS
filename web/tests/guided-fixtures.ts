@@ -149,6 +149,7 @@ export function guidedRevised(
       ? { ...common, kind: "copy", base_revision: base.receipt.revision }
       : { ...common, kind: "edit", expected_revision: base.receipt.revision },
     result: patched(base, text, resource_key, element_key),
+    ...(base.analytic_origin ? { analytic_origin: structuredClone(base.analytic_origin) } : {}),
     initial_request: initial,
     ...(origin ? { origin } : {}),
   };
@@ -187,5 +188,6 @@ export function guidedDraft(
     },
     initial_request: structuredClone(base.initial_request ?? base.request) as GuidedPlanningRequest,
     result: patched(base, text, resource_key, element_key),
+    ...(base.analytic_origin ? { analytic_origin: structuredClone(base.analytic_origin) } : {}),
   };
 }

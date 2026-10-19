@@ -67,8 +67,7 @@ test("analytic client recovers a committed section and preserves exact independe
   expect(result.draftReopened.result.purpose).toBe("Borrador de la clase.");
   expect(result.nextPlanning.analytic_origin).toEqual(result.updated);
   expect(result.planning.receipt.source_id).toBeNull();
-  // The analytic explorer/reader remain pending. Derived classes retain the
-  // already implemented library and reader.
+  // Derived classes remain available through the existing library and reader.
   await page.reload();
   await page.getByRole("button", { name: "Mis recursos", exact: true }).first().click();
   await expect(page.getByRole("button", { name: "Consultar planeación", exact: true })).toHaveCount(3);
@@ -142,4 +141,61 @@ test("analytic client searches the whole catalog before paginating through real 
   expect(result.first).toEqual({ items: result.saved.slice(0, 2), next_cursor: result.saved[1].receipt.section_id });
   expect(result.second).toEqual({ items: result.saved.slice(2), next_cursor: null });
   expect(result.empty).toEqual({ items: [], next_cursor: null });
+});
+
+test("explorer UI derives the selected historical revision and reopens it through real HTTP/PostgreSQL", async ({ page }) => {
+  await page.goto("/tests/acenta-api.html");
+  const session = { actorId: process.env.AULALISTA_E2E_ACTOR_ID!, scopeId: process.env.AULALISTA_E2E_SCOPE_ID! };
+  const original = await page.evaluate(async session => {
+    const modulePath = "/src/acenta/api.ts";
+    const { AcentaApi, ApiError } = await import(modulePath) as typeof import("../src/acenta/api");
+    const api = new AcentaApi(session), key = crypto.randomUUID();
+    const data = {
+      contract_version: 1 as const, name: "El cuidado del agua en la comunidad", grade: "3.º de primaria", period: "Octubre · recorrido UI",
+      context: { text: " Contexto hipotético del recorrido UI. ", hypothetical: true },
+      situation: " Situación sintética propia del recorrido. ", entries: [{ content: " Contenido original UI. ", pda: " PDA original UI. " }],
+      formative_field: "Campo UI & 100%_", articulating_axes: [" Eje propio UI "], language: "es", reference: null,
+    };
+    try { return await api.createAnalyticSection(data, key); }
+    catch (error) { if (!(error instanceof ApiError) || error.status !== 503) throw error; return api.analyticSectionOperation(key); }
+  }, session);
+  await page.getByRole("button", { name: "Crear planeación", exact: true }).click();
+  await page.getByRole("button", { name: "Usar un apartado guardado", exact: true }).click();
+  const explorer = page.getByRole("dialog", { name: "Usar un apartado guardado", exact: true });
+  await explorer.getByLabel("Buscar por título o tema").fill("CUIDADO DEL AGUA");
+  await explorer.getByLabel("Filtrar por grado exacto").fill(original.data.grade);
+  await explorer.getByLabel("Filtrar por campo formativo exacto").fill(original.data.formative_field!);
+  await expect(explorer.locator(".analytic-result")).toHaveCount(1);
+  await explorer.locator(`[data-section-id="${original.receipt.section_id}"]`).click();
+  await expect(explorer.getByLabel("Vista previa del apartado")).toContainText("PDA original UI.");
+  await explorer.getByRole("button", { name: "Usar apartado →", exact: true }).click();
+  await expect(page.getByLabel("Tema del apartado")).toHaveAttribute("readonly", "");
+  // A later edit to the source must not silently replace the displayed origin.
+  const updated = await page.evaluate(async ({ session, original }) => {
+    const modulePath = "/src/acenta/api.ts";
+    const { AcentaApi } = await import(modulePath) as typeof import("../src/acenta/api");
+    return new AcentaApi(session).saveAnalyticSection(original.receipt.section_id, 1,
+      { ...original.data, entries: [{ content: "Contenido de revisión dos.", pda: "PDA de revisión dos." }] }, crypto.randomUUID());
+  }, { session, original });
+  await page.getByLabel("Asignatura").fill("Ciencias naturales");
+  const response = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname.endsWith("/revisions/1/plannings"));
+  await page.getByRole("button", { name: "Crear ejemplo →", exact: true }).click();
+  const created = await response;
+  expect(created.status()).toBe(201);
+  const planning = await created.json();
+  expect(planning.analytic_origin).toEqual(original);
+  expect(planning.request.context).toEqual(original.data.context);
+  const reader = page.getByRole("dialog", { name: "Vista previa", exact: true });
+  await expect(reader).toBeVisible();
+  await reader.getByText("Datos y procedencia de esta planeación", { exact: true }).click();
+  await reader.getByText("Apartado de origen · Revisión 1", { exact: true }).click();
+  await expect(reader).toContainText("PDA original UI.");
+  await reader.getByRole("button", { name: "Cerrar vista previa", exact: true }).click();
+  await page.locator(`[data-navigation-focus="planning-${planning.receipt.planning_id}"]`).click();
+  await expect(reader).toBeVisible();
+  await reader.getByText("Datos y procedencia de esta planeación", { exact: true }).click();
+  await reader.getByText("Apartado de origen · Revisión 1", { exact: true }).click();
+  await expect(reader).toContainText("PDA original UI.");
+  expect(await (await page.request.get(`/scopes/${session.scopeId}/analytic-sections/${original.receipt.section_id}`)).json()).toEqual(updated);
+  expect((await (await page.request.get(`/scopes/${session.scopeId}/plannings/${planning.receipt.planning_id}`)).json()).analytic_origin).toEqual(original);
 });

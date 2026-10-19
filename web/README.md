@@ -103,9 +103,9 @@ añade DTO, validación de recibos, transporte scoped y prellenado determinista 
 `analytic-sections.ts` y `api.ts`. La procedencia `analytic_origin` fija el
 apartado y revisión elegidos y se conserva al leer ediciones, copias y borradores.
 Los pares contenido/PDA permanecen manuales, separados de objetivos.
-La UI de este recorrido sigue pendiente: no hay todavía nueva entrada visible,
-guardia de interrupción ni aceptación visual del apartado. Las regresiones del
-recorrido existente no acreditan esos estados pendientes.
+El formulario manual y el explorador/derivación visual tienen controladores
+separados y guardias de interrupción. Las composiciones pendientes del lector
+manual tras guardar y móvil A conservan su propia aceptación; no se cierra #53.
 
 - `src/acenta/App.tsx`: acceso, shell, composer, menús, resultado, editor, guardia
   de salida y biblioteca mínima para reabrir revisiones/copia/borrador.
@@ -423,8 +423,8 @@ cambiar su clave ni datos. Un conflicto mantiene el texto hasta que se descarte
 explícitamente para cargar la revisión vigente. Cancelar la salida invalida su
 continuación aunque el guardado termine después.
 
-Quedan pendientes el explorador para reabrir otros apartados, lector de guardado,
-derivación visual y diseño móvil A. El reflow de estos controles no certifica esa
+Quedan pendientes el lector de guardado, reabrir el formulario de otros
+apartados y el diseño móvil A. El reflow de estos controles no certifica esa
 composición móvil. Las pruebas `analytic-form.test.ts`,
 `analytic-controller.test.ts` y `analytic.browser.ts` cubren este corte;
 `analytic.integration.ts` conserva la evidencia HTTP/PostgreSQL del contrato.
@@ -435,5 +435,36 @@ El cliente `listAnalyticSections(cursor, limit, filters)` admite búsqueda por
 nombre/tema (`q`) y filtros exactos de grado/campo. La API aplica los criterios a
 todas las revisiones vigentes del ámbito antes de paginar. Continuar requiere
 los mismos filtros; cambiarlos exige volver al inicio. El cursor ordena por UUID,
-sin congelar cambios concurrentes ni devolver un total. Este contrato prepara
-el explorador aprobado; todavía no hay controles de búsqueda en la interfaz.
+sin congelar cambios concurrentes ni devolver un total.
+
+## Explorador y clase derivada (#53, corte parcial)
+
+`Usar un apartado guardado` abre la composición de
+[explorador aprobada](https://www.figma.com/design/WEmZPyqYaUjBpY2fMhXItU?node-id=169-3682):
+seis filas, búsqueda literal por nombre, grado/campo manual exactos, páginas y
+vista previa íntegra de la revisión elegida. Se muestran cantidades conocidas,
+no un total ficticio ni filtros aplicados sólo a una página. Carga, vacío y error
+son distintos; consultas tardías no reemplazan selección/consulta nuevas.
+
+`Usar apartado` abre la [variante readonly aprobada](https://www.figma.com/design/WEmZPyqYaUjBpY2fMhXItU?node-id=199-5014).
+Tema, contenido/PDA, contexto y demás datos heredados se conservan; sólo
+asignatura, duración y método se cambian. `Ver apartado` muestra el origen exacto.
+`Crear ejemplo` usa la derivación existente y explica el fixture limitado; no
+activa API real. El resultado reutiliza lector y edición básica, y su procedencia
+permite consultar la misma revisión del apartado al reabrirlo.
+
+La preparación es independiente del formulario guiado y del editor manual.
+Una respuesta perdida conserva clave, solicitud y origen; `Comprobar creación`
+confirma el mismo intento. Descartar o sustituir se bloquea mientras sea incierto.
+La guardia de sesión no sale automáticamente tras comprobar ni continúa una
+salida cancelada. Recarga/cierre advierte de cambios; no hay respaldo nuevo de
+esta preparación ni recuperación ampliada tras sesión inválida.
+
+`analytic-explorer.ts` y `analytic-derivation.ts` mantienen estados e intenciones;
+`AnalyticPlanning.tsx` reutiliza Dialog, iconos, fuentes y controles existentes.
+Los tests de controladores/fixtures/workspace y `analytic-explorer.browser.ts`
+cubren el recorrido. `analytic.integration.ts` lo atraviesa con HTTP/PostgreSQL,
+incluyendo derivación desde una revisión elegida antes de editar el apartado.
+Capturas previstas: explorador y formulario readonly 1440×1000; reflow genérico
+360×800. Las capturas se inspeccionan después de ejecutar Chromium sobre el
+candidato exacto; no equivalen al diseño móvil A pendiente.
