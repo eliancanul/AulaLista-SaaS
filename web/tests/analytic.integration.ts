@@ -110,3 +110,36 @@ test("analytic form saves and revises exact manual data through real HTTP and Po
   expect((await reopened.json()).data).toEqual({ ...original.data, situation: " Otra situación manual. " });
   expect(await (await page.request.get(`${path}/revisions/1`)).json()).toEqual(original);
 });
+
+test("analytic client searches the whole catalog before paginating through real HTTP and PostgreSQL", async ({ page }) => {
+  await page.goto("/tests/acenta-api.html");
+  const result = await page.evaluate(async session => {
+    const modulePath = "/src/acenta/api.ts";
+    const { AcentaApi, ApiError } = await import(modulePath) as typeof import("../src/acenta/api");
+    const api = new AcentaApi(session);
+    const saved = [];
+    for (let index = 0; index < 3; index++) {
+      const key = crypto.randomUUID();
+      const data = {
+        contract_version: 1 as const, name: `Explorador & 100%_ · ${index}`, grade: "3.º de primaria", period: "Octubre",
+        context: null, situation: "Una situación sintética.", entries: [{ content: "Contenido propio.", pda: "PDA propio." }],
+        formative_field: "Campo de prueba", articulating_axes: [], language: "es", reference: null,
+      };
+      // The harness may drop this journey's first successful write response.
+      try { saved.push(await api.createAnalyticSection(data, key)); }
+      catch (error) {
+        if (!(error instanceof ApiError) || error.status !== 503) throw error;
+        saved.push(await api.analyticSectionOperation(key));
+      }
+    }
+    saved.sort((a, b) => a.receipt.section_id.localeCompare(b.receipt.section_id));
+    const filters = { q: "EXPLORADOR & 100%_", grade: "3.º de primaria", formative_field: "Campo de prueba" };
+    const first = await api.listAnalyticSections(undefined, 2, filters);
+    const second = await api.listAnalyticSections(first.next_cursor!, 2, filters);
+    const empty = await api.listAnalyticSections(undefined, 2, { ...filters, grade: "4.º de primaria" });
+    return { saved, first, second, empty };
+  }, { actorId: process.env.AULALISTA_E2E_ACTOR_ID!, scopeId: process.env.AULALISTA_E2E_SCOPE_ID! });
+  expect(result.first).toEqual({ items: result.saved.slice(0, 2), next_cursor: result.saved[1].receipt.section_id });
+  expect(result.second).toEqual({ items: result.saved.slice(2), next_cursor: null });
+  expect(result.empty).toEqual({ items: [], next_cursor: null });
+});

@@ -8,7 +8,7 @@ los contratos de [fundación](0001-fundacion.md) y [edición](0003-edicion-durab
 Este corte proporciona API, contratos del consumidor y el formulario de
 alta/edición de escritorio C. **No completa #53:** el explorador, lector,
 derivación visual y composición móvil A quedan pendientes. El formulario C se
-materializó e inspeccionó; las otras tres referencias aún no son accesibles.
+materializó e inspeccionó; en ese incremento las otras tres referencias no estaban accesibles.
 El alcance permite avanzar ese formulario de forma independiente, sin sustituir
 las pantallas pendientes. El usuario eligió escritorio C y móvil A con la
 condición de mantener código limpio,
@@ -83,7 +83,7 @@ escrituras requieren `Idempotency-Key` y las respuestas privadas son `no-store`.
 | `GET /analytic-sections/{id}` | Leer revisión vigente propia. |
 | `GET /analytic-sections/{id}/revisions/{n}` | Leer revisión exacta, sin seleccionar latest. |
 | `GET /analytic-section-operations/{key}` | Recuperar el documento confirmado por esa operación. |
-| `GET /analytic-sections?after={id}&limit=50` | Página por UUID ascendente; límite 1–100 y cursor del ámbito. |
+| `GET /analytic-sections?after={id}&limit=50` | Página de revisiones vigentes por UUID ascendente; límite 1–100 y cursor del ámbito. Admite `q`, `grade` y `formative_field`. |
 | `POST /analytic-sections/{id}/revisions/{n}/plannings` | Crear Planeación desde esa revisión exacta. |
 
 El guardado usa el namespace `analytic-section-v1`, separado de fuentes y
@@ -103,6 +103,52 @@ tamaño. Su representación JSONB se limita a 16384 bytes. Los límites individu
 no garantizan que la combinación quepa:
 el exceso total produce 413 sin guardar parcialmente. El historial es inmutable
 mediante restricciones, triggers y permisos del rol runtime.
+
+## Consulta para el explorador
+
+El incremento iniciado sobre `93e4ab913bb76685231542e1487fe3a95d1bb2cf`
+prepara la consulta del [explorador aprobado](https://www.figma.com/design/WEmZPyqYaUjBpY2fMhXItU?node-id=169-3682),
+inspeccionado junto con la composición de derivación. Sólo modifica API,
+contrato cliente y pruebas; no implementa ni rediseña esas pantallas, y no cierra #53.
+
+- `q` es una subcadena literal del nombre/tema del apartado, de hasta 200
+  caracteres Unicode antes de quitar espacios exteriores. Vacío o sólo espacios
+  no filtra. PostgreSQL compara sin distinguir mayúsculas; se conservan tildes,
+  signos y espacios interiores. `%`, `_`, barras y comillas no son comodines ni
+  código SQL. No busca en PDA, situación, contexto, archivos o revisiones antiguas.
+- `grade` (hasta 80 caracteres) y `formative_field` (hasta 120) son filtros
+  opcionales de igualdad exacta, conservando mayúsculas y espacios. Se omiten
+  para consultar todos; un filtro vacío, sólo espacios, NUL o Unicode inválido
+  se rechaza con `422 invalid_request`, sin eco del texto. No hay vocabulario
+  curricular nuevo ni filtro por autoridad oficial.
+- Los tres criterios se combinan con AND sobre todas las revisiones vigentes
+  del ámbito autorizado **antes** de aplicar el límite. No se filtra una página
+  ya descargada. Sin coincidencias devuelve `{items: [], next_cursor: null}`;
+  el contrato no devuelve un total ni datos de otros ámbitos.
+- El cursor sigue siendo el UUID del último apartado devuelto y el orden sigue
+  siendo ascendente, sin offsets. Se autoriza cada página. Un cursor ajeno y uno
+  inexistente tienen el mismo rechazo genérico; un apartado propio que deje de
+  coincidir tras editarse sigue siendo un límite válido para continuar.
+- Cada página consulta el estado confirmado actual; no es un snapshot entre
+  solicitudes. No repite IDs ya recorridos, pero inserciones o cambios de filtros
+  anteriores al cursor requieren volver a consultar desde el inicio para verse.
+  El consumidor debe conservar los criterios al continuar y reiniciar el cursor
+  al cambiar búsqueda/filtros. No se promete una vista congelada frente a ediciones
+  concurrentes ni se introduce un buscador general para toda la biblioteca.
+
+El cliente codifica cada criterio por separado en la query, comprueba sus límites
+antes del transporte y conserva la validación de ámbito, documentos, orden y
+cursor de respuesta. Las consultas privadas siguen siendo `no-store`; los logs
+de acceso/URL permanecen deshabilitados según el contrato de desarrollo.
+No se añaden dependencias, migraciones, índices de texto ni permisos. La consulta
+examina nombres vigentes del ámbito con el timeout existente; no acredita una
+escala de biblioteca aún no medida.
+
+La regresión incluye búsqueda más allá de la primera página, combinación de
+filtros, revisiones, caracteres literales, límites y errores seguros, cursores,
+aislamiento y revocación de sesión. PostgreSQL real acredita la semántica SQL;
+el cliente se comprueba además atravesando HTTP. La UI pendiente deberá resolver
+selección, respuestas tardías, estados vacíos/error y accesibilidad del recorrido.
 
 ## Derivación e independencia
 

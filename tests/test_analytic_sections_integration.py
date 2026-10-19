@@ -153,6 +153,202 @@ def test_section_catalog_paginates_latest_revisions_and_rejects_foreign_cursors(
             assert client.get(base, params={"limit": invalid}).status_code == 422
 
 
+def test_section_catalog_filters_current_revisions_before_pagination(
+    runtime_database, actors
+):
+    actor, scope = actors[0]
+    with TestClient(actor_app(actor)) as client:
+        saved = sorted(
+            [
+                write(client, scope, section_body(name="Agua anterior")).json()
+                for _ in range(6)
+            ],
+            key=lambda item: item["receipt"]["section_id"],
+        )
+        inputs = [
+            section_body(name="El bosque", formative_field="Campo manual"),
+            section_body(name="AGUA en casa", formative_field="Campo manual"),
+            section_body(
+                name="Agua en cuarto",
+                grade="4.º de primaria",
+                formative_field="Campo manual",
+            ),
+            section_body(name="Agua en la escuela", formative_field="Otro campo"),
+            section_body(name="El agua de lluvia", formative_field="Campo manual"),
+            section_body(name="El patio", formative_field="Campo manual"),
+        ]
+        revised = [
+            write(client, scope, data, section=doc["receipt"]["section_id"]).json()
+            for doc, data in zip(saved, inputs, strict=True)
+        ]
+        base = f"/scopes/{scope}/analytic-sections"
+        params = {
+            "q": "  aGuA  ",
+            "grade": "3.º de primaria",
+            "formative_field": "Campo manual",
+            "limit": 1,
+        }
+        first = client.get(base, params=params)
+        assert first.status_code == 200
+        assert first.headers["cache-control"] == "no-store"
+        assert first.json() == {
+            "items": [revised[1]],
+            "next_cursor": revised[1]["receipt"]["section_id"],
+        }
+        second = client.get(
+            base, params={**params, "after": first.json()["next_cursor"]}
+        )
+        assert second.json() == {"items": [revised[4]], "next_cursor": None}
+        assert client.get(base, params={"q": "anterior"}).json() == {
+            "items": [],
+            "next_cursor": None,
+        }
+        assert (
+            client.get(
+                base + f"/{saved[0]['receipt']['section_id']}/revisions/1"
+            ).json()
+            == saved[0]
+        )
+
+
+def test_section_catalog_search_is_literal_and_filters_are_exact(
+    runtime_database, actors
+):
+    actor, scope = actors[0]
+    with TestClient(actor_app(actor)) as client:
+        names = [
+            "100% de agua",
+            "100X de agua",
+            "Río_mapa",
+            "RíoZmapa",
+            r"Ruta\agua",
+            "Ruta/agua",
+        ]
+        saved = {
+            name: write(client, scope, section_body(name=name)).json() for name in names
+        }
+        base = f"/scopes/{scope}/analytic-sections"
+        for query, expected in [
+            ("%", ["100% de agua"]),
+            ("_", ["Río_mapa"]),
+            ("\\", [r"Ruta\agua"]),
+            ("/", ["Ruta/agua"]),
+            ("RÍO_", ["Río_mapa"]),
+            ("rio", []),
+            ("' OR true --", []),
+            ("aportación manual", []),
+        ]:
+            response = client.get(base, params={"q": query})
+            assert response.status_code == 200
+            assert response.json() == {
+                "items": [saved[name] for name in expected],
+                "next_cursor": None,
+            }
+        all_items = sorted(
+            saved.values(), key=lambda item: item["receipt"]["section_id"]
+        )
+        for query in ["", " \t\n "]:
+            assert client.get(base, params={"q": query}).json() == {
+                "items": all_items,
+                "next_cursor": None,
+            }
+        for filters in [
+            {"grade": "3.º de Primaria"},
+            {"grade": " 3.º de primaria "},
+            {"formative_field": "campo escrito por el docente"},
+        ]:
+            assert client.get(base, params=filters).json() == {
+                "items": [],
+                "next_cursor": None,
+            }
+
+
+def test_section_catalog_filtered_queries_preserve_scope_and_cursor_privacy(
+    runtime_database, actors
+):
+    (actor, scope), (other, other_scope) = actors
+    with TestClient(actor_app(other)) as client:
+        foreign = write(client, other_scope).json()
+    with TestClient(actor_app(actor)) as client:
+        own = write(client, scope).json()
+        filters = {
+            "q": "agua",
+            "grade": "3.º de primaria",
+            "formative_field": own["data"]["formative_field"],
+        }
+        base = f"/scopes/{scope}/analytic-sections"
+        assert client.get(base, params=filters).json() == {
+            "items": [own],
+            "next_cursor": None,
+        }
+        for hidden in [other_scope, uuid4()]:
+            denied = client.get(f"/scopes/{hidden}/analytic-sections", params=filters)
+            assert denied.status_code == 404
+            assert denied.json() == {"detail": "not_found"}
+            assert denied.headers["cache-control"] == "no-store"
+        for hidden in [foreign["receipt"]["section_id"], uuid4()]:
+            denied = client.get(base, params={**filters, "after": str(hidden)})
+            assert denied.status_code == 422
+            assert denied.json() == {"detail": "invalid_request"}
+            assert denied.headers["cache-control"] == "no-store"
+
+
+def test_section_catalog_query_bounds_and_safe_errors(runtime_database, actors):
+    actor, scope = actors[0]
+    with TestClient(actor_app(actor)) as client:
+        data = section_body(name="🌱" * 200, grade="g" * 80, formative_field="f" * 120)
+        saved = write(client, scope, data).json()
+        base = f"/scopes/{scope}/analytic-sections"
+        assert client.get(
+            base,
+            params={
+                "q": data["name"],
+                "grade": data["grade"],
+                "formative_field": data["formative_field"],
+            },
+        ).json() == {"items": [saved], "next_cursor": None}
+        for params in [
+            {"q": "x" * 201},
+            {"q": " " * 201},
+            {"q": "a\0b"},
+            {"grade": "x" * 81},
+            {"grade": ""},
+            {"grade": " "},
+            {"grade": "a\0b"},
+            {"formative_field": "x" * 121},
+            {"formative_field": ""},
+            {"formative_field": "a\0b"},
+        ]:
+            denied = client.get(base, params=params)
+            assert denied.status_code == 422
+            assert denied.json() == {"detail": "invalid_request"}
+            assert denied.headers["cache-control"] == "no-store"
+
+
+def test_section_catalog_cursor_survives_revision_changes_without_repeating_ids(
+    runtime_database, actors
+):
+    actor, scope = actors[0]
+    with TestClient(actor_app(actor)) as client:
+        saved = sorted(
+            [write(client, scope).json() for _ in range(3)],
+            key=lambda item: item["receipt"]["section_id"],
+        )
+        base = f"/scopes/{scope}/analytic-sections"
+        first = client.get(base, params={"q": "agua", "limit": 1}).json()
+        cursor = first["next_cursor"]
+        assert first["items"] == [saved[0]]
+        assert (
+            write(
+                client, scope, section_body(name="El bosque"), section=cursor
+            ).status_code
+            == 201
+        )
+        tail = client.get(base, params={"q": "agua", "after": cursor}).json()
+        assert tail == {"items": saved[1:], "next_cursor": None}
+        assert client.get(base, params={"q": "agua"}).json() == tail
+
+
 def test_exact_reference_and_hypothetical_context_are_retained_across_derivation(
     runtime_database, actors
 ):
@@ -455,6 +651,47 @@ def test_real_session_csrf_and_revocation_rechecked_inside_section_operation(
         assert fresh.get(f"/scopes/{scope}/{catalog}").json()["items"] == (
             [saved] if replay else []
         )
+
+
+def test_filtered_section_catalog_rechecks_session_revoked_after_request_admission(
+    auth_factory, monkeypatch
+):
+    factory, sender = auth_factory
+    reached, release = threading.Event(), threading.Event()
+    original_list = AnalyticSections.list_items
+
+    def delayed(*args, **kwargs):
+        reached.set()
+        assert release.wait(timeout=10)
+        return original_list(*args, **kwargs)
+
+    with factory() as client, factory() as concurrent:
+        session = login(client, sender)
+        path = f"/scopes/{session['scope_id']}/analytic-sections"
+        headers = {
+            "Origin": ORIGIN,
+            "X-CSRF-Token": session["csrf_token"],
+            "Idempotency-Key": str(uuid4()),
+        }
+        assert (
+            client.post(path, json=section_body(), headers=headers).status_code == 201
+        )
+        assert len(client.get(path, params={"q": "agua"}).json()["items"]) == 1
+        concurrent.cookies.set(
+            "__Host-acenta-session", client.cookies.get("__Host-acenta-session")
+        )
+        monkeypatch.setattr(AnalyticSections, "list_items", delayed)
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pending = pool.submit(concurrent.get, path, params={"q": "agua"})
+            try:
+                assert reached.wait(timeout=5)
+                assert client.post("/auth/logout", headers=headers).status_code == 204
+            finally:
+                release.set()
+            denied = pending.result(timeout=10)
+            assert denied.status_code == 401
+            assert denied.headers["cache-control"] == "no-store"
+            assert denied.json() == {"detail": "unauthorized"}
 
 
 @pytest.mark.parametrize("kind", ["create", "edit", "derive"])

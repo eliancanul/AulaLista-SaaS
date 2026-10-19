@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from aulalista_api.analytic_sections import (
     AnalyticSectionData,
     AnalyticSectionEdit,
+    AnalyticSectionFilters,
     DerivePlanningRequest,
 )
 from aulalista_api.app import create_app
@@ -179,6 +180,13 @@ def test_derivation_defaults_only_class_time_and_method():
     assert parsed.model_dump(mode="json") == derive_body()
 
 
+@pytest.mark.parametrize("field", ["q", "grade", "formative_field"])
+@pytest.mark.parametrize("value", ["\ud800", "nul\0", 12, True])
+def test_catalog_filters_reject_unsafe_text(field, value):
+    with pytest.raises(ValidationError):
+        AnalyticSectionFilters.model_validate({field: value})
+
+
 def test_all_section_routes_fail_closed_without_identity():
     scope, section, key = uuid4(), uuid4(), uuid4()
     base = f"/scopes/{scope}/analytic-sections"
@@ -188,6 +196,7 @@ def test_all_section_routes_fail_closed_without_identity():
         )
         for path in [
             base,
+            base + "?q=agua&grade=3.%C2%BA%20de%20primaria&formative_field=Manual",
             f"{base}/{section}",
             f"{base}/{section}/revisions/1",
             f"/scopes/{scope}/analytic-section-operations/{key}",

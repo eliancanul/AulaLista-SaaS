@@ -430,3 +430,10 @@ composición móvil. Las pruebas `analytic-form.test.ts`,
 `analytic.integration.ts` conserva la evidencia HTTP/PostgreSQL del contrato.
 El [contrato 0012](../docs/specs/0012-apartados-analiticos.md) delimita los estados
 y límites. No se cierra #53 con este formulario parcial.
+
+El cliente `listAnalyticSections(cursor, limit, filters)` admite búsqueda por
+nombre/tema (`q`) y filtros exactos de grado/campo. La API aplica los criterios a
+todas las revisiones vigentes del ámbito antes de paginar. Continuar requiere
+los mismos filtros; cambiarlos exige volver al inicio. El cursor ordena por UUID,
+sin congelar cambios concurrentes ni devolver un total. Este contrato prepara
+el explorador aprobado; todavía no hay controles de búsqueda en la interfaz.

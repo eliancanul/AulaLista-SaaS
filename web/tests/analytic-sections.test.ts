@@ -157,12 +157,43 @@ describe("analytic API transport and confirmation", () => {
     const substituted = structuredClone(doc); substituted.analytic_origin.receipt.revision++;
     await expect(new AcentaApi(session, transportFor(substituted)).deriveAnalyticPlanning(original, request, doc.receipt.operation_id)).rejects.toThrow(ApiError);
   });
+  it("sends the same whole-catalog filters on every scoped page without losing literal characters", async () => {
+    const transport = transportFor({ items: [], next_cursor: null });
+    const api = new AcentaApi(session, transport);
+    const filters = { q: "  Río 100%_ + & ?/#  ", grade: "3.º de primaria", formative_field: "Campo & manual" };
+    const cursor = crypto.randomUUID();
+    await api.listAnalyticSections(undefined, 6, filters);
+    await api.listAnalyticSections(cursor, 6, filters);
+    for (const [index, [path, init]] of transport.mock.calls.entries()) {
+      const url = new URL(String(path), "https://acenta.example");
+      expect(url.pathname).toBe(`/scopes/${session.scopeId}/analytic-sections`);
+      expect(Object.fromEntries(url.searchParams)).toEqual({ limit: "6", ...filters, ...(index ? { after: cursor } : {}) });
+      expect(init).toMatchObject({ method: "GET", credentials: "same-origin", cache: "no-store" });
+    }
+  });
   it("rejects oversized UTF-8 data before transport", async () => {
     const doc = section(), transport = transportFor(doc);
     doc.data.entries = Array.from({ length: 8 }, () => ({ content: "😀".repeat(500), pda: "😀".repeat(500) }));
     expect(isAnalyticSectionData(doc.data)).toBe(true);
     await expect(new AcentaApi(session, transport).createAnalyticSection(doc.data, doc.receipt.operation_id)).rejects.toMatchObject({ status: 413 });
     expect(transport).not.toHaveBeenCalled();
+  });
+  it.each([
+    { q: "x".repeat(201) }, { q: "\0" }, { q: "\ud800" }, { q: 12 },
+    { grade: "" }, { grade: "  " }, { grade: "x".repeat(81) }, { grade: "\0" },
+    { formative_field: "" }, { formative_field: "x".repeat(121) }, { formative_field: "\ud800" },
+  ])("rejects invalid catalog filters before transport: %j", async filters => {
+    const transport = transportFor({ items: [], next_cursor: null });
+    await expect(new AcentaApi(session, transport).listAnalyticSections(undefined, 50, filters as never)).rejects.toMatchObject({ status: 422 });
+    expect(transport).not.toHaveBeenCalled();
+  });
+  it("allows empty search and counts Unicode characters instead of UTF-16 units", async () => {
+    const transport = transportFor({ items: [], next_cursor: null });
+    const api = new AcentaApi(session, transport);
+    await api.listAnalyticSections(undefined, 50, { q: "" });
+    await api.listAnalyticSections(undefined, 50, { q: "  " });
+    await api.listAnalyticSections(undefined, 50, { q: "🌱".repeat(200), grade: "g".repeat(80), formative_field: "f".repeat(120) });
+    expect(transport).toHaveBeenCalledTimes(3);
   });
   it.each([8000, 8001])("uses the same %i-byte data budget for creation and revision envelopes", async size => {
     const doc = section();
