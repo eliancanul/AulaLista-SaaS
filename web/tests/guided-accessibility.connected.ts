@@ -30,7 +30,11 @@ async function tabTo(page: Page, target: Locator, reverse = false) {
   await expect(target).toBeVisible();
   for (let count = 0; count < 60; count++) {
     if (await target.evaluate((el) => el === document.activeElement)) {
-      await expect(target).toBeInViewport({ ratio: 1 });
+      const geometry = await target.evaluate((el) => ({
+        box: el.getBoundingClientRect().toJSON(),
+        viewport: { width: innerWidth, height: innerHeight },
+      }));
+      await expect(target, `Focused control geometry: ${JSON.stringify(geometry)}`).toBeInViewport({ ratio: 1 });
       return;
     }
     await page.keyboard.press(reverse ? "Shift+Tab" : "Tab");

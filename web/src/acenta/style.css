@@ -1123,7 +1123,8 @@ dialog::backdrop {
 .guided-form { background: white; border: 1px solid #d9ddda; border-radius: 12px; padding: 24px; }
 .guided-form fieldset { padding: 0; margin: 0; border: 0; min-width: 0; display: flex; flex-direction: column; gap: 28px; }
 .guided-form .field-hint { font-size: 13px; line-height: 19px; }
-.guided-form button, .guided-form input, .guided-form select, .guided-form textarea { font-size: 15px; border-radius: 8px; }
+/* Native keyboard scrolling must leave room for the focus outline at viewport edges. */
+.guided-form button, .guided-form input, .guided-form select, .guided-form textarea { font-size: 15px; border-radius: 8px; scroll-margin-block: 8px; }
 .guided-field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .guided-field label { font-weight: 600; font-size: 15px; }
 .guided-field label > span { color: var(--action); }
