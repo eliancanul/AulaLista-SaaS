@@ -80,7 +80,8 @@ def run_process_group(command, *, timeout, **kwargs):
 
 
 @pytest.mark.parametrize(
-    "journey", ["acenta", "draft", "copy", "original", "navigation", "guided"]
+    "journey",
+    ["acenta", "draft", "copy", "original", "navigation", "guided", "analytic"],
 )
 def test_journey_through_real_api(runtime_database, actors, journey):
     actor, scope = actors[0]
@@ -89,6 +90,8 @@ def test_journey_through_real_api(runtime_database, actors, journey):
         app = lose_first_copy_response(app)
     if journey == "guided":
         app = lose_first_copy_response(app, path_suffix="/guided-plannings")
+    if journey == "analytic":
+        app = lose_first_copy_response(app, path_suffix="/analytic-sections")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
         listener.bind(("127.0.0.1", 0))
         port = listener.getsockname()[1]

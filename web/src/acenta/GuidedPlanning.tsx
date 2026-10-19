@@ -92,7 +92,7 @@ export function GuidedForm({ controller }: { controller: AcentaController }) {
       </div>
       <div className="guided-mode">
         <span aria-current="page">Clase</span>
-        <span className="secondary">Programa analítico · Próximamente</span>
+        <button className="quiet" onClick={() => controller.navigate("analytic")}>Programa analítico</button>
       </div>
       <form
         className="guided-form"

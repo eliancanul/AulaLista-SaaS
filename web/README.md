@@ -98,6 +98,15 @@ fondo; la captura por sí sola no demuestra esos comportamientos.
 
 ## Componentes y contratos
 
+El [incremento de apartados #53](../docs/specs/0012-apartados-analiticos.md)
+añade DTO, validación de recibos, transporte scoped y prellenado determinista en
+`analytic-sections.ts` y `api.ts`. La procedencia `analytic_origin` fija el
+apartado y revisión elegidos y se conserva al leer ediciones, copias y borradores.
+Los pares contenido/PDA permanecen manuales, separados de objetivos.
+La UI de este recorrido sigue pendiente: no hay todavía nueva entrada visible,
+guardia de interrupción ni aceptación visual del apartado. Las regresiones del
+recorrido existente no acreditan esos estados pendientes.
+
 - `src/acenta/App.tsx`: acceso, shell, composer, menús, resultado, editor, guardia
   de salida y biblioteca mínima para reabrir revisiones/copia/borrador.
 - `src/acenta/style.css`: tokens visuales, fuentes locales y reflow responsive.
@@ -376,3 +385,27 @@ sustituye el transporte del correo de prueba, como el harness existente.
 Los assets proceden de los nodos Figma aprobados; [ASSETS.md](public/acenta/ASSETS.md)
 registra cada exportación. Las capturas de pruebas son evidencia técnica del
 candidato, no nueva aprobación de diseño ni aceptación docente.
+
+## Formulario de Programa analítico (#53, corte parcial)
+
+La pestaña `Programa analítico` dentro de Planeación abre el formulario de
+escritorio C inspeccionado. Guarda un apartado manual y permite editarlo en la
+misma pantalla, con confirmación de revisión, validación de campos y tamaño,
+pares contenido/PDA separados y contexto hipotético explícito. Reutiliza
+controles y estilos guiados; su buffer y operación pertenecen a un controlador
+independiente. No genera texto ni acredita alineación curricular oficial.
+
+Navegar a otra vista conserva ese buffer. La guardia de cierre de sesión y la
+advertencia de recarga protegen cambios pendientes; este formulario no añade
+respaldo del navegador. `Comprobar guardado` recupera una operación incierta sin
+cambiar su clave ni datos. Un conflicto mantiene el texto hasta que se descarte
+explícitamente para cargar la revisión vigente. Cancelar la salida invalida su
+continuación aunque el guardado termine después.
+
+Quedan pendientes el explorador para reabrir otros apartados, lector de guardado,
+derivación visual y diseño móvil A. El reflow de estos controles no certifica esa
+composición móvil. Las pruebas `analytic-form.test.ts`,
+`analytic-controller.test.ts` y `analytic.browser.ts` cubren este corte;
+`analytic.integration.ts` conserva la evidencia HTTP/PostgreSQL del contrato.
+El [contrato 0012](../docs/specs/0012-apartados-analiticos.md) delimita los estados
+y límites. No se cierra #53 con este formulario parcial.

@@ -1,4 +1,6 @@
 /** HTTP DTOs coordinated with B2/B3. Identity is supplied by verified session, never a UI selector. */
+import type { AnalyticSectionDocument } from "./analytic-sections";
+
 export interface Session {
   actorId: string;
   scopeId: string;
@@ -94,6 +96,7 @@ export interface PlanningDocument {
   result: Result;
   origin?: Origin;
   initial_request?: CreationRequest;
+  analytic_origin?: AnalyticSectionDocument;
 }
 export interface EditRequest {
   contract_version: 1;
@@ -145,6 +148,7 @@ export interface DraftReceipt {
 }
 export interface DraftDocument {
   initial_request?: CreationRequest;
+  analytic_origin?: AnalyticSectionDocument;
   receipt: DraftReceipt;
   request: DraftRequest;
   result: Result;

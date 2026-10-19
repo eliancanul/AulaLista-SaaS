@@ -41,6 +41,7 @@ export function Dialog({
   const ref = useRef<HTMLDialogElement>(null);
   useLayoutEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
+    const previousDialog = previous?.closest("dialog");
     const dialog = ref.current!;
     dialog.showModal();
     let space: HTMLDivElement | null = null;
@@ -92,6 +93,12 @@ export function Dialog({
       dialog.close();
       space?.remove();
       if (previous?.isConnected) previous.focus();
+      // A responsive layout can remove a nested modal's original trigger.
+      else if (
+        previousDialog?.matches(":modal") &&
+        (!previousDialog.contains(document.activeElement) ||
+          dialog.contains(document.activeElement))
+      ) previousDialog.focus();
     };
   }, [anchor]);
   return (

@@ -19,8 +19,15 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, Session, mapped_column
+from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
+from aulalista_api.analytic_sections import (
+    AnalyticSectionRevision,
+    DerivePlanningRequest,
+    derived_guided_request,
+    exact_section,
+    section_document,
+)
 from aulalista_api.database import Base
 from aulalista_api.guided_planning import GuidedPlanningRequest, generate_guided
 from aulalista_api.materials import MaterialError, Source, SourceVersion, authorize
@@ -85,6 +92,11 @@ class PlanningRevision(Base):
             ["planning_revision.id", "planning_revision.scope_id"],
             name="fk_planning_origin_scope",
         ),
+        ForeignKeyConstraint(
+            ["analytic_revision_id", "scope_id"],
+            ["analytic_section_revision.id", "analytic_section_revision.scope_id"],
+            name="fk_planning_analytic_scope",
+        ),
         UniqueConstraint("id", "scope_id", name="uq_planning_revision_scope"),
         UniqueConstraint(
             "id", "scope_id", "source_version_id", name="uq_planning_revision_source"
@@ -121,6 +133,12 @@ class PlanningRevision(Base):
     request: Mapped[dict] = mapped_column(JSONB)
     result: Mapped[dict] = mapped_column(JSONB)
     origin_revision_id: Mapped[UUID | None]
+    analytic_revision_id: Mapped[UUID | None]
+    analytic_revision: Mapped[AnalyticSectionRevision | None] = relationship(
+        foreign_keys="[PlanningRevision.analytic_revision_id, PlanningRevision.scope_id]",
+        viewonly=True,
+        lazy="joined",
+    )
 
 
 def revision_source(
@@ -131,6 +149,11 @@ def revision_source(
         if revision.source_version_id is not None
         else None
     )
+
+
+def analytic_origin_document(revision: PlanningRevision):
+    origin = revision.analytic_revision
+    return section_document(origin, origin.source_version)
 
 
 def document(revision: PlanningRevision, source: SourceVersion | None) -> dict:
@@ -157,6 +180,8 @@ def document(revision: PlanningRevision, source: SourceVersion | None) -> dict:
         saved["origin"] = revision.request["origin"]
     if "initial_request" in revision.request:
         saved["initial_request"] = revision.request["initial_request"]
+    if revision.analytic_revision_id is not None:
+        saved["analytic_origin"] = analytic_origin_document(revision)
     return saved
 
 
@@ -169,13 +194,32 @@ class Plannings:
         actor_id: UUID,
         scope_id: UUID,
         operation_id: UUID,
-        request: PlanningRequest | GuidedPlanningRequest,
+        request: PlanningRequest | GuidedPlanningRequest | DerivePlanningRequest,
+        *,
+        analytic_origin: tuple[UUID, int] | None = None,
     ) -> dict:
-        canonical = request.canonical()
+        canonical = (
+            json.dumps(
+                [
+                    str(analytic_origin[0]),
+                    analytic_origin[1],
+                    request.model_dump(mode="json"),
+                ],
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ).encode()
+            if analytic_origin is not None
+            else request.canonical()
+        )
         if len(canonical) > MAX_REQUEST_BYTES:
             raise MaterialError(413, "content_too_large")
         fingerprint = hashlib.sha256(
-            f"aulalista-planning-request-v{request.contract_version}\0".encode()
+            (
+                b"aulalista-analytic-derivation-v1\0"
+                if analytic_origin is not None
+                else f"aulalista-planning-request-v{request.contract_version}\0".encode()
+            )
             + canonical
         ).hexdigest()
         lock = int.from_bytes(
@@ -199,6 +243,12 @@ class Plannings:
                     raise MaterialError(409, "conflict")
                 saved = document(previous, revision_source(session, previous))
             else:
+                section = None
+                if analytic_origin is not None:
+                    section = exact_section(session, scope_id, *analytic_origin)
+                    request = derived_guided_request(section, request)
+                    if len(request.canonical()) > MAX_REQUEST_BYTES:
+                        raise MaterialError(413, "content_too_large")
                 version = None
                 if isinstance(request, GuidedPlanningRequest):
                     if request.reference is not None:
@@ -257,12 +307,24 @@ class Plannings:
                     request_fingerprint=fingerprint,
                     request=request.model_dump(mode="json"),
                     result=result,
+                    analytic_revision_id=section.id if section is not None else None,
                 )
                 session.add(revision)
                 session.flush()
                 saved = document(revision, version)
         # Do not expose success until the context manager has committed.
         return saved
+
+    def derive(self, actor_id, scope_id, operation_id, section_id, number, request):
+        # Resolve manual input only inside the authorized transaction. Replay uses
+        # the original route/input fingerprint before reading a newer revision.
+        return self.write(
+            actor_id,
+            scope_id,
+            operation_id,
+            request,
+            analytic_origin=(section_id, number),
+        )
 
     def read(
         self,
