@@ -76,14 +76,15 @@ def canonical(value):
 
 @dataclass(frozen=True)
 class GenerationProfile:
-    """An explicitly injected, pre-authorized profile; no implicit wildcard input."""
+    """Explicit bounded admission; configuration is not transmission permission."""
 
     name: str
     actor_id: UUID
     scope_id: UUID
     budget_usd: Decimal
     count_request_reserve_usd: Decimal
-    allowed_request_sha256: frozenset[str]
+    allowed_request_sha256: frozenset[str] | None
+    input_policy: str = "exact-input-v1"
 
     def __post_init__(self):
         if not isinstance(self.actor_id, UUID) or not isinstance(self.scope_id, UUID):
@@ -99,13 +100,20 @@ class GenerationProfile:
                 or not 0 < amount < Decimal("100000000")
             ):
                 raise ValueError("invalid_generation_profile")
-        if (
-            not isinstance(self.allowed_request_sha256, frozenset)
-            or not self.allowed_request_sha256
-            or any(
-                not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value)
-                for value in self.allowed_request_sha256
-            )
+        if self.input_policy == "exact-input-v1":
+            if (
+                not isinstance(self.allowed_request_sha256, frozenset)
+                or not self.allowed_request_sha256
+                or any(
+                    not isinstance(value, str)
+                    or not re.fullmatch(r"[0-9a-f]{64}", value)
+                    for value in self.allowed_request_sha256
+                )
+            ):
+                raise ValueError("invalid_generation_profile")
+        elif (
+            self.input_policy != "manual-variable-v1"
+            or self.allowed_request_sha256 is not None
         ):
             raise ValueError("invalid_generation_profile")
 
@@ -127,7 +135,12 @@ class GenerationProfile:
                     "budget_usd": str(self.budget_usd),
                     "count_request_reserve_usd": str(self.count_request_reserve_usd),
                     "reservation_usd": str(self.reservation_usd),
-                    "allowed_request_sha256": sorted(self.allowed_request_sha256),
+                    "input_policy": self.input_policy,
+                    "allowed_request_sha256": (
+                        sorted(self.allowed_request_sha256)
+                        if self.allowed_request_sha256 is not None
+                        else None
+                    ),
                     "model": MODEL,
                     "max_input_tokens": MAX_INPUT_TOKENS,
                     "max_output_tokens": MAX_OUTPUT_TOKENS,
@@ -315,7 +328,7 @@ class GeneratedPlannings:
     def _enabled_for(self, principal, scope):
         return (
             self.provider is not None
-            and self.profile is not None
+            and isinstance(self.profile, GenerationProfile)
             and self.profile.actor_id == principal
             and self.profile.scope_id == scope
         )
@@ -376,7 +389,13 @@ class GeneratedPlannings:
                     raise MaterialError(409, "conflict")
                 if not self._enabled_for(actor_id, scope):
                     raise MaterialError(503, "generation_unavailable")
-                if fingerprint not in self.profile.allowed_request_sha256:
+                if (
+                    self.profile.input_policy == "exact-input-v1"
+                    and fingerprint not in self.profile.allowed_request_sha256
+                ) or (
+                    self.profile.input_policy == "manual-variable-v1"
+                    and request.reference is not None
+                ):
                     raise MaterialError(422, "generation_input_not_approved")
                 source_version_id = None
                 if request.reference is not None:
@@ -425,6 +444,7 @@ class GeneratedPlannings:
                             request=json.loads(raw),
                             configuration={
                                 "version": "openai-guided-v1",
+                                "input_policy": self.profile.input_policy,
                                 "provider_payload": {
                                     k: v for k, v in payload.items() if k != "input"
                                 },
@@ -444,7 +464,12 @@ class GeneratedPlannings:
                                 "currency": "USD",
                                 "input_usd_per_token": str(cost_usd(1, 0)),
                                 "output_usd_per_token": str(cost_usd(0, 1)),
-                                "approved_request_sha256": fingerprint,
+                                "request_sha256": fingerprint,
+                                **(
+                                    {"approved_request_sha256": fingerprint}
+                                    if self.profile.input_policy == "exact-input-v1"
+                                    else {}
+                                ),
                             },
                             payload_sha256=hashlib.sha256(
                                 canonical(payload)

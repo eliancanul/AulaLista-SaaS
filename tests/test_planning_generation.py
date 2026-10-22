@@ -79,16 +79,19 @@ class FakeProvider:
         )
 
 
-def profile(*requests, actor, scope, budget="0.1"):
+def profile(*requests, actor, scope, budget="0.1", input_policy="exact-input-v1"):
     return GenerationProfile(
         name="synthetic-test-only",
         actor_id=actor.principal_id if isinstance(actor, AuthenticatedActor) else actor,
         scope_id=scope,
         budget_usd=Decimal(budget),
         count_request_reserve_usd=Decimal("0.0001"),
-        allowed_request_sha256=frozenset(
-            hashlib.sha256(r.canonical()).hexdigest() for r in requests
+        allowed_request_sha256=(
+            frozenset(hashlib.sha256(r.canonical()).hexdigest() for r in requests)
+            if input_policy == "exact-input-v1"
+            else None
         ),
+        input_policy=input_policy,
     )
 
 
@@ -250,8 +253,9 @@ def test_count_limit_and_failures_consume_global_reservation_without_refund(
         assert sum(item.reserved_usd for item in records) == Decimal("0.0016336")
 
 
+@pytest.mark.parametrize("input_policy", ["exact-input-v1", "manual-variable-v1"])
 def test_overlapping_admissions_share_one_global_budget_reservation(
-    runtime_database, migrated_database, actors
+    runtime_database, migrated_database, actors, input_policy
 ):
     body, provider = request(), FakeProvider()
     budget = Decimal("0.0008168")  # One count reserve plus maximum generation cost.
@@ -279,7 +283,13 @@ def test_overlapping_admissions_share_one_global_budget_reservation(
         service = GeneratedPlannings(
             runtime_database,
             provider,
-            profile(body, actor=actor, scope=scope, budget=str(budget)),
+            profile(
+                body,
+                actor=actor,
+                scope=scope,
+                budget=str(budget),
+                input_policy=input_policy,
+            ),
         )
         try:
             return service.write(actor, scope, uuid4(), body)
@@ -332,7 +342,13 @@ def test_overlapping_admissions_share_one_global_budget_reservation(
             GeneratedPlannings(
                 runtime_database,
                 provider,
-                profile(body, actor=actor, scope=scope, budget=str(budget)),
+                profile(
+                    body,
+                    actor=actor,
+                    scope=scope,
+                    budget=str(budget),
+                    input_policy=input_policy,
+                ),
             ).write(actor, scope, uuid4(), body)
         assert exhausted.value.detail == "generation_budget_exhausted"
     assert [kind for kind, _ in provider.calls] == ["count", "generate"]
@@ -425,8 +441,9 @@ def test_active_attempt_is_durable_and_global_concurrency_has_no_database_lock_d
 
 
 @pytest.mark.parametrize("stage", ["count", "generate"])
+@pytest.mark.parametrize("input_policy", ["exact-input-v1", "manual-variable-v1"])
 def test_original_authenticated_session_is_revalidated_before_send_and_commit(
-    runtime_database, actors, stage
+    runtime_database, actors, stage, input_policy
 ):
     principal, scope = actors[0]
     instant = datetime.now(UTC)
@@ -467,7 +484,9 @@ def test_original_authenticated_session_is_revalidated_before_send_and_commit(
 
     provider = Revoking()
     service = GeneratedPlannings(
-        runtime_database, provider, profile(body, actor=actor, scope=scope)
+        runtime_database,
+        provider,
+        profile(body, actor=actor, scope=scope, input_policy=input_policy),
     )
     with pytest.raises(AuthError) as revoked:
         service.write(actor, scope, key, body)
@@ -485,8 +504,9 @@ def test_original_authenticated_session_is_revalidated_before_send_and_commit(
     assert uncertain.value.detail == "generation_uncertain"
 
 
+@pytest.mark.parametrize("input_policy", ["exact-input-v1", "manual-variable-v1"])
 def test_process_crash_expires_to_uncertain_and_cannot_resend(
-    runtime_database, actors, monkeypatch
+    runtime_database, actors, monkeypatch, input_policy
 ):
     import aulalista_api.planning_generation as module
 
@@ -501,7 +521,9 @@ def test_process_crash_expires_to_uncertain_and_cannot_resend(
     actor, scope = actors[0]
     body, key, provider = request(), uuid4(), Crashing()
     service = GeneratedPlannings(
-        runtime_database, provider, profile(body, actor=actor, scope=scope)
+        runtime_database,
+        provider,
+        profile(body, actor=actor, scope=scope, input_policy=input_policy),
     )
     with pytest.raises(ProcessCrash):
         service.write(actor, scope, key, body)
@@ -523,8 +545,9 @@ def test_process_crash_expires_to_uncertain_and_cannot_resend(
 
 
 @pytest.mark.parametrize("stage", ["count", "generate"])
+@pytest.mark.parametrize("input_policy", ["exact-input-v1", "manual-variable-v1"])
 def test_late_external_completion_does_not_create_a_planning(
-    runtime_database, actors, monkeypatch, stage
+    runtime_database, actors, monkeypatch, stage, input_policy
 ):
     import aulalista_api.planning_generation as module
 
@@ -547,7 +570,9 @@ def test_late_external_completion_does_not_create_a_planning(
 
     provider = Late()
     service = GeneratedPlannings(
-        runtime_database, provider, profile(body, actor=actor, scope=scope)
+        runtime_database,
+        provider,
+        profile(body, actor=actor, scope=scope, input_policy=input_policy),
     )
     with pytest.raises(MaterialError) as late:
         service.write(actor, scope, key, body)
@@ -558,8 +583,9 @@ def test_late_external_completion_does_not_create_a_planning(
     assert len(provider.calls) == (1 if stage == "count" else 2)
 
 
+@pytest.mark.parametrize("input_policy", ["exact-input-v1", "manual-variable-v1"])
 def test_get_expiry_retains_late_usage_without_resurrecting_result(
-    runtime_database, actors, monkeypatch
+    runtime_database, actors, monkeypatch, input_policy
 ):
     import aulalista_api.planning_generation as module
 
@@ -578,7 +604,9 @@ def test_get_expiry_retains_late_usage_without_resurrecting_result(
 
     provider = ReturningAfterExpiry()
     service = GeneratedPlannings(
-        runtime_database, provider, profile(body, actor=actor, scope=scope)
+        runtime_database,
+        provider,
+        profile(body, actor=actor, scope=scope, input_policy=input_policy),
     )
     with pytest.raises(MaterialError) as expired:
         service.write(actor, scope, key, body)
