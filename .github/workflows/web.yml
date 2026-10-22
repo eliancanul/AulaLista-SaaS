@@ -2,10 +2,10 @@ name: web
 
 on:
   pull_request:
-    paths: ["web/**", "src/**", "scripts/**", "tests/check_web_artifact.py", "migrations/**", "pyproject.toml", "uv.lock", "tests/browser_integration.py", "tests/auth_browser_integration.py", "tests/guided_accessibility_browser_integration.py", "tests/test_auth_integration.py", "tests/conftest.py", "tests/test_materials.py", "tests/postgres-init.sql", ".github/workflows/web.yml"]
+    paths: ["web/**", "src/**", "scripts/**", "tests/check_web_artifact.py", "migrations/**", "pyproject.toml", "uv.lock", "tests/browser_integration.py", "tests/auth_browser_integration.py", "tests/pilot_browser_integration.py", "tests/test_planning_generation.py", "tests/test_openai_planning.py", "tests/guided_accessibility_browser_integration.py", "tests/test_auth_integration.py", "tests/conftest.py", "tests/test_materials.py", "tests/postgres-init.sql", ".github/workflows/web.yml"]
   push:
     branches: [main]
-    paths: ["web/**", "src/**", "scripts/**", "tests/check_web_artifact.py", "migrations/**", "pyproject.toml", "uv.lock", "tests/browser_integration.py", "tests/auth_browser_integration.py", "tests/guided_accessibility_browser_integration.py", "tests/test_auth_integration.py", "tests/conftest.py", "tests/test_materials.py", "tests/postgres-init.sql", ".github/workflows/web.yml"]
+    paths: ["web/**", "src/**", "scripts/**", "tests/check_web_artifact.py", "migrations/**", "pyproject.toml", "uv.lock", "tests/browser_integration.py", "tests/auth_browser_integration.py", "tests/pilot_browser_integration.py", "tests/test_planning_generation.py", "tests/test_openai_planning.py", "tests/guided_accessibility_browser_integration.py", "tests/test_auth_integration.py", "tests/conftest.py", "tests/test_materials.py", "tests/postgres-init.sql", ".github/workflows/web.yml"]
 
 permissions:
   contents: read
@@ -90,6 +90,11 @@ jobs:
         working-directory: .
         # Only the email transport is replaced. Never export auth traces/cookies/codes.
         run: uv run --locked --no-editable pytest tests/auth_browser_integration.py
+      - name: Manual pilot through real browser, auth, HTTP and PostgreSQL
+        if: ${{ !cancelled() && steps.web_dependencies.outcome == 'success' && steps.api_setup.outcome == 'success' && steps.web_build.outcome == 'success' && steps.chromium.outcome == 'success' }}
+        working-directory: .
+        # External email and model transports are synthetic; all application gates run.
+        run: uv run --locked --no-editable pytest tests/pilot_browser_integration.py
       - name: Guided keyboard, focus and reflow through real sessions and PostgreSQL
         if: ${{ !cancelled() && steps.web_dependencies.outcome == 'success' && steps.api_setup.outcome == 'success' && steps.web_build.outcome == 'success' && steps.chromium.outcome == 'success' }}
         working-directory: .

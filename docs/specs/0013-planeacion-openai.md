@@ -8,6 +8,11 @@ llamadas reales, integración en main ni despliegue. Seguimiento autorizado:
 [PR #60](https://github.com/eliancanul/AulaLista-SaaS/pull/60). Regulariza la
 trazabilidad de esta preparación offline, sin autorizar activación.
 
+Ampliación offline de admisión en [#67](https://github.com/eliancanul/AulaLista-SaaS/issues/67),
+sobre main `51b7d37f263805a55493a073b20d99e5346133dd`: política manual variable
+versionada, distinta del ensayo de entradas exactas. #60 ya está integrado;
+esta ampliación no activa su transporte ni autoriza credenciales, gasto o despliegue.
+
 ## Contrato
 
 La creación v3 conserva los campos manuales de v2 y elimina `fixture_context`.
@@ -32,6 +37,46 @@ Sin proveedor y perfil explícitos es falsa. El factory normal no obtiene una
 credencial del entorno ni abre la capacidad; la activación requiere el preflight
 indicado abajo y un adaptador de composición revisado.
 
+### Políticas de admisión inyectadas
+
+`GenerationProfile.input_policy` tiene dos valores cerrados, controlados por el
+servidor, nunca por el formulario:
+
+- `exact-input-v1` es el default compatible: exige `allowed_request_sha256` como
+  `frozenset` no vacío de SHA-256 exactos. Mantiene la referencia opcional propia
+  del contrato v3; cambiar una entrada no incluida sigue rechazándose.
+- `manual-variable-v1` exige seleccionar ese valor explícitamente y
+  `allowed_request_sha256=None`. Admite entradas variables del DTO manual v3
+  únicamente para el actor/ámbito del perfil y con `reference=null`. No acepta
+  archivos ni derivación de apartados. Conserva los límites y opciones manuales
+  vigentes, sin imponer un idioma o contexto hipotético nuevos. Una lista vacía
+  no significa comodín y una lista, incluso no vacía, contradice este modo.
+
+Una política desconocida, actor/ámbito ausente o configuración contradictoria
+falla cerrada. Ausencia de perfil/proveedor no habilita generación. No se cambia
+el factory normal ni se descubre una credencial. El POST sigue siendo la única
+admisión autoritativa; disponibilidad no reserva presupuesto ni promete éxito.
+
+Las entradas del piloto deben ser no sensibles y sin datos identificables de
+alumnos o terceros; el DTO limita estructura/tamaño, no certifica privacidad ni
+clasifica texto libre. Activar requiere delimitar y autorizar esos datos y su
+transmisión de conteo y generación a OpenAI para el actor/ámbito concretos.
+La implementación y sus fixtures sintéticas no conceden ese permiso.
+
+La política versionada entra en el fingerprint del perfil y en el snapshot
+inmutable `configuration.input_policy` de cada intento nuevo. `request` y
+`request_fingerprint` siguen conservando la entrada y su SHA-256 exactos;
+`configuration.request_sha256` también los identifica. Sólo exact-input conserva
+`approved_request_sha256`: un hash manual no pretende aprobación individual.
+Los snapshots históricos sin discriminante conservan su semántica exact-input
+original y no se reescriben. Replay consulta el intento anterior antes de evaluar
+la política actual: cambiar perfil o apagar capacidad no regenera ni reinterpreta
+historia. La configuración JSONB existente basta; no hay migración nueva.
+
+Cambiar nombre, política, actor/ámbito o clave no crea presupuesto fresco: la
+reserva acumulada y el bloqueo de intentos activos/inciertos siguen siendo
+globales. No se modifica plazo, concurrencia, consumo observado ni recuperación.
+
 ## Intento, presupuesto y recuperación
 
 Una operación admite como máximo un intento, con dos etapas externas distintas:
@@ -50,8 +95,8 @@ El conteo usa el mismo contexto y esquema que la generación. Si excede 2048,
 no se envía la generación. El conteo ya transmitió el contenido: requiere permiso
 y reserva propios. Su precio no se presupone cero. El perfil inyectado exige una
 reserva positiva verificada para ese request, presupuesto remanente en USD y
-actor/ámbito autorizados y huellas SHA-256 de las entradas exactas aprobadas,
-sin comodines. Otro propietario no puede utilizar ese perfil aunque coincida
+actor/ámbito autorizados y una de las políticas explícitas descritas arriba.
+Exact-input exige las huellas SHA-256 aprobadas sin comodines. Otro propietario no puede utilizar ese perfil aunque coincida
 su entrada. Las reservas
 acumuladas nunca se liberan automáticamente: fallos, consumo desconocido y estados
 inciertos conservan su margen. El consumo observado se registra aparte; ausente
@@ -107,9 +152,28 @@ presupuesto para una reserva, sólo una operación cuenta y genera; la prueba
 debe fallar al retirar la serialización global.
 Esas fixtures no se enviarán a la API ni se presentarán como prueba educativa.
 
+Para #67, `tests/test_manual_generation.py` recorre auth/CSRF reales, dos entradas
+manuales distintas con transporte OpenAI falso, edición y reapertura en PostgreSQL;
+prueba configuración cerrada, referencias/bytes rechazados, snapshots inmutables
+y rotación de política sin presupuesto ni incertidumbre nuevos. Las pruebas de
+carreras, revocación y respuestas tardías de `test_planning_generation.py` ejecutan
+ambas políticas. El rojo inicial sobre main admite la primera entrada exacta y
+rechaza la segunda por `generation_input_not_approved`, no por falta de una API.
+
+`uv run --locked --no-editable pytest tests/pilot_browser_integration.py` es el
+gate adicional en la CI web: Chromium → UI/HTTP/auth reales → PostgreSQL → sólo
+transportes externos falsos. Incluye formularios diferentes, edición, reapertura,
+revisiones originales, proyección de impresión y recuperación incierta sin reenvío.
+Sólo se intercepta el diálogo de impresión, no la red de aplicación. No acredita
+impresión física ni PDF real. Se conserva una captura únicamente de datos
+sintéticos del lector, nunca cookies/códigos/login. Compilar o listar este test
+no demuestra ejecutarlo; un entorno sin Chromium deja ese gate pendiente.
+
 Antes de una llamada real: verificar en metadatos seguros `OPENAI_API_KEY` de tipo
 Network secret ligado únicamente al destino autorizado `api.openai.com`; entrada
-real exacta aprobada, cuenta/proyecto y permiso tanto de conteo como generación;
+real exacta aprobada para exact-input o categoría manual variable acotada y
+autorizada para el piloto, con actor/ámbito y límites de sesión/periodo/volumen
+definidos; cuenta/proyecto y permiso tanto de conteo como generación;
 precio/costo del conteo; tarifas vigentes, impuestos/conversión, saldo remanente
 dentro de MXN 100 totales ya recargados; revisión independiente y límite de gasto
 efectivo. Sin esos datos, no activar ni recargar. `store=false` no promete cero
