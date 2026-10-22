@@ -33,6 +33,7 @@ for (const trigger of ["click", "Enter"] as const) test(`available AI creation t
   await page.setViewportSize({ width, height: 900 });
   const server = new GuidedServer();
   let pending = true;
+  let confirmed: ReturnType<typeof guidedPlanning> | undefined;
   server.after = async (call, response) => {
     if (call.path === "planning-generation") return json({ available: true });
     if (call.path === "generated-plannings") {
@@ -43,22 +44,24 @@ for (const trigger of ["click", "Enter"] as const) test(`available AI creation t
       doc.request = input;
       doc.result.provenance = "openai-guided-v1";
       doc.result.notice = "Respuesta sintética de transporte para comprobar software; no valida calidad educativa.";
-      server.put(doc);
+      confirmed = doc;
       return json({ detail: "generation_pending" }, 409);
     }
     if (pending && call.path.startsWith("planning-operations/"))
-      return json({ detail: "generation_uncertain" }, 409);
+      return json({ detail: "generation_pending" }, 409);
+    if (confirmed && call.path.startsWith("planning-operations/"))
+      return json(server.put(confirmed));
     return response;
   };
   await mount(page, server);
-  await expect(page.getByRole("status")).toContainText("La generación con IA está disponible");
+  await expect(page.getByRole("status")).toContainText("La generación con IA está configurada");
   await page.getByRole("button", { name: "Usar datos del ejemplo" }).click();
   await expect(page.getByRole("button", { name: "Generar con IA", exact: true })).toBeVisible();
   if (trigger === "click") await page.getByRole("button", { name: "Generar con IA", exact: true }).click();
   else await page.getByLabel("Tema").press("Enter");
   await expect(page.getByRole("heading", { name: "Resultado sin confirmar" })).toBeVisible();
   await page.getByRole("button", { name: "Consultar estado", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("No se pudo confirmar el resultado");
+  await expect(page.getByRole("alert")).toContainText("La generación sigue pendiente");
   pending = false;
   await page.getByRole("button", { name: "Consultar estado", exact: true }).click();
   const reader = page.getByRole("dialog", { name: width <= 700 ? "Lectura de planeación" : "Vista previa", exact: true });
@@ -73,6 +76,28 @@ for (const trigger of ["click", "Enter"] as const) test(`available AI creation t
   await reader.getByRole("button", { name: width <= 700 ? "Mis recursos" : "Cerrar", exact: true }).click();
   await expect(page.locator(".library-card")).toContainText("Generada con IA");
   expect(server.calls.filter(call => call.path === "generated-plannings")).toHaveLength(1);
+});
+test("uncertain generation stays stopped on repeated GETs without a phantom result", async ({ page }) => {
+  const server = new GuidedServer();
+  server.after = async (call, response) => {
+    if (call.path === "planning-generation") return json({ available: true });
+    if (call.path === "generated-plannings" || call.path.startsWith("planning-operations/"))
+      return json({ detail: "generation_uncertain" }, 409);
+    return response;
+  };
+  await mount(page, server);
+  await page.getByRole("button", { name: "Usar datos del ejemplo" }).click();
+  await page.getByRole("button", { name: "Generar con IA", exact: true }).click();
+  for (let check = 0; check < 2; check++) {
+    await expect(page.getByRole("heading", { name: "Resultado sin confirmar" })).toBeVisible();
+    await expect(page.getByLabel("Tema")).toBeDisabled();
+    await page.getByRole("button", { name: "Consultar estado", exact: true }).click();
+    await expect(page.getByRole("alert")).toContainText("No se pudo confirmar el resultado");
+  }
+  expect(server.calls.filter(call => call.path === "generated-plannings")).toHaveLength(1);
+  expect(server.calls.filter(call => call.path.startsWith("planning-operations/"))).toHaveLength(2);
+  expect(server.docs.size).toBe(0);
+  await expect(page.getByRole("dialog", { name: /Vista previa|Lectura de planeación/ })).toHaveCount(0);
 });
 async function create(page: Page) {
   await page.getByRole("button", { name: "Usar datos del ejemplo" }).click();

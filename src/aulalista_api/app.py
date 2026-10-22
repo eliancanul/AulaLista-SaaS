@@ -11,12 +11,22 @@ from aulalista_api.auth_routes import install_auth_routes
 from aulalista_api.config import load_settings
 from aulalista_api.database import Readiness, make_engine
 from aulalista_api.material_routes import install_material_routes
+from aulalista_api.pilot import ManualPilotConfig
 from aulalista_api.planning_edit_routes import install_planning_edit_routes
 from aulalista_api.planning_routes import install_planning_routes
 from aulalista_api.web import install_web
 
 
-def create_app(*, planning_provider=None, generation_profile=None) -> FastAPI:
+def create_app(
+    *, planning_provider=None, generation_profile=None, pilot_config=None
+) -> FastAPI:
+    if pilot_config is not None:
+        if (
+            not isinstance(pilot_config, ManualPilotConfig)
+            or generation_profile is not None
+        ):
+            raise ValueError("invalid_manual_pilot")
+        generation_profile = pilot_config.generation_profile(planning_provider)
     settings = load_settings()
     engine = make_engine(settings)
     readiness = Readiness(engine, settings.db_timeout_seconds)

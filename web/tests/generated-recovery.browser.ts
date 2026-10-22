@@ -20,11 +20,6 @@ async function mount(page: Page, corruptGeneration = false, editorUnavailable = 
   let state = "generation_uncertain";
   server.after = async (call, response) => {
     if (call.path === "planning-generation") return json({ available: true });
-    if (call.path === "generated-plannings") {
-      const doc = guidedPlanning(call.key!);
-      doc.request = JSON.parse(call.body!); doc.result.provenance = "openai-guided-v1";
-      server.put(doc);
-    }
     if (state && (call.path === "generated-plannings" || call.path.startsWith("planning-operations/")))
       return json({ detail: state }, state === "not_found" ? 404 : 409);
     return response;

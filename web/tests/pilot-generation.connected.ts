@@ -46,7 +46,7 @@ async function fillManual(page: Page, input: typeof cases[number]) {
   await page.getByLabel("Situación hipotética", { exact: true }).setChecked(input.hypothetical);
 }
 
-test("two manual v3 forms remain independent through save/reopen/print, and uncertainty never resends", async ({ page }, info) => {
+test("success: two manual v3 forms remain independent through save/reopen/print", async ({ page }, info) => {
   // Replace only the OS print dialog. The existing print projection still renders
   // its confirmed document; this is not a claim that a physical printer worked.
   await page.addInitScript(() => {
@@ -110,6 +110,7 @@ test("two manual v3 forms remain independent through save/reopen/print, and unce
     await expect(page.getByText("Guardado confirmado", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Cerrar", exact: true }).click();
     await expect(reader).toBeVisible();
+    await expect(reader.getByRole("button", { name: "Editar", exact: true })).toBeFocused();
     await reader.getByRole("button", { name: "Cerrar vista previa", exact: true }).click();
     await page.getByRole("button", { name: "Volver a la petición", exact: true }).click();
   }
@@ -140,6 +141,8 @@ test("two manual v3 forms remain independent through save/reopen/print, and unce
     expect(printed).toContain(`Corrección sintética independiente ${index + 1}.`);
     expect(printed).toContain(input.context);
     expect(privateCalls).toHaveLength(beforePrint);
+    await expect(reader.getByRole("button", { name: "Imprimir", exact: true })).toBeFocused();
+    await expect(page.locator("iframe[data-acenta-print]")).toHaveCount(0);
     if (index === 1) {
       await page.evaluate(() => document.fonts.ready);
       await page.screenshot({ path: info.outputPath("manual-pilot-synthetic-reader.png") });
@@ -170,7 +173,41 @@ test("two manual v3 forms remain independent through save/reopen/print, and unce
   expect((await post({ ...initial.request, analytic_origin: {} })).status()).toBe(422);
   expect((await post({ ...initial.request, topic: "x".repeat(5000) })).status()).toBe(413);
 
-  await page.getByRole("button", { name: "Volver a la petición", exact: true }).click();
+  // Actual 401 removes authority. A different account sees neither
+  // documents nor pilot capability; the profile is never global.
+  expect((await page.request.post("/auth/logout", { headers })).status()).toBe(204);
+  await page.evaluate(() => window.dispatchEvent(new Event("pageshow")));
+  await expect(page.getByRole("button", { name: "Continuar con correo", exact: true })).toBeVisible();
+  expect((await page.request.get(`${prefix}/plannings/${initial.receipt.planning_id}`)).status()).toBe(401);
+  const other = await login(page, "manual-pilot-b@example.test");
+  expect(other.scope_id).not.toBe(account.scope_id);
+  expect((await page.request.get(`${prefix}/plannings/${initial.receipt.planning_id}`)).status()).toBe(404);
+  const capability = await page.request.get(`/scopes/${other.scope_id}/planning-generation`);
+  expect(await capability.json()).toEqual({ available: false });
+  const foreign = await page.request.post(`/scopes/${other.scope_id}/generated-plannings`, {
+    data: initial.request, headers: { Origin: origin, "X-CSRF-Token": other.csrf_token, "Idempotency-Key": crypto.randomUUID() },
+  });
+  expect(foreign.status()).toBe(503);
+  expect(await foreign.json()).toEqual({ detail: "generation_unavailable" });
+  await page.getByRole("button", { name: "Mis recursos", exact: true }).first().click();
+  await expect(page.getByRole("button", { name: "Consultar planeación", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Resultado sin confirmar", exact: true })).toHaveCount(0);
+  expect(external).toEqual([]);
+});
+
+
+test("uncertain: timeout stops generation and repeated GETs never publish a result", async ({ page }) => {
+  const privateCalls: { method: string; path: string }[] = [];
+  page.on("request", request => {
+    const path = new URL(request.url()).pathname;
+    if (path.startsWith("/scopes/")) privateCalls.push({ method: request.method(), path });
+  });
+  const account = await login(page, "manual-pilot-a@example.test");
+  const prefix = `/scopes/${account.scope_id}`;
+  const headers = { Origin: origin, "X-CSRF-Token": account.csrf_token };
+  const post = (data: unknown, key: string = crypto.randomUUID()) => page.request.post(`${prefix}/generated-plannings`, {
+    data, headers: { ...headers, "Idempotency-Key": key },
+  });
   await fillManual(page, { ...cases[0], topic: uncertainTopic });
   const uncertainResponse = page.waitForResponse(r => r.request().method() === "POST" && new URL(r.url()).pathname.endsWith("/generated-plannings"));
   await page.getByRole("button", { name: "Generar con IA", exact: true }).click();
@@ -197,24 +234,59 @@ test("two manual v3 forms remain independent through save/reopen/print, and unce
   expect(blocked.status()).toBe(409);
   expect(await blocked.json()).toEqual({ detail: "generation_busy" });
 
-  // Actual 401 clears the unconfirmed recovery. A different account sees neither
-  // documents nor pilot capability; the profile is never global.
-  expect((await page.request.post("/auth/logout", { headers })).status()).toBe(204);
-  await page.evaluate(() => window.dispatchEvent(new Event("pageshow")));
-  await expect(page.getByRole("button", { name: "Continuar con correo", exact: true })).toBeVisible();
-  expect((await page.request.get(`${prefix}/plannings/${initial.receipt.planning_id}`)).status()).toBe(401);
-  const other = await login(page, "manual-pilot-b@example.test");
-  expect(other.scope_id).not.toBe(account.scope_id);
-  expect((await page.request.get(`${prefix}/plannings/${initial.receipt.planning_id}`)).status()).toBe(404);
-  const capability = await page.request.get(`/scopes/${other.scope_id}/planning-generation`);
-  expect(await capability.json()).toEqual({ available: false });
-  const foreign = await page.request.post(`/scopes/${other.scope_id}/generated-plannings`, {
-    data: initial.request, headers: { Origin: origin, "X-CSRF-Token": other.csrf_token, "Idempotency-Key": crypto.randomUUID() },
+  expect((await page.request.get(`${prefix}/plannings`)).status()).toBe(200);
+  expect((await (await page.request.get(`${prefix}/plannings`)).json()).items).toEqual([]);
+  await expect(page.getByRole("dialog", { name: /Vista previa|Lectura de planeación/ })).toHaveCount(0);
+});
+
+async function assertGlobalBusyPreservesManualForm(page: Page) {
+  const topic = page.getByLabel("Tema", { exact: false });
+  const context = page.getByLabel("Contexto · Aportación manual", { exact: true });
+  const before = {
+    subject: await page.getByLabel("Asignatura").inputValue(),
+    grade: await page.getByLabel("Grado", { exact: false }).inputValue(),
+    topic: await topic.inputValue(),
+    context: await context.inputValue(),
+    language: await page.getByLabel("Idioma del material", { exact: true }).inputValue(),
+    hypothetical: await page.getByLabel("Situación hipotética", { exact: true }).isChecked(),
+  };
+  const privateCalls: { method: string; path: string }[] = [];
+  page.on("request", request => {
+    const path = new URL(request.url()).pathname;
+    if (path.startsWith("/scopes/")) privateCalls.push({ method: request.method(), path });
   });
-  expect(foreign.status()).toBe(503);
-  expect(await foreign.json()).toEqual({ detail: "generation_unavailable" });
-  await page.getByRole("button", { name: "Mis recursos", exact: true }).first().click();
-  await expect(page.getByRole("button", { name: "Consultar planeación", exact: true })).toHaveCount(0);
+  const status = page.getByRole("status");
+  await expect(status).toContainText(/no (?:garantiza|asegura).*admi|admi.*no.*garantiza/i);
+  await expect(status).toContainText(/no.*reserva.*presupuesto|presupuesto.*no.*reserv/i);
+  const responsePromise = page.waitForResponse(response => response.request().method() === "POST"
+    && new URL(response.url()).pathname.endsWith("/generated-plannings"));
+  await page.getByRole("button", { name: "Generar con IA", exact: true }).click();
+  const response = await responsePromise;
+  expect(response.status()).toBe(409);
+  expect(await response.json()).toEqual({ detail: "generation_busy" });
+  const alert = page.getByRole("alert");
+  await expect(alert).toContainText(/no se inició/i);
+  await expect(alert).toContainText(/tus datos.*(?:aquí|conserv)/i);
+  await expect(alert).not.toContainText(/otra generación|en curso|cuenta|usuario|anterior|consult[ae].*estado|recuper/i);
   await expect(page.getByRole("heading", { name: "Resultado sin confirmar", exact: true })).toHaveCount(0);
-  expect(external).toEqual([]);
+  await expect(page.getByRole("button", { name: /Consultar estado/ })).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: /Vista previa|Lectura de planeación/ })).toHaveCount(0);
+  await expect(topic).toBeEnabled();
+  await expect(topic).toHaveValue(before.topic);
+  await expect(context).toHaveValue(before.context);
+  await expect(page.getByLabel("Asignatura")).toHaveValue(before.subject);
+  await expect(page.getByLabel("Grado", { exact: false })).toHaveValue(before.grade);
+  await expect(page.getByLabel("Idioma del material", { exact: true })).toHaveValue(before.language);
+  expect(await page.getByLabel("Situación hipotética", { exact: true }).isChecked()).toBe(before.hypothetical);
+  await topic.fill(`${before.topic} revisado`);
+  await expect(topic).toHaveValue(`${before.topic} revisado`);
+  expect(privateCalls).toHaveLength(1);
+  expect(privateCalls[0].method).toBe("POST");
+  expect(privateCalls[0].path).toMatch(/\/generated-plannings$/);
+}
+
+test("busy: a global stop reveals no foreign operation and preserves the form", async ({ page }) => {
+  await login(page, "manual-pilot-a@example.test");
+  await fillManual(page, cases[1]);
+  await assertGlobalBusyPreservesManualForm(page);
 });

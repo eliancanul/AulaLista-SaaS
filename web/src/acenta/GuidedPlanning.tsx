@@ -113,7 +113,7 @@ export function GuidedForm({ controller }: { controller: AcentaController }) {
         <div className="guided-example-note">
           <p role="status">
             {s.generationAvailable
-              ? "La generación con IA está disponible. Se preparará una planeación con los datos que escribas. Revisa el resultado antes de usarlo."
+              ? "La generación con IA está configurada para un piloto limitado. La disponibilidad no garantiza admisión ni reserva presupuesto. Usa sólo entradas manuales autorizadas, sin datos sensibles ni identificables de alumnos o terceros. Revisa el resultado: no acredita alineación curricular."
               : "La generación con IA no está disponible. Puedes crear un ejemplo de software de Ciencias naturales, 3.º de primaria, el cuidado del agua, aprendizaje activo y español. El contexto manual se conserva; no adapta el ejemplo ni acredita alineación NEM."}
           </p>
           <button
@@ -444,8 +444,8 @@ export function GuidedForm({ controller }: { controller: AcentaController }) {
                     ))}
                   </select>
                   <p className="field-hint">
-                    Sólo referencias ya admitidas. Se conserva la versión
-                    elegida y su original, sin interpretarlos.
+                    Sólo referencias ya admitidas. Si la petición se admite,
+                    se conserva la versión elegida y su original, sin interpretarlos.
                   </p>
                   <button
                     type="button"

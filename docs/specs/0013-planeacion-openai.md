@@ -77,6 +77,58 @@ Cambiar nombre, política, actor/ámbito o clave no crea presupuesto fresco: la
 reserva acumulada y el bloqueo de intentos activos/inciertos siguen siendo
 globales. No se modifica plazo, concurrencia, consumo observado ni recuperación.
 
+### Composición explícita del piloto (#68)
+
+`create_app(planning_provider=..., pilot_config=ManualPilotConfig(...))` añade
+una frontera validada al factory existente, no otro servidor ni descubrimiento
+de configuración. `ManualPilotConfig` contiene sólo nombre, actor UUID, ámbito
+UUID, presupuesto y reserva del conteo en `Decimal`, proveedor, destino, modelo
+y política. Todos son explícitos: `openai`, `https://api.openai.com/v1`, el
+`MODEL` fijado y `manual-variable-v1` son las únicas elecciones del piloto.
+No acepta JSON arbitrario, campos extra, credenciales ni un booleano de aprobación.
+
+Antes de crear el engine o invocar transporte, la composición exige un
+`OpenAIPlanning` inyectado, valida identidad/tipos/perfil y dinero positivo,
+finito y representable a nueve decimales. El presupuesto configurado debe cubrir
+al menos la reserva total redondeada, incluido el conteo; esto no consulta saldo
+ni descuenta reservas anteriores. Configuración parcial, desconocida o mezclada
+con `generation_profile` falla con `invalid_manual_pilot`, sin reflejar valores
+en el error. Los límites de tokens, concurrencia, plazos y reintentos no son
+opciones configurables nuevas. Se conserva la inyección técnica anterior de
+`generation_profile`, incluida su política exact-input, sin cambiar su contrato.
+
+El proveedor se inyecta por separado con `protected_placeholder`: un marcador
+de Network secret protegido y verificado en el entorno autorizado, no una API
+key literal. Ni el tipo `OpenAIPlanning` ni una cadena no vacía prueban esa
+procedencia, protección, permisos o acceso al destino. No se inventa una regex
+para certificar secretos y no se lee `OPENAI_API_KEY`. Las pruebas usan un
+marcador sintético **junto con transporte falso**, nunca con transporte de red.
+La [ruta ejecutable offline](../development.md#componer-el-piloto-manual-offline-68)
+demuestra la configuración y el recorrido sin activar un proveedor real.
+
+La disponibilidad sólo describe capacidad configurada para ese actor/ámbito:
+no garantiza admisión ni reserva presupuesto. El POST sigue siendo la única
+admisión. El formulario conserva entradas rechazadas y describe los límites;
+`generation_busy` informa una pausa sin atribuir actividad a otra cuenta ni
+pedir recuperar una operación ajena. `pending` puede confirmarse por GET;
+`uncertain` permanece incierto, sin documento publicado ni reenvío.
+
+Para cerrar la capacidad, retirar proveedor y `pilot_config` y usar el factory
+normal en **todos** los procesos que admiten solicitudes. No basta iniciar un
+proceso cerrado si otro habilitado sigue atendiendo. Esto no demuestra cancelar
+una transmisión anterior: mantener intentos, reservas y estados inciertos en la
+misma DB. Las sesiones válidas conservan lectura, revisión exacta, edición,
+biblioteca y recuperación autorizada por GET. No borrar filas, reiniciar el
+presupuesto ni ampliar límites para desbloquear una demostración.
+
+Este cambio no resuelve la aceptación operativa de #69. #67 fue integrado por
+el usuario en `f11644c7fe37777a57afe8c1b72fff10d80e331f`; su merge no convierte en
+verdes los gates de CI o Chromium pendientes. Cada candidato requiere evidencia
+propia, revisión independiente y CI exacta. Permisos de transmisión, categorías
+de datos, cuenta/proyecto, protección del secreto, tarifas/saldo, destino de
+servicio, auth, retención y recuperación siguen siendo puertas independientes;
+aprobar software no autoriza credenciales, gastos, despliegue ni uso real.
+
 ## Intento, presupuesto y recuperación
 
 Una operación admite como máximo un intento, con dos etapas externas distintas:
@@ -168,6 +220,16 @@ Sólo se intercepta el diálogo de impresión, no la red de aplicación. No acre
 impresión física ni PDF real. Se conserva una captura únicamente de datos
 sintéticos del lector, nunca cookies/códigos/login. Compilar o listar este test
 no demuestra ejecutarlo; un entorno sin Chromium deja ese gate pendiente.
+
+En #68 ese mismo runner atraviesa `ManualPilotConfig` y separa tres escenarios
+con DB limpia: éxito de dos entradas, timeout/incierto terminal, y bloqueo global
+por un intento de otro actor. Este último preserva formulario sin inventar
+recuperación ni tocar transporte. `test_pilot_configuration.py` comprueba la
+frontera cerrada; `test_pilot_composition.py` recorre sesión/CSRF/PG reales y
+apagado mediante un factory nuevo, conservando documentos, intentos y reservas.
+Los mocks UI de `guided.browser.ts` no publican resultado mientras están
+pendientes y nunca convierten incertidumbre en éxito. Son fixtures de UI, no
+evidencia del backend ni sustituto de Chromium conectado/PDF inspeccionado.
 
 Antes de una llamada real: verificar en metadatos seguros `OPENAI_API_KEY` de tipo
 Network secret ligado únicamente al destino autorizado `api.openai.com`; entrada
