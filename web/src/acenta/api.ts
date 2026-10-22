@@ -698,7 +698,7 @@ export function errorMessage(error: unknown): string {
   if (error.code === "generation_budget_exhausted")
     return "No hay presupuesto disponible para esta generación. No se inició un intento. Tus datos siguen aquí.";
   if (error.code === "generation_busy")
-    return "Ya hay otra generación en curso. No se inició este intento. Consulta el estado de la anterior.";
+    return "La generación con IA está en pausa. No se inició este intento. Tus datos siguen aquí.";
   if (error.code === "generation_pending")
     return "La generación sigue pendiente. Consulta su estado; no se enviará otro intento.";
   if (error.code === "generation_uncertain")
@@ -712,7 +712,7 @@ export function errorMessage(error: unknown): string {
   if (error.status === 404)
     return "No pudimos recuperar este elemento. Su estado puede seguir pendiente.";
   if (error.status === 413)
-    return "El contenido supera el límite de este ejemplo.";
+    return "El contenido supera el límite permitido para esta petición. Tus datos siguen aquí.";
   if (error.status === 415) return "Este formato de envío no está admitido.";
   if (error.status === 422)
     return "Revisa los datos del ejemplo antes de continuar.";

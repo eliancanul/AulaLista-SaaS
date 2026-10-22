@@ -307,12 +307,14 @@ el formulario ni texto pendiente después de 401.
 
 [Spec 0013](specs/0013-planeacion-openai.md) define el DTO manual v3 y su intento
 durable. `create_app()` mantiene OpenAI deshabilitado; no descubre ni lee
-`OPENAI_API_KEY`. La composición explícita recibe `planning_provider` y
-`generation_profile` únicamente tras resolver las puertas de activación. Los
+`OPENAI_API_KEY`. La inyección técnica recibe `planning_provider` y
+`generation_profile`; el piloto #68 añade la configuración cerrada descrita
+abajo. Uso real sólo tras resolver las puertas de activación. Los
 tests inyectan un transporte falso, jamás una credencial o una llamada real.
 
 `planning-generation` devuelve disponibilidad autorizada. `generated-plannings`
-admite sólo entradas exactas de un perfil explícito, reserva antes del conteo,
+admite entradas según la política explícita exact-input o manual-variable,
+reserva antes del conteo,
 limita la entrada contada y confirma la salida validada. La tabla
 `planning_generation_attempt` conserva reserva, configuración y consumo observado;
 campos desconocidos son null. No se libera reserva automáticamente. Un intento
@@ -326,3 +328,57 @@ real preparada y ejemplo de software; sus pruebas simulan respuestas y no
 acreditan inferencia real. La descarga local del Chromium fijado puede requerir
 acceso a su CDN; usar otra versión local debe registrarse como evidencia distinta
 de CI, nunca como equivalencia.
+
+### Componer el piloto manual offline (#68)
+
+No hay comando que lea claves, archivo JSON, variable de activación ni segundo
+launcher. Se usa el mismo `create_app` con `ManualPilotConfig` no secreto y un
+`OpenAIPlanning` explícito. Este ejemplo sólo demuestra composición sintética;
+su transporte rechaza sin red. Los UUID son ilustrativos, no atajos de sesión.
+Requiere el DSN de desarrollo preparado como arriba, y no escucha en ningún puerto:
+
+```python
+from decimal import Decimal
+from uuid import UUID
+from aulalista_api.app import create_app
+from aulalista_api.openai_planning import BASE_URL, MODEL, OpenAIPlanning, ProviderError
+from aulalista_api.pilot import ManualPilotConfig
+
+
+def synthetic_transport(url, payload):
+    raise ProviderError("provider_rejected", uncertain=False)
+
+
+config = ManualPilotConfig(
+    name="synthetic-pilot-only",
+    actor_id=UUID("00000000-0000-4000-8000-000000000001"),
+    scope_id=UUID("00000000-0000-4000-8000-000000000002"),
+    budget_usd=Decimal("0.1"),
+    count_request_reserve_usd=Decimal("0.0001"),
+    provider="openai",
+    destination=BASE_URL,
+    model=MODEL,
+    input_policy="manual-variable-v1",
+)
+app = create_app(
+    pilot_config=config,
+    planning_provider=OpenAIPlanning(
+        "software-placeholder-only", transport=synthetic_transport
+    ),
+)
+```
+
+La demostración vertical nueva con resultados, sesión/CSRF y PostgreSQL reales
+se ejecuta con `uv run --locked --no-editable pytest tests/test_pilot_configuration.py
+tests/test_pilot_composition.py`, tras provisionar la DB desechable. No necesita
+ni admite una credencial real. Para Chromium, reutilizar el runner ya existente
+`uv run --locked --no-editable pytest tests/pilot_browser_integration.py`, que
+separa `success`, `uncertain` y `busy`. Sólo el transporte externo es falso;
+compilar o listar pruebas no acredita ejecutarlas ni inspeccionar capturas/PDF.
+
+No quitar el transporte falso del ejemplo ni reemplazar el marcador por una
+API key. La composición no verifica protección de un Network secret, permisos,
+tarifas vigentes o saldo. Antes de cualquier uso real resolver el preflight de
+[spec 0013](specs/0013-planeacion-openai.md) y la aceptación operativa #69.
+Cerrar mediante `create_app()` en todos los procesos de admisión conserva la DB
+y la lectura autorizada; no cancela transmisiones inciertas ni libera reservas.
