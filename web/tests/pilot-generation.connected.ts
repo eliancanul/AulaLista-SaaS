@@ -133,16 +133,18 @@ test("success: two manual v3 forms remain independent through save/reopen/print"
     await expect(reader.locator(".guided-context")).toContainText(input.context);
     await expect(reader.locator(".guided-context")).toContainText("Revisión 2 · Guardado confirmado");
     const beforePrint = privateCalls.length;
-    await reader.getByRole("button", { name: "Imprimir", exact: true }).click();
-    await expect.poll(() => page.evaluate(() => (window as PrintHost).pilotPrinted.length)).toBe(index + 1);
-    const printed = await page.evaluate(() => (window as PrintHost).pilotPrinted.at(-1)!);
-    expect(printed).toContain("Revisión 2");
-    expect(printed).toContain(input.topic);
-    expect(printed).toContain(`Corrección sintética independiente ${index + 1}.`);
-    expect(printed).toContain(input.context);
-    expect(privateCalls).toHaveLength(beforePrint);
-    await expect(reader.getByRole("button", { name: "Imprimir", exact: true })).toBeFocused();
-    await expect(page.locator("iframe[data-acenta-print]")).toHaveCount(0);
+    for (let repeat = 0; repeat < 2; repeat++) {
+      await reader.getByRole("button", { name: "Imprimir", exact: true }).click();
+      await expect.poll(() => page.evaluate(() => (window as PrintHost).pilotPrinted.length)).toBe(index * 2 + repeat + 1);
+      const printed = await page.evaluate(() => (window as PrintHost).pilotPrinted.at(-1)!);
+      expect(printed).toContain("Revisión 2");
+      expect(printed).toContain(input.topic);
+      expect(printed).toContain(`Corrección sintética independiente ${index + 1}.`);
+      expect(printed).toContain(input.context);
+      expect(privateCalls).toHaveLength(beforePrint);
+      await expect(reader.getByRole("button", { name: "Imprimir", exact: true })).toBeFocused();
+      await expect(page.locator("iframe[data-acenta-print]")).toHaveCount(0);
+    }
     if (index === 1) {
       await page.evaluate(() => document.fonts.ready);
       await page.screenshot({ path: info.outputPath("manual-pilot-synthetic-reader.png") });

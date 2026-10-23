@@ -70,7 +70,6 @@ export function PrintPlanningButton({ document: saved }: { document: PlanningDoc
       ]);
       if (disposed) return;
       printWindow.addEventListener("afterprint", finish);
-      printWindow.focus();
       printWindow.print();
       // The browser snapshots the document when print() is invoked. Also clean up
       // if it returns without afterprint; neither event proves that anything printed.
