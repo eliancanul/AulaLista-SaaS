@@ -2,9 +2,11 @@
 
 import hashlib
 import json
+import subprocess
 from copy import deepcopy
 from dataclasses import replace
 from decimal import Decimal
+from pathlib import Path
 from uuid import uuid4
 
 import auth_browser_integration as auth_harness
@@ -24,6 +26,38 @@ from aulalista_api.planning_generation import GenerationAttempt
 
 PILOT_EMAIL = "manual-pilot-a@example.test"
 UNCERTAIN_TOPIC = "Resultado incierto de software"
+
+
+def pilot_command(scenario):
+    return [
+        "npx",
+        "--no-install",
+        "playwright",
+        "test",
+        "--config",
+        "playwright.pilot.config.ts",
+        "--grep",
+        f"{scenario}:",
+        "--output",
+        f"test-results/integration/pilot-generation/{scenario}",
+    ]
+
+
+@pytest.mark.parametrize("scenario", ["success", "uncertain", "busy"])
+def test_pilot_command_selects_exactly_one_browser_journey(scenario):
+    result = subprocess.run(
+        [*pilot_command(scenario), "--list", "--reporter=json"],
+        cwd=Path(__file__).resolve().parents[1] / "web",
+        capture_output=True,
+        text=True,
+        timeout=20,
+        check=True,
+    )
+    report = json.loads(result.stdout)
+    titles = [spec["title"] for suite in report["suites"] for spec in suite["specs"]]
+    assert not report["errors"]
+    assert len(titles) == 1
+    assert titles[0].startswith(f"{scenario}:")
 
 
 @pytest.mark.parametrize("scenario", ["success", "uncertain", "busy"])
@@ -130,19 +164,7 @@ def test_manual_pilot_through_real_auth_browser(
 
     def run_pilot(_command, **kwargs):
         run_process_group(
-            [
-                "npx",
-                "--no-install",
-                "playwright",
-                "test",
-                "--config",
-                "playwright.pilot.config.ts",
-                "--grep",
-                f"^{scenario}:",
-                "--output",
-                f"test-results/integration/pilot-generation/{scenario}",
-                "--reporter=line",
-            ],
+            [*pilot_command(scenario), "--reporter=line"],
             **kwargs,
         )
 
