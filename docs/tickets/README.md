@@ -2,6 +2,12 @@
 
 Las tareas, prioridades, dependencias y estado se mantienen en [GitHub Issues](https://github.com/eliancanul/AulaLista-SaaS/issues). Este directorio conserva contratos de cortes, criterios de aceptación y evidencia histórica; no se elige ni actualiza trabajo desde una tabla de estados local. El [workflow](../workflow.md) define dónde registrar cada cambio.
 
+Para conciliar qué falta del MVP de conversación y Planeación y qué queda después,
+consulta [Pendientes Acenta, corte del 24 de octubre de 2026](PENDIENTES-2026-10-24.md):
+alcance, aceptación, dependencias y evidencia vinculados a los issues existentes,
+con la auditoría de las 38 asignaciones del prototipo. Es una referencia fechada;
+el estado vigente y la selección del trabajo permanecen en Issues.
+
 ## Trabajo en Issues
 
 El [plan Acenta #12](https://github.com/eliancanul/AulaLista-SaaS/issues/12) es la entrada al recorrido conectado. Consulta allí la secuencia y el estado vigente; los enlaces siguientes son un mapa, no una copia del backlog:
