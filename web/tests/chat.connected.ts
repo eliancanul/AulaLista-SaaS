@@ -104,3 +104,41 @@ test("private multi-turn chat survives reload and account changes without new ge
   expect(privateCalls.filter(call => call.method === "POST" && call.path.endsWith("/turns"))).toHaveLength(2);
   expect(external).toEqual([]);
 });
+
+test("uncertain: explicit logout revokes the session without replaying the turn", async ({page}) => {
+  const privateCalls: {method: string; path: string}[] = [];
+  page.on("request", request => {
+    const path = new URL(request.url()).pathname;
+    if (path.startsWith("/scopes/")) privateCalls.push({method: request.method(), path});
+  });
+  await login(page, "chat-pilot-a@example.test");
+  const text = "Provoca incertidumbre sintética sin datos privados.";
+  await page.getByLabel("Mensaje para Luna", {exact: true}).fill(text);
+  const sending = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname.endsWith("/turns"));
+  await page.getByRole("button", {name: "Enviar mensaje", exact: true}).click();
+  expect((await sending).status()).toBe(409);
+  const consult = page.getByRole("button", {name: "Consultar estado del envío", exact: true});
+  await expect(consult).toBeEnabled();
+  await expect(page.getByLabel("Mensaje para Luna", {exact: true})).toHaveValue(text);
+  const querying = page.waitForResponse(response => response.request().method() === "GET" && /\/conversations\/[^/]+\/operations\/[^/]+$/.test(new URL(response.url()).pathname));
+  await consult.click();
+  const queried = await querying;
+  expect(queried.status()).toBe(200);
+  const document: ChatDocument = await queried.json();
+  expect(document.turns).toHaveLength(1);
+  expect(document.turns[0]).toMatchObject({state: "uncertain", user_text: text, assistant_text: null});
+  await expect(consult).toBeEnabled();
+  expect(privateCalls.filter(call => call.method === "POST" && call.path.endsWith("/turns"))).toHaveLength(1);
+  const callsBeforeLogout = privateCalls.length;
+
+  await page.getByRole("button", {name: "Cerrar sesión", exact: true}).click();
+  const exit = page.getByRole("dialog", {name: "¿Salir con mensajes pendientes?", exact: true});
+  await expect(exit).toContainText("Cerrar sesión no cancela el procesamiento");
+  const closing = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === "/auth/logout");
+  await exit.getByRole("button", {name: "Continuar cierre de sesión sin confirmar el envío", exact: true}).click();
+  expect((await closing).status()).toBe(204);
+  await expect(page.getByRole("button", {name: "Continuar con correo", exact: true})).toBeVisible();
+  expect((await page.request.get("/auth/session")).status()).toBe(401);
+  expect(privateCalls).toHaveLength(callsBeforeLogout);
+  expect(privateCalls.filter(call => call.method === "POST" && call.path.endsWith("/turns"))).toHaveLength(1);
+});
