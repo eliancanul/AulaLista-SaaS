@@ -863,6 +863,14 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
             </button>
           </section>
         )}
+        {(s.view === "home" || s.view === "chat") && s.pending && s.submit !== "sending" && (
+          <section aria-label="Planeación pendiente">
+            <p>Hay una planeación pendiente de confirmar. Consulta su estado; esta acción no inicia una nueva generación con IA.</p>
+            <button onClick={() => void controller.recoverCreate()}>
+              {s.pending.payload.contract_version === 3 ? "Consultar estado de generación" : "Comprobar estado del envío"}
+            </button>
+          </section>
+        )}
         {s.error && s.view !== "planning" && s.view !== "analytic" && (
           <p className="workspace-error" role="alert">
             {s.error}
