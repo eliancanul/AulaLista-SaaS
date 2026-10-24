@@ -32,7 +32,7 @@ class ManualPilotConfig:
     model: str
     input_policy: str
     count_strategy: str = "remote-v1"
-    additional_reserve_usd: Decimal = Decimal("0")
+    additional_reserve_usd: Decimal | None = None
 
     def generation_profile(self, provider: OpenAIPlanning) -> GenerationProfile:
         """Validate before the factory creates DB resources or invokes a provider."""
@@ -76,7 +76,7 @@ class ManualPilotConfig:
                 for amount in (
                     self.budget_usd,
                     self.count_request_reserve_usd,
-                    self.additional_reserve_usd,
+                    profile.additional_reserve_usd,
                 )
             )
             or self.budget_usd < profile.reservation_usd

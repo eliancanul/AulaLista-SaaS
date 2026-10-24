@@ -14,6 +14,7 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select, text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 from test_auth_integration import ORIGIN, CapturingSender
 from test_auth_integration import auth_factory as auth_factory
@@ -22,6 +23,7 @@ from test_generated_routes import submit
 from test_openai_planning import Transport, completed, reply
 from test_pilot_composition import composed as composed
 from test_pilot_composition import sign_in
+from test_pilot_configuration import pilot_config
 
 from aulalista_api.ai_budget import BudgetReservation
 from aulalista_api.openai_planning import OpenAIPlanning, ProviderError
@@ -261,15 +263,17 @@ def test_window_includes_legacy_reservations_in_global_budget(
         assert row.reserved_usd == Decimal("0.02")
 
 
+@pytest.mark.parametrize("same_operation", [False, True])
 def test_window_uses_reservations_from_other_product_in_same_total(
-    monkeypatch, composed, runtime_database
+    monkeypatch, composed, runtime_database, same_operation
 ):
+    operation = uuid4()
     with Session(runtime_database) as db, db.begin():
         db.add(
             BudgetReservation(
                 id=uuid4(),
                 scope_id=composed.scope_id,
-                operation_id=uuid4(),
+                operation_id=operation,
                 kind="chat",
                 state="failed",
                 reserved_usd=Decimal("1.9"),
@@ -281,8 +285,23 @@ def test_window_uses_reservations_from_other_product_in_same_total(
         window_app(monkeypatch, composed, transport), base_url=ORIGIN
     ) as client:
         scope, headers = sign_in(client)
-        assert submit(client, scope, headers=headers).status_code == 429
+        assert submit(
+            client, scope, key=operation if same_operation else uuid4(), headers=headers
+        ).status_code == (409 if same_operation else 429)
     assert not transport.calls
+
+    for statement in (
+        "UPDATE ai_budget_reservation SET reserved_usd = 0.000001",
+        "UPDATE ai_budget_reservation SET state = 'generating'",
+        "DELETE FROM ai_budget_reservation",
+        "TRUNCATE ai_budget_reservation",
+    ):
+        with pytest.raises(DBAPIError):
+            with runtime_database.begin() as connection:
+                connection.execute(text(statement))
+    with Session(runtime_database) as db:
+        row = db.scalars(select(BudgetReservation)).one()
+        assert row.state == "failed" and row.reserved_usd == Decimal("1.9")
 
 
 def test_window_sql_constraints_and_retained_attempt_prevent_downgrade(empty_database):
@@ -340,3 +359,13 @@ def test_window_sql_constraints_and_retained_attempt_prevent_downgrade(empty_dat
             connection.scalar(text("SELECT count(*) FROM planning_generation_attempt"))
             == 2
         )
+
+
+def test_window_direct_composition_requires_explicit_additional_reserve():
+    config = pilot_config(
+        count_strategy="window-v1",
+        count_request_reserve_usd=Decimal("0"),
+        budget_usd=Decimal("2"),
+    )
+    with pytest.raises(ValueError, match="^invalid_manual_pilot$"):
+        config.validated_profile()

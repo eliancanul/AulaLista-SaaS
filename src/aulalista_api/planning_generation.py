@@ -28,7 +28,12 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
-from aulalista_api.ai_budget import GLOBAL_LOCK, budget_busy, reserved_total
+from aulalista_api.ai_budget import (
+    GLOBAL_LOCK,
+    BudgetReservation,
+    budget_busy,
+    reserved_total,
+)
 from aulalista_api.auth import AuthError
 from aulalista_api.database import Base
 from aulalista_api.guided_planning import GeneratedPlanningRequest
@@ -83,7 +88,7 @@ class GenerationProfile:
     allowed_request_sha256: frozenset[str] | None
     input_policy: str = "exact-input-v1"
     count_strategy: str = "remote-v1"
-    additional_reserve_usd: Decimal = Decimal("0")
+    additional_reserve_usd: Decimal | None = None
 
     def __post_init__(self):
         if not isinstance(self.actor_id, UUID) or not isinstance(self.scope_id, UUID):
@@ -95,6 +100,8 @@ class GenerationProfile:
         if self.count_strategy not in {"remote-v1", "window-v1"}:
             raise ValueError("invalid_generation_profile")
         single = self.count_strategy == "window-v1"
+        if self.additional_reserve_usd is None and not single:
+            object.__setattr__(self, "additional_reserve_usd", Decimal("0"))
         if not isinstance(self.count_request_reserve_usd, Decimal):
             raise ValueError("invalid_generation_profile")
         if single and (
@@ -168,7 +175,9 @@ class GenerationProfile:
                         else None
                     ),
                     "model": MODEL,
-                    "max_input_tokens": MAX_INPUT_TOKENS,
+                    "max_input_tokens": MODEL_CONTEXT_TOKENS
+                    if self.count_strategy == "window-v1"
+                    else MAX_INPUT_TOKENS,
                     "max_output_tokens": MAX_OUTPUT_TOKENS,
                     "deadline_seconds": DEADLINE_SECONDS,
                     "max_concurrency": 1,
@@ -405,6 +414,18 @@ class GeneratedPlannings:
                 )
                 attempt_id = None
             else:
+                if (
+                    session.scalar(
+                        select(BudgetReservation.id)
+                        .where(
+                            BudgetReservation.scope_id == scope,
+                            BudgetReservation.operation_id == operation,
+                        )
+                        .limit(1)
+                    )
+                    is not None
+                ):
+                    raise MaterialError(409, "conflict")
                 if (
                     session.scalar(
                         select(PlanningRevision.id).where(

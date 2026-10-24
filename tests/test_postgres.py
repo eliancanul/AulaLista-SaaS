@@ -2,6 +2,7 @@ import asyncio
 import socket
 import time
 from dataclasses import replace
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
@@ -147,6 +148,24 @@ def test_each_existing_branch_upgrades_to_one_head_without_losing_history(
             )
             == before
         )
+    if table == "planning_generation_attempt":
+        with empty_database.connect() as connection:
+            copied = connection.execute(
+                text(
+                    "SELECT id, scope_id, operation_id, kind, state, reserved_usd FROM ai_budget_reservation"
+                )
+            ).one()
+            assert copied == (
+                record,
+                scope,
+                operation,
+                "planning",
+                before["state"],
+                Decimal(str(before["reserved_usd"])),
+            )
+            assert connection.scalar(
+                text("SELECT sum(reserved_usd) FROM ai_budget_reservation")
+            ) == Decimal(str(before["reserved_usd"]))
     assert schema_is_ready(empty_database)
     assert {"analytic_section_revision", "planning_generation_attempt"} <= set(
         inspect(empty_database).get_table_names()
