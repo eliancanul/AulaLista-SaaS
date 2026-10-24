@@ -138,6 +138,10 @@ recarga y recuperación en Chromium conectado. PostgreSQL es local desechable y
 el proveedor sintético. Revisión independiente y CI del candidato exacto siguen
 siendo gates; una excepción operativa autorizada se registra por PR.
 
+La navegación y los paneles del espacio docente tienen su contrato separado en
+[0015](0015-workspace-navigation.md); no cambian los permisos ni las operaciones
+de contexto descritos aquí.
+
 Pendiente: compactación generada incremental con procedencia/fragmentación,
 política y coste explícitos; contexto de revisiones de recursos seleccionadas;
 retención/borrado permanente; validación docente real. Reset manual no sustituye

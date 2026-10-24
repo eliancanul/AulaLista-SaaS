@@ -9,6 +9,8 @@ import React, {
 } from "react";
 import {
   AcentaController,
+  isPanelView,
+  type PanelView,
   editableResource,
   type EditorState,
 } from "./controller";
@@ -27,7 +29,8 @@ import { GuidedForm, GuidedReader } from "./GuidedPlanning";
 import { AnalyticForm } from "./AnalyticForm";
 import { AnalyticDerivedForm, AnalyticExplorer } from "./AnalyticPlanning";
 import { fieldLabel, guidedResources, isGuided, planningReference } from "./guided-planning";
-import { Chat, ChatExitGuard, Conversations } from "./Chat";
+import { Chat, ChatContextEditor, ChatExitGuard, Conversations } from "./Chat";
+import { WorkspacePanel, ResourceLibrary, ToolsCatalog, PendingPlanning } from "./WorkspacePanels";
 export function AccessView() {
   const [auth] = useState(() => new AuthController());
   useEffect(() => { void auth.start(); }, [auth]);
@@ -43,23 +46,6 @@ function AccountLinks() {
     </nav>
   );
 }
-const toolCatalog: Record<string, string[]> = {
-  Planear: ["Planeación de clase", "Proyecto de aula"],
-  Materiales: [
-    "Hoja de actividades",
-    "Preguntas sobre un texto",
-    "Adaptar material",
-    "Tarjetas de repaso",
-  ],
-  Evaluar: ["Diagnóstico breve", "Rúbrica y lista de cotejo"],
-  "Juegos y repaso": [
-    "Bingo temático",
-    "Memorama",
-    "Sopa de letras",
-    "Adivina con pistas",
-    "Quiz para proyectar",
-  ],
-};
 function ResultView({
   document,
   onOpen,
@@ -436,14 +422,18 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
   useEffect(() => () => logoutGuard.dispose(), [logoutGuard]);
   const input = useRef<HTMLTextAreaElement>(null);
   const toolsTrigger = useRef<HTMLButtonElement>(null);
-  const [position, setPosition] = useState<{ value: NavigationPosition | null } | null>(null);
+  const [position, setPosition] = useState<{ value: NavigationPosition | null; reveal?: boolean } | null>(null);
+  const panelReturn = useRef<NavigationPosition["panelReturn"]>(undefined);
   useEffect(() => {
     const previous = window.history.scrollRestoration;
     window.history.scrollRestoration = "manual";
     const navigation = new AcentaNavigation(controller, window.history, () => ({
       x: window.scrollX, y: window.scrollY,
+      panelY: document.querySelector(".workspace-panel-body")?.scrollTop,
+      panelReturn: panelReturn.current,
       focus: (document.activeElement as HTMLElement | null)?.dataset.navigationFocus ?? null,
     }), (value) => {
+      panelReturn.current = value?.panelReturn;
       logoutGuard.cancel();
       dismissAnalyticExit();
       setDerivedExit(false);
@@ -466,8 +456,11 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
       const saved = position.value;
       const focus = saved?.focus ? Array.from(document.querySelectorAll<HTMLElement>("[data-navigation-focus]"))
         .find((node) => node.dataset.navigationFocus === saved.focus) : null;
+      const panel = document.querySelector(".workspace-panel-body");
+      if (panel && saved?.panelY !== undefined) panel.scrollTop = saved.panelY;
       (focus ?? document.querySelector<HTMLElement>("main"))?.focus({ preventScroll: true });
       window.scrollTo(saved?.x ?? 0, saved?.y ?? 0);
+      if (position.reveal) focus?.scrollIntoView({block: "nearest"});
     });
     return () => cancelAnimationFrame(frame);
   }, [position]);
@@ -504,6 +497,22 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
     return () => window.removeEventListener("beforeunload", handler);
   }, [controller]);
   if (s.closed) return <AccessView />;
+  const panelView = isPanelView(s.view) ? s.view : null;
+  const conversational = s.view === "home" || s.view === "chat" || !!panelView;
+  const openPanel = (view: PanelView) => {
+    const origin = {x: window.scrollX, y: window.scrollY,
+      focus: (document.activeElement as HTMLElement | null)?.dataset.navigationFocus ?? (view === "chat-context" ? "shortcut-context" : `panel-${view}`)};
+    // Capture the old entry before replacing its return target with this action.
+    controller.navigate(view);
+    panelReturn.current = origin;
+    setPosition({value: {x: window.scrollX, y: window.scrollY, focus: "workspace-panel-title", panelY: 0}, reveal: true});
+  };
+  const closePanel = () => {
+    if (!panelView) return;
+    const target = panelReturn.current ?? {x: 0, y: 0, focus: panelView === "chat-context" ? "shortcut-context" : `panel-${panelView}`};
+    controller.navigate("home");
+    setPosition({value: target, reveal: true});
+  };
   const openEditor = (key?: string) => {
     controller.openEditor(s.result, key);
     if (controller.snapshot().editor) setShowEditor(true);
@@ -539,7 +548,11 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
     }
   };
   return (
-    <div className={`workspace ${expanded ? "expanded" : ""}`}>
+    <div className={`workspace ${expanded ? "expanded" : ""} ${conversational ? "conversational-workspace" : ""}`}
+      onKeyDown={event => {
+        if (event.key !== "Escape" || event.defaultPrevented || !panelView || document.querySelector("dialog[open]")) return;
+        event.preventDefault(); event.stopPropagation(); closePanel();
+      }}>
       <aside className="sidebar">
         <div className="rail-spacer" />
         <button
@@ -551,30 +564,31 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
           {expanded && <span>Contraer menú</span>}
         </button>
         <button
-          className={s.view === "home" ? "selected" : ""}
+          className={s.view === "home" || s.view === "chat" ? "selected" : ""}
           aria-label="Inicio"
           onClick={() => controller.navigate("home")}
         >
           <Icon name="home" />
           {expanded && <span>Inicio</span>}
         </button>
-        <button disabled aria-label="Buscar, pendiente">
-          <Icon name="search" />
-          {expanded && <span>Buscar</span>}
-        </button>
         <button
           className={s.view === "resources" ? "selected" : ""}
           aria-label="Mis recursos"
-          onClick={() => controller.navigate("resources")}
+          aria-controls="workspace-panel" aria-expanded={panelView === "resources"} data-navigation-focus="panel-resources"
+          onClick={() => openPanel("resources")}
         >
           <Icon name="folder" />
           {expanded && <span>Mis recursos</span>}
         </button>
-        <div className="rail-flex" />
-        <button disabled aria-label="Ajustes, pendiente">
-          <Icon name="settings" />
-          {expanded && <span>Ajustes</span>}
+        <button aria-label="Herramientas" className={panelView === "tools" ? "selected" : ""}
+          aria-controls="workspace-panel" aria-expanded={panelView === "tools"} data-navigation-focus="panel-tools" onClick={() => openPanel("tools")}>
+          <Icon name="document" />{expanded && <span>Herramientas</span>}
         </button>
+        <button aria-label="Soporte" className={panelView === "support" ? "selected" : ""}
+          aria-controls="workspace-panel" aria-expanded={panelView === "support"} data-navigation-focus="panel-support" onClick={() => openPanel("support")}>
+          <Icon name="chat" />{expanded && <span>Soporte</span>}
+        </button>
+        <div className="rail-flex" />
         <button
           aria-label="Cerrar sesión"
           onClick={() => {
@@ -586,9 +600,19 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
           {expanded && <span>Cerrar sesión</span>}
         </button>
       </aside>
-      <main tabIndex={-1} className={s.view === "example" ? "home-main" : "content-main"}>
-        {s.view !== "planning" && s.view !== "analytic" && <AccountLinks />}
-        {s.view === "home" || s.view === "chat" ? <Chat controller={controller} onExample={actionExample} onTools={() => setOverlay("tools")} /> : s.view === "conversations" ? <Conversations controller={controller} /> : s.view === "analytic" ? <AnalyticForm controller={controller} /> : s.view === "planning" ? (derived.origin ? <AnalyticDerivedForm controller={controller} /> : <GuidedForm controller={controller} />) : s.view === "example" ? (
+      <main tabIndex={-1} className={conversational ? "conversation-main" : s.view === "example" ? "home-main" : "content-main"}>
+        {!conversational && s.view !== "planning" && s.view !== "analytic" && <AccountLinks />}
+        {conversational ? <Chat controller={controller} panelView={panelView}
+          onContext={() => openPanel("chat-context")} onPlan={() => { setCategory("Planear"); openPanel("tools"); }}
+          panel={panelView && <WorkspacePanel view={panelView} onClose={closePanel}>
+            {panelView === "resources" ? <ResourceLibrary controller={controller} onEditor={() => setShowEditor(true)} /> :
+              panelView === "chat-context" ? <ChatContextEditor controller={controller} /> :
+              panelView === "support" ? <p>Soporte todavía no está disponible en Acenta.</p> : <>
+                <PendingPlanning controller={controller} />
+                <ToolsCatalog category={category} onCategory={setCategory} onPlanning={() => controller.navigate("planning")} />
+                <button className="text-action" onClick={actionExample}>Ajustar planeación · ejemplo</button>
+              </>}
+          </WorkspacePanel>} /> : s.view === "conversations" ? <Conversations controller={controller} /> : s.view === "analytic" ? <AnalyticForm controller={controller} /> : s.view === "planning" ? (derived.origin ? <AnalyticDerivedForm controller={controller} /> : <GuidedForm controller={controller} />) : s.view === "example" ? (
           <section className="home-panel">
             <header className="home-heading">
               <Logo />
@@ -739,130 +763,9 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
             onOriginal={() => { const reference = planningReference(s.result!); if (reference) void controller.openOriginal(reference); }}
           />
         ) : (
-          <section className="library">
-            <h1>Mis recursos</h1>
-            <button disabled={s.listState === "loading"} onClick={() => void controller.loadResources()}>
-              Actualizar listado
-            </button>
-            {s.editor && <button onClick={() => { controller.resumeEditor(); setShowEditor(true); }}>
-              Retomar edición abierta
-            </button>}
-            <p className="secondary">
-              Originales, revisiones y copias de trabajo de esta cuenta.
-            </p>
-            <p className="secondary">
-              Abrir un original conserva tu petición y no lo adjunta al próximo envío.
-            </p>
-            {s.listState === "loading" && (
-              <p role="status">Recuperando recursos…</p>
-            )}
-            {s.listState === "error" && (
-              <button onClick={() => void controller.loadResources()}>
-                Reintentar listado
-              </button>
-            )}
-            {s.listState === "ready" && !s.sources.length && !s.items.length && !s.drafts.length && (
-              <p>No hay recursos todavía. Adjunta un ejemplo para empezar.</p>
-            )}
-            {s.sources.map((source) => (
-              <article key={source.source_id} className="library-card" aria-label={`Recurso original · Versión ${source.number}`}>
-                <h2>{knownSourceSample(source.sha256)?.name ?? "Recurso original"}</h2>
-                <p>Original conservado · Versión {source.number} · {source.size} bytes</p>
-                <p className="field-hint">
-                  Conservado el <time dateTime={source.created_at}>{new Date(source.created_at).toLocaleString("es-MX")}</time>
-                </p>
-                <p className="original-metadata">Fuente: {source.source_id}</p>
-                <p className="original-metadata">SHA-256: {source.sha256}</p>
-                <button
-                  className="primary"
-                  data-navigation-focus={`source-${source.source_id}`}
-                  onClick={() => void controller.openOriginal(source)}
-                >
-                  Abrir original
-                </button>
-              </article>
-            ))}
-            {s.listState === "ready" && !!s.sources.length && !s.items.length && !s.drafts.length && (
-              <p>Aún no hay copias ni borradores guardados.</p>
-            )}
-            {s.items.map((doc) => (
-              <article key={doc.receipt.planning_id} className="library-card">
-                <h2>
-                  {doc.result.resources?.[0]?.title ?? doc.result.title}
-                  {doc.origin ? " · Copia conservada" : ""}
-                </h2>
-                <p>
-                  {doc.result.title} · Revisión {doc.receipt.revision}
-                </p>
-                {isGuided(doc.result) && <p>{doc.result.provenance === "openai-guided-v1" ? "Generada con IA" : "Ejemplo de software"}</p>}
-                <p className="field-hint">
-                  {doc.receipt.source_id ? `Original conservado · Fuente versión ${doc.receipt.source_version}` : "Sin referencia adjunta · Contexto manual"}
-                </p>
-                <button
-                  className="primary"
-                  data-navigation-focus={`planning-${doc.receipt.planning_id}`}
-                  onClick={async () => {
-                    await controller.open(doc.receipt.planning_id);
-                    const current = controller.snapshot();
-                    if (
-                      current.view === "result" &&
-                      current.editor?.document.receipt.planning_id ===
-                        doc.receipt.planning_id
-                    )
-                      setShowEditor(true);
-                  }}
-                >
-                  {isGuided(doc.result) ? "Consultar planeación" : "Reabrir copia guardada"}
-                </button>
-              </article>
-            ))}
-            {s.drafts.map((d) => (
-              <article key={d.receipt.draft_id} className="library-card">
-                <h2>
-                  {d.result.resources?.[0]?.title ?? d.result.title} · Borrador
-                  privado
-                </h2>
-                <p>
-                  Base {d.receipt.base_revision} · Copia de trabajo{" "}
-                  {d.receipt.draft_revision}
-                </p>
-                <button
-                  data-navigation-focus={`draft-${d.receipt.draft_id}`}
-                  onClick={async () => {
-                    await controller.openDraft(d.receipt.draft_id);
-                    const current = controller.snapshot();
-                    if (
-                      current.view === "result" &&
-                      current.editor?.draftId === d.receipt.draft_id
-                    )
-                      setShowEditor(true);
-                  }}
-                >
-                  Recuperar borrador
-                </button>
-              </article>
-            ))}
-            {(s.cursor || s.draftCursor || s.sourceCursor) && (
-              <button disabled={s.listState === "loading"} onClick={() => void controller.loadResources(true)}>
-                Ver más recursos
-              </button>
-            )}
-            <button
-              className="text-action"
-              onClick={() => controller.navigate("example")}
-            >
-              Volver a la petición
-            </button>
-          </section>
+          <ResourceLibrary controller={controller} onEditor={() => setShowEditor(true)} />
         )}
-        {(s.view === "home" || s.view === "chat") && s.pending && s.submit !== "sending" && (
-          <section aria-label="Planeación pendiente">
-            <p>Hay una planeación pendiente de confirmar. Consulta su estado; esta acción no inicia una nueva generación con IA.</p>
-            <button onClick={() => void controller.recoverCreate()}>
-              {s.pending.payload.contract_version === 3 ? "Consultar estado de generación" : "Comprobar estado del envío"}
-            </button>
-          </section>
-        )}
+        {(s.view === "home" || s.view === "chat") && <PendingPlanning controller={controller} />}
         {s.error && s.view !== "planning" && s.view !== "analytic" && (
           <p className="workspace-error" role="alert">
             {s.error}
@@ -1069,26 +972,7 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
               Cerrar
             </button>
           </header>
-          <div className="tool-tabs" role="tablist" aria-label="Categorías">
-            {Object.keys(toolCatalog).map((c) => (
-              <button
-                key={c}
-                role="tab"
-                aria-selected={category === c}
-                onClick={() => setCategory(c)}
-              >
-                {c}
-              </button>
-            ))}
-          </div>
-          <p className="field-hint">
-            Planeación guiada disponible como ejemplo; las demás herramientas están pendientes
-          </p>
-          <div className="catalog-items">
-            {toolCatalog[category].map((t) => (
-              t === "Planeación de clase" ? <button key={t} onClick={() => { setOverlay(null); controller.navigate("planning"); }}>{t}</button> : <p key={t}>{t}<span className="sr-only">, todavía no disponible</span></p>
-            ))}
-          </div>
+          <ToolsCatalog category={category} onCategory={setCategory} onPlanning={() => { setOverlay(null); controller.navigate("planning"); }} />
           <footer>
             <button className="quiet" onClick={actionExample}>
               Ajustar planeación ↗

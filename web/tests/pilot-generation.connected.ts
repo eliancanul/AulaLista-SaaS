@@ -34,7 +34,10 @@ async function login(page: Page, email: string): Promise<Session> {
 }
 
 async function fillManual(page: Page, input: typeof cases[number]) {
-  await page.getByRole("button", { name: "Crear planeación", exact: true }).click();
+  await page.getByRole("complementary").getByRole("button", { name: "Herramientas", exact: true }).click();
+  const tools = page.getByRole("region", { name: "Herramientas", exact: true });
+  await tools.getByRole("tab", { name: "Planear", exact: true }).click();
+  await tools.getByRole("button", { name: "Planeación de clase", exact: true }).click();
   await expect(page.getByRole("button", { name: "Generar con IA", exact: true })).toBeVisible();
   await page.getByLabel("Asignatura").selectOption("Ciencias naturales");
   await page.getByLabel("Grado", { exact: false }).selectOption("3.º de primaria");

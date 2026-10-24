@@ -38,10 +38,67 @@
   .chat-usage dd { margin-bottom: 8px; }
 }
 
-.chat-context-dialog { width: min(680px, calc(100vw - 32px)); padding: 24px; }
-.chat-context-dialog > * + * { margin-top: 16px; }
-.chat-context-dialog header { display: flex; gap: 16px; align-items: center; justify-content: space-between; }
-.chat-context-dialog h2 { font-size: 26px; }
-.chat-context-dialog label { display: block; font-weight: 600; }
-.chat-context-dialog textarea { width: 100%; min-height: 140px; resize: vertical; padding: 12px; border: 1px solid var(--border); border-radius: 8px; }
-.chat-context-dialog .actions { flex-wrap: wrap; }
+/* Panels occupy layout space; their closed state reserves none. */
+.conversation-main { flex: 1; min-width: 0; padding: clamp(12px, 2.5vw, 32px); }
+.chat-panel.conversation-panel { width: min(100%, 900px); margin: 0 auto; display: grid; grid-template-areas: "history" "composer"; gap: 20px; }
+.chat-panel.conversation-panel.with-panel { width: 100%; grid-template-columns: minmax(0, 1fr) minmax(280px, 370px); grid-template-areas: "history panel" "composer panel"; align-items: start; gap: 20px 24px; }
+.chat-history-area { grid-area: history; display: grid; gap: 16px; min-width: 0; }
+.chat-compose-area { grid-area: composer; display: grid; gap: 12px; min-width: 0; }
+.conversation-panel .chat-heading { gap: 8px; }
+.conversation-panel .chat-heading .logo { width: 120px; }
+.conversation-panel .chat-heading h1 { font-size: clamp(28px, 3vw, 38px); }
+.conversation-panel .chat-toolbar { gap: 8px; }
+.conversation-panel .chat-toolbar button { font-size: 14px; padding: 8px 12px; }
+.conversation-panel .chat-turns { margin: 0; }
+.conversation-panel .chat-turns:empty { display: none; }
+.conversation-panel .chat-composer textarea { min-height: 88px; }
+.chat-shortcuts { display: flex; flex-wrap: wrap; gap: 8px; }
+.chat-shortcuts button { display: inline-flex; align-items: center; gap: 8px; }
+.chat-shortcuts button[aria-expanded=true] { background: var(--selection); }
+.workspace-panel { grid-area: panel; min-width: 0; max-width: 100%; max-height: calc(100dvh - 32px); display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 16px; background: #fff; position: sticky; top: 16px; }
+.workspace-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; flex: none; background: #fff; border-bottom: 1px solid var(--border); z-index: 1; }
+.workspace-panel-heading h2 { font-size: 24px; min-width: 0; overflow-wrap: anywhere; }
+.workspace-panel-heading button { flex: none; padding: 8px 12px; }
+.workspace-panel-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 16px; min-width: 0; min-height: 0; overflow: auto; scroll-padding-block: 12px; }
+.workspace-panel .library { width: 100%; max-width: none; margin: 0; gap: 16px; }
+.workspace-panel .library-card { padding: 14px; min-width: 0; }
+.workspace-panel .library button, .workspace-panel .actions button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.workspace-panel .tool-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.workspace-panel .tool-tabs button { padding: 8px; font-size: 14px; }
+.workspace-panel .catalog-items { margin: 0; min-height: 0; flex: none; }
+.workspace-panel input, .workspace-panel textarea, .workspace-panel button { scroll-margin-block: 4px; }
+.tool-unavailable { display: block; font-size: 14px; color: var(--secondary); }
+.chat-context-editor { display: grid; gap: 16px; }
+.chat-context-editor label { font-weight: 600; }
+.chat-context-editor textarea { width: 100%; min-height: 120px; resize: vertical; padding: 12px; border: 1px solid var(--border); border-radius: 8px; }
+.chat-context-editor .actions { flex-wrap: wrap; }
+.pending-planning { padding: 16px; border: 1px solid var(--border); border-radius: 12px; display: grid; gap: 12px; }
+.workspace.conversational-workspace.expanded { --rail: 224px; }
+.workspace.conversational-workspace .sidebar { position: sticky; top: 0; height: 100dvh; min-height: 0; overflow: auto; align-self: flex-start; gap: 12px; padding: 16px 10px; }
+.workspace.conversational-workspace .rail-spacer { display: none; }
+.workspace.conversational-workspace .rail-flex { min-height: 8px; }
+@media (max-width: 1000px) {
+  .chat-panel.conversation-panel.with-panel { grid-template-columns: minmax(0, 1fr); grid-template-areas: "history" "panel" "composer"; }
+  .workspace-panel { position: relative; top: auto; max-height: none; overflow: visible; }
+  .workspace-panel-body { overflow: visible; }
+}
+@media (max-width: 800px) {
+  .workspace.conversational-workspace, .workspace.conversational-workspace.expanded { --rail: 64px; }
+  .workspace.conversational-workspace .sidebar { padding: 12px 6px; gap: 8px; }
+  .workspace.conversational-workspace.expanded .sidebar button { width: 100%; height: auto; min-height: 44px; padding: 8px 2px; flex-direction: column; gap: 4px; }
+  .workspace.conversational-workspace.expanded .sidebar button span { font-size: 12px; line-height: 1.2; white-space: normal; overflow-wrap: anywhere; }
+  .conversation-panel .chat-composer { padding: 12px; }
+  .conversation-panel .chat-composer textarea { min-height: 72px; }
+  .conversation-panel .chat-shortcuts button { padding: 8px; font-size: 14px; }
+  .workspace-panel-heading, .workspace-panel-body { padding: 12px; }
+  .workspace-panel-heading { gap: 8px; }
+  .workspace-panel-heading h2 { font-size: 22px; }
+  .workspace-panel-heading button { font-size: 14px; padding: 8px; }
+  .conversation-panel .chat-message { margin-left: 0; margin-right: 0; }
+  .workspace-panel .library-card { padding: 10px; }
+}
+
+@media (max-height: 450px) {
+  .workspace-panel { position: relative; top: auto; max-height: none; overflow: visible; scroll-padding: 0; }
+  .workspace-panel-body { overflow: visible; }
+}
