@@ -23,6 +23,7 @@ from aulalista_api.materials import MaterialError
 from aulalista_api.openai_planning import BASE_URL, MODEL, OpenAIPlanning, ProviderError
 from aulalista_api.pilot import ManualPilotConfig
 from aulalista_api.pilot_runtime import create_app as create_runtime_app
+from aulalista_api.pilot_runtime import create_single_app
 from aulalista_api.planning_generation import GenerationAttempt
 
 PILOT_EMAIL = "manual-pilot-a@example.test"
@@ -44,7 +45,7 @@ def pilot_command(scenario):
     ]
 
 
-@pytest.mark.parametrize("scenario", ["success", "uncertain", "busy"])
+@pytest.mark.parametrize("scenario", ["success", "uncertain", "busy", "single"])
 def test_pilot_command_selects_exactly_one_browser_journey(scenario):
     result = subprocess.run(
         [*pilot_command(scenario), "--list", "--reporter=json"],
@@ -61,7 +62,7 @@ def test_pilot_command_selects_exactly_one_browser_journey(scenario):
     assert titles[0].startswith(f"{scenario}:")
 
 
-@pytest.mark.parametrize("scenario", ["success", "uncertain", "busy"])
+@pytest.mark.parametrize("scenario", ["success", "uncertain", "busy", "single"])
 def test_manual_pilot_through_real_auth_browser(
     runtime_database, actors, monkeypatch, scenario
 ):
@@ -110,11 +111,19 @@ def test_manual_pilot_through_real_auth_browser(
         )
 
     config = ManualPilotConfig(
-        name="private-manual-pilot-v1",
+        name="private-single-generation-v1"
+        if scenario == "single"
+        else "private-manual-pilot-v1",
         actor_id=actor,
         scope_id=scope,
-        budget_usd=Decimal("0.1"),
-        count_request_reserve_usd=Decimal("0.0001"),
+        budget_usd=Decimal("1") if scenario == "single" else Decimal("0.1"),
+        count_request_reserve_usd=Decimal("0")
+        if scenario == "single"
+        else Decimal("0.0001"),
+        count_strategy="window-once-v1" if scenario == "single" else "remote-v1",
+        additional_reserve_usd=Decimal("0.02")
+        if scenario == "single"
+        else Decimal("0"),
         input_policy="manual-variable-v1",
         provider="openai",
         destination=BASE_URL,
@@ -160,6 +169,7 @@ def test_manual_pilot_through_real_auth_browser(
         "AULALISTA_PILOT_SCOPE_ID": str(scope),
         "AULALISTA_PILOT_BUDGET_USD": str(config.budget_usd),
         "AULALISTA_PILOT_COUNT_RESERVE_USD": str(config.count_request_reserve_usd),
+        "AULALISTA_PILOT_ADDITIONAL_RESERVE_USD": str(config.additional_reserve_usd),
         "OPENAI_API_KEY": "software-server-credential-only",
     }.items():
         monkeypatch.setenv(key, value)
@@ -168,7 +178,7 @@ def test_manual_pilot_through_real_auth_browser(
     )
 
     def pilot_app():
-        app = create_runtime_app()
+        app = create_single_app() if scenario == "single" else create_runtime_app()
         assert not app.dependency_overrides
         return app
 
@@ -182,12 +192,14 @@ def test_manual_pilot_through_real_auth_browser(
     monkeypatch.setattr(auth_harness, "run_process_group", run_pilot)
     auth_harness.test_auth_journey_through_real_api(runtime_database, monkeypatch)
 
-    successes = 2 if scenario == "success" else 0
-    sends = successes if scenario == "success" else int(scenario == "uncertain")
-    assert [url.rsplit("/", 1)[-1] for url, _ in calls] == [
-        "input_tokens",
-        "responses",
-    ] * sends
+    successes = 1 if scenario == "single" else 2 if scenario == "success" else 0
+    sends = (
+        successes if scenario in {"success", "single"} else int(scenario == "uncertain")
+    )
+    expected_paths = (
+        ["responses"] if scenario == "single" else ["input_tokens", "responses"]
+    )
+    assert [url.rsplit("/", 1)[-1] for url, _ in calls] == expected_paths * sends
     # No regeneration during editing, reading, printing, 401 or uncertainty GETs.
     with Session(runtime_database) as db:
         attempts = list(db.scalars(select(GenerationAttempt)))
@@ -224,7 +236,9 @@ def test_manual_pilot_through_real_auth_browser(
             assert attempt.request_fingerprint == hashlib.sha256(raw).hexdigest()
             assert attempt.reserved_usd == profile.reservation_usd
             assert attempt.configuration["input_policy"] == "manual-variable-v1"
-            assert attempt.count_requests == 1
+            assert attempt.count_requests == int(scenario != "single")
+            if scenario == "single":
+                assert attempt.counted_input_tokens is None
             assert attempt.generation_requests == int(scenario != "busy")
         if not successes:
             assert attempts[0].planning_revision_id is None

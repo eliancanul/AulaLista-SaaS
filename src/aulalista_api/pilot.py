@@ -10,7 +10,13 @@ from dataclasses import dataclass
 from decimal import Decimal
 from uuid import UUID
 
-from aulalista_api.openai_planning import BASE_URL, MODEL, OpenAIPlanning
+from aulalista_api.openai_planning import (
+    BASE_URL,
+    MAX_INPUT_TOKENS,
+    MODEL,
+    MODEL_CONTEXT_TOKENS,
+    OpenAIPlanning,
+)
 from aulalista_api.planning_generation import GenerationProfile
 
 
@@ -25,10 +31,19 @@ class ManualPilotConfig:
     destination: str
     model: str
     input_policy: str
+    count_strategy: str = "remote-v1"
+    additional_reserve_usd: Decimal = Decimal("0")
 
     def generation_profile(self, provider: OpenAIPlanning) -> GenerationProfile:
         """Validate before the factory creates DB resources or invokes a provider."""
         if not isinstance(provider, OpenAIPlanning):
+            raise ValueError("invalid_manual_pilot")
+        expected_limit = (
+            MODEL_CONTEXT_TOKENS
+            if self.count_strategy == "window-once-v1"
+            else MAX_INPUT_TOKENS
+        )
+        if provider.input_token_limit != expected_limit:
             raise ValueError("invalid_manual_pilot")
         return self.validated_profile()
 
@@ -50,13 +65,19 @@ class ManualPilotConfig:
                 count_request_reserve_usd=self.count_request_reserve_usd,
                 allowed_request_sha256=None,
                 input_policy=self.input_policy,
+                count_strategy=self.count_strategy,
+                additional_reserve_usd=self.additional_reserve_usd,
             )
         except ValueError:
             raise ValueError("invalid_manual_pilot") from None
         if (
             any(
                 amount != amount.quantize(Decimal("0.000000001"))
-                for amount in (self.budget_usd, self.count_request_reserve_usd)
+                for amount in (
+                    self.budget_usd,
+                    self.count_request_reserve_usd,
+                    self.additional_reserve_usd,
+                )
             )
             or self.budget_usd < profile.reservation_usd
         ):

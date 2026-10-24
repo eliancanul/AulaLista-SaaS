@@ -73,7 +73,10 @@ def test_empty_database_migrates_and_upgrade_is_repeatable(empty_database):
     command.check(Config("alembic.ini"))
 
 
-@pytest.mark.parametrize("branch", ["0008_analytic_sections", "0008_openai_planning"])
+@pytest.mark.parametrize(
+    "branch",
+    ["0008_analytic_sections", "0008_openai_planning", "0009_planning_branches"],
+)
 def test_each_existing_branch_upgrades_to_one_head_without_losing_history(
     empty_database, branch
 ):
@@ -126,7 +129,7 @@ def test_each_existing_branch_upgrades_to_one_head_without_losing_history(
                 values,
             )
         before = connection.scalar(
-            text(f"SELECT to_jsonb(retained) FROM {table} retained")
+            text(f"SELECT to_jsonb(retained) - 'count_strategy' FROM {table} retained")
         )
     assert not schema_is_ready(empty_database)
     command.upgrade(config, "head")
@@ -136,7 +139,11 @@ def test_each_existing_branch_upgrades_to_one_head_without_losing_history(
             text("SELECT version_num FROM alembic_version")
         ).scalars().all() == [SCHEMA_REVISION]
         assert (
-            connection.scalar(text(f"SELECT to_jsonb(retained) FROM {table} retained"))
+            connection.scalar(
+                text(
+                    f"SELECT to_jsonb(retained) - 'count_strategy' FROM {table} retained"
+                )
+            )
             == before
         )
     assert schema_is_ready(empty_database)
@@ -149,7 +156,11 @@ def test_each_existing_branch_upgrades_to_one_head_without_losing_history(
     assert schema_is_ready(empty_database)
     with empty_database.connect() as connection:
         assert (
-            connection.scalar(text(f"SELECT to_jsonb(retained) FROM {table} retained"))
+            connection.scalar(
+                text(
+                    f"SELECT to_jsonb(retained) - 'count_strategy' FROM {table} retained"
+                )
+            )
             == before
         )
 

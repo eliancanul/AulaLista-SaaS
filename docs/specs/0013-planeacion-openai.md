@@ -13,6 +13,50 @@ sobre main `51b7d37f263805a55493a073b20d99e5346133dd`: política manual variable
 versionada, distinta del ensayo de entradas exactas. #60 ya está integrado;
 esta ampliación no activa su transporte ni autoriza credenciales, gasto o despliegue.
 
+## Enmienda: un intento sin conteo remoto (#67/#69)
+
+Ajuste autorizado el 24 de octubre de 2026: perfil `window-once-v1` separado del
+perfil histórico `remote-v1`. No habilita gasto, credenciales, migración remota
+ni despliegue por sí mismo. El recorrido sigue usando la UI privada y sus rutas
+HTTP, sesión/CSRF, guardado, edición y recuperación existentes.
+
+La [ficha oficial del modelo](https://developers.openai.com/api/docs/models/gpt-6-luna)
+consultada ese día publica ventana de 1 050 000 tokens, entrada Standard USD
+0.10/M y salida USD 0.50/M; sobre 272 000 aplica 2x entrada y 1.5x salida.
+Se reserva toda la ventana como entrada más 1024 de salida, incluso contando
+ambas por separado: `(1050000 * 0.20 + 1024 * 0.75) / 1000000 = 0.210768 USD`.
+Es una cota de inferencia, no tokens estimados del formulario ni una factura.
+No hay herramientas ni endpoint regional. Según la [guía oficial de caché](https://developers.openai.com/api/docs/guides/prompt-caching),
+modo explícito sin breakpoints no usa caché ni crea escrituras; se mantiene ese
+payload fijo. Se revalidan precios/destino antes de activar; no se inventa tarifa
+para el conteo porque este perfil no lo envía.
+
+El operador debe suministrar reserva adicional explícita para cargos aplicables
+(impuestos/conversión incluidos cuando correspondan); cero requiere verificar
+que no aplican. Reserva total = cota anterior + adicional, redondeada hacia arriba
+a nueve decimales. Presupuesto global de hasta USD 2, descontando gasto externo
+al ledger, y suma de **todas** las reservas anteriores + nueva <= presupuesto.
+Si cargos o saldo no pueden acotarse, no activar. Nunca se libera margen por
+fallo, incertidumbre, reinicio, cambio de actor, key o perfil.
+
+Sólo se admite un intento `window-once-v1` global retenido, aun si falla. Lock
+global y un índice único en PostgreSQL lo hacen cumplir entre procesos. Antes
+de HTTP se confirma estado `generating`, `generation_requests=1`,
+`count_requests=0`, `counted_input_tokens=NULL` y la reserva. No se registra un
+conteo falso. `usage.input_tokens` se observa después, admitido hasta la ventana
+publicada; salida sigue limitada a 1024. El formulario conserva sus límites de
+bytes; ya no se promete un máximo de 2048 tokens para este perfil. Cero retries,
+redirecciones o fallback. Una respuesta inválida/incierta conserva la reserva;
+replay/GET no reenvían. El perfil anterior mantiene sus dos etapas y sus reglas.
+
+La migración aditiva `0010_single_generation` desde `0009_planning_branches`
+conserva filas, estados y reservas antiguas, asignándoles `remote-v1` por default.
+No cambia grants. Downgrade rechaza cualquier intento del nuevo modo: no borrar
+historia para recuperar compatibilidad. El binario anterior espera revisión
+0009 en readiness; coordinar mantenimiento y no confundir rollback de código
+con reversión del esquema. Este ensayo de una entrada no acepta por sí solo #69,
+que conserva su recorrido y revisión humana pendientes.
+
 ## Contrato
 
 La creación v3 conserva los campos manuales de v2 y elimina `fixture_context`.
@@ -173,7 +217,7 @@ sintéticos; verifica reinicio sin presupuesto fresco. El runner Chromium usa
 el factory de servidor y una credencial sintética, sustituyendo únicamente el
 transporte externo del modelo y el correo. No acredita una llamada real.
 
-## Intento, presupuesto y recuperación
+## Intento, presupuesto y recuperación del perfil remoto histórico
 
 Una operación admite como máximo un intento, con dos etapas externas distintas:
 conteo y generación. La admisión persiste solicitud/huellas, perfil, plazo y
