@@ -1,5 +1,12 @@
 # Chat privado de Acenta
 
+Este documento describe el incremento integrado por #76/#77. La petición
+posterior de un chat único continuo, contexto versionado y compactación queda
+delimitada en [#11](https://github.com/eliancanul/AulaLista-SaaS/issues/11) y en la
+[conciliación del backlog](../tickets/CONCILIACION-2026-10-24.md). Esa evolución
+todavía no está implementada: no cambia retroactivamente los endpoints, límites
+ni garantías del contrato que sigue, ni autoriza borrar conversaciones.
+
 Contrato del incremento de [#11](https://github.com/eliancanul/AulaLista-SaaS/issues/11),
 autorizado para implementación el 24 de octubre de 2026. Las pruebas usan sólo
 datos sintéticos y transporte falso; no acreditan uso real, despliegue ni calidad
