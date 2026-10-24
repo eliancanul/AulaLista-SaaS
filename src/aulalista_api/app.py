@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 
 from aulalista_api.analytic_section_routes import install_analytic_section_routes
 from aulalista_api.auth_routes import install_auth_routes
+from aulalista_api.chat_routes import install_chat_routes
 from aulalista_api.config import load_settings
 from aulalista_api.database import Readiness, make_engine
 from aulalista_api.material_routes import install_material_routes
@@ -61,6 +62,9 @@ def create_app(
     install_auth_routes(app, engine)
     install_material_routes(app, engine)
     install_planning_routes(
+        app, engine, provider=planning_provider, profile=generation_profile
+    )
+    install_chat_routes(
         app, engine, provider=planning_provider, profile=generation_profile
     )
     install_planning_edit_routes(app, engine)

@@ -4,6 +4,7 @@ from alembic import context
 
 from aulalista_api import (  # noqa: F401 -- register persisted models
     analytic_sections,
+    chat_models,
     materials,
     planning_edits,
     planning_generation,

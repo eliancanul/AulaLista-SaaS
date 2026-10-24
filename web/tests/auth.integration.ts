@@ -124,6 +124,7 @@ test("a fresh authenticated account discovers exact original versions without an
   const firstLoginAt = Date.now();
   const firstCookie = (await context.cookies()).find((c) => c.name === "__Host-acenta-session")!;
   const origin = new URL(page.url()).origin;
+  await page.getByRole("button", { name: "Ajustar planeación", exact: true }).click();
   await page.getByLabel("Petición para tu clase").fill("Petición sin generar una planeación");
   await page.getByRole("button", { name: "Adjuntar referencia", exact: true }).click();
   const savedResponse = page.waitForResponse((r) => r.request().method() === "POST" && new URL(r.url()).pathname.endsWith("/sources"));
@@ -159,7 +160,7 @@ test("a fresh authenticated account discovers exact original versions without an
     const cookie = (await fresh.cookies()).find((c) => c.name === "__Host-acenta-session")!;
     expect(cookie.value === firstCookie.value).toBe(false);
     expect(await restored.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
-    await expect(restored.getByRole("button", { name: "Adjuntar referencia", exact: true })).toBeVisible();
+    await expect(restored.getByLabel("Mensaje para Luna", { exact: true })).toBeVisible();
     const listingResponse = restored.waitForResponse((r) => r.request().method() === "GET" && new URL(r.url()).pathname === catalogPath);
     await restored.getByRole("button", { name: "Mis recursos", exact: true }).first().click();
     const listing = await listingResponse;

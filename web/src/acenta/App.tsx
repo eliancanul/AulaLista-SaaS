@@ -27,6 +27,7 @@ import { GuidedForm, GuidedReader } from "./GuidedPlanning";
 import { AnalyticForm } from "./AnalyticForm";
 import { AnalyticDerivedForm, AnalyticExplorer } from "./AnalyticPlanning";
 import { fieldLabel, guidedResources, isGuided, planningReference } from "./guided-planning";
+import { Chat, ChatExitGuard, Conversations } from "./Chat";
 export function AccessView() {
   const [auth] = useState(() => new AuthController());
   useEffect(() => { void auth.start(); }, [auth]);
@@ -414,6 +415,8 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
   const s = useSyncExternalStore(controller.subscribe, controller.snapshot);
   const analytic = useSyncExternalStore(controller.analytic.subscribe, controller.analytic.snapshot);
   const derived = useSyncExternalStore(controller.analyticDerivation.subscribe, controller.analyticDerivation.snapshot);
+  useSyncExternalStore(controller.chat.subscribe, controller.chat.snapshot);
+  const [chatExit, setChatExit] = useState(false);
   const [derivedExit, setDerivedExit] = useState(false);
   const [analyticExit, setAnalyticExit] = useState(false);
   const analyticExitGeneration = useRef(0);
@@ -444,6 +447,7 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
       logoutGuard.cancel();
       dismissAnalyticExit();
       setDerivedExit(false);
+      setChatExit(false);
       setOverlay(null);
       setShowEditor(false);
       setPosition({ value });
@@ -483,6 +487,7 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
       const state = controller.snapshot();
       if (
         state.pending ||
+        controller.chat.hasUnsavedChanges() ||
         controller.analytic.hasUnsavedChanges() ||
         controller.analyticDerivation.hasUnsavedChanges() ||
         state.sourcePending ||
@@ -504,6 +509,7 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
     if (controller.snapshot().editor) setShowEditor(true);
   };
   const actionExample = () => {
+    controller.navigate("example");
     controller.useExample();
     setOverlay(null);
     input.current?.focus();
@@ -518,6 +524,11 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
       analyticExitGeneration.current++;
       setAnalyticExit(true);
     } else logoutGuard.request();
+  };
+  const requestLogout = () => {
+    setChatExit(false);
+    if (controller.analyticDerivation.hasUnsavedChanges()) setDerivedExit(true);
+    else continueLogout();
   };
   const saveAnalyticBeforeExit = async (recover = false) => {
     const generation = analyticExitGeneration.current;
@@ -539,7 +550,7 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
           <Icon name="expand" />
           {expanded && <span>Contraer menú</span>}
         </button>
-        <button disabled aria-label="Nueva conversación, pendiente">
+        <button aria-label="Nueva conversación" onClick={() => controller.navigate("home")}>
           <Icon name="plus" />
           {expanded && <span>Nueva conversación</span>}
         </button>
@@ -563,7 +574,7 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
           <Icon name="folder" />
           {expanded && <span>Mis recursos</span>}
         </button>
-        <button disabled aria-label="Conversaciones, pendiente">
+        <button aria-label="Conversaciones" className={s.view === "conversations" ? "selected" : ""} onClick={() => controller.navigate("conversations")}>
           <Icon name="chat" />
           {expanded && <span>Conversaciones</span>}
         </button>
@@ -575,17 +586,17 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
         <button
           aria-label="Cerrar sesión"
           onClick={() => {
-            if (controller.analyticDerivation.hasUnsavedChanges()) setDerivedExit(true);
-            else continueLogout();
+            if (controller.chat.hasUnsavedChanges()) setChatExit(true);
+            else requestLogout();
           }}
         >
           <Icon name="chat" />
           {expanded && <span>Cerrar sesión</span>}
         </button>
       </aside>
-      <main tabIndex={-1} className={s.view === "home" ? "home-main" : "content-main"}>
+      <main tabIndex={-1} className={s.view === "example" ? "home-main" : "content-main"}>
         {s.view !== "planning" && s.view !== "analytic" && <AccountLinks />}
-        {s.view === "analytic" ? <AnalyticForm controller={controller} /> : s.view === "planning" ? (derived.origin ? <AnalyticDerivedForm controller={controller} /> : <GuidedForm controller={controller} />) : s.view === "home" ? (
+        {s.view === "home" || s.view === "chat" ? <Chat controller={controller} onExample={actionExample} onTools={() => setOverlay("tools")} /> : s.view === "conversations" ? <Conversations controller={controller} /> : s.view === "analytic" ? <AnalyticForm controller={controller} /> : s.view === "planning" ? (derived.origin ? <AnalyticDerivedForm controller={controller} /> : <GuidedForm controller={controller} />) : s.view === "example" ? (
           <section className="home-panel">
             <header className="home-heading">
               <Logo />
@@ -846,9 +857,17 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
             )}
             <button
               className="text-action"
-              onClick={() => controller.navigate("home")}
+              onClick={() => controller.navigate("example")}
             >
               Volver a la petición
+            </button>
+          </section>
+        )}
+        {(s.view === "home" || s.view === "chat") && s.pending && s.submit !== "sending" && (
+          <section aria-label="Planeación pendiente">
+            <p>Hay una planeación pendiente de confirmar. Consulta su estado; esta acción no inicia una nueva generación con IA.</p>
+            <button onClick={() => void controller.recoverCreate()}>
+              {s.pending.payload.contract_version === 3 ? "Consultar estado de generación" : "Comprobar estado del envío"}
             </button>
           </section>
         )}
@@ -871,6 +890,11 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
         )}
       </main>
       <AnalyticExplorer controller={controller} />
+      {chatExit && <Dialog title="¿Salir con mensajes pendientes?" onClose={() => setChatExit(false)}>
+        <ChatExitGuard controller={controller}
+          onReview={() => { setChatExit(false); controller.navigate("conversations"); }}
+          onExit={requestLogout} />
+      </Dialog>}
       {derivedExit && <Dialog title="¿Salir con una clase pendiente?" onClose={() => setDerivedExit(false)} className="analytic-exit-dialog">
         <section className="exit-guard">
           <h2>¿Salir con una clase pendiente?</h2>

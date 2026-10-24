@@ -16,6 +16,7 @@ import type {
 } from "./contracts";
 
 import { guidedResources, validateGuidedRequest } from "./guided-planning";
+import { chatTextError, parseChatDocument, parseConversationSummary, type ChatDocument, type ConversationSummary } from "./chat-contracts";
 import {
   isAnalyticSectionData,
   MAX_ANALYTIC_DATA_BYTES,
@@ -405,6 +406,57 @@ export class AcentaApi {
     if (!isAnalyticSectionData(data)) throw new ApiError(422, "invalid_request");
     if (new TextEncoder().encode(JSON.stringify(data)).length > MAX_ANALYTIC_DATA_BYTES)
       throw new ApiError(413, "content_too_large");
+  }
+  async chatAvailable(): Promise<boolean> {
+    const value = await this.request("chat-capability");
+    assert(object(value) && typeof value.available === "boolean");
+    return value.available;
+  }
+  async createConversation(key: string): Promise<ChatDocument> {
+    const doc = parseChatDocument(await this.request("conversations", "POST", {}, key));
+    assert(doc.conversation.version === 0);
+    return doc;
+  }
+  async conversationOperation(key: string): Promise<ChatDocument> {
+    return parseChatDocument(await this.request(`conversation-operations/${this.id(key)}`));
+  }
+  async readConversation(id: string): Promise<ChatDocument> {
+    const doc = parseChatDocument(await this.request(`conversations/${this.id(id)}`));
+    assert(doc.conversation.id === id);
+    return doc;
+  }
+  async sendChatTurn(id: string, text: string, expected: number, key: string): Promise<ChatDocument> {
+    if (chatTextError(text) || !Number.isInteger(expected) || expected < 0 || expected >= 100)
+      throw new ApiError(422, "invalid_request");
+    const doc = parseChatDocument(await this.request(`conversations/${this.id(id)}/turns`, "POST", {text, expected_version: expected}, key, false, 32768));
+    this.matchChatTurn(doc, id, key, text, expected);
+    return doc;
+  }
+  async chatTurnOperation(id: string, key: string, text?: string, expected?: number): Promise<ChatDocument> {
+    const doc = parseChatDocument(await this.request(`conversations/${this.id(id)}/operations/${this.id(key)}`));
+    this.matchChatTurn(doc, id, key, text, expected);
+    return doc;
+  }
+  private matchChatTurn(doc: ChatDocument, id: string, key: string, text?: string, expected?: number) {
+    const turn = doc.turns.find(turn => turn.operation_id === key);
+    assert(doc.conversation.id === id && turn && (text === undefined || turn.user_text === text) &&
+      (expected === undefined || turn.number === expected + 1));
+  }
+  async listConversations(cursor?: string, limit = 50): Promise<Page<ConversationSummary>> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw new ApiError(422, "invalid_request");
+    const params = new URLSearchParams({limit: String(limit)});
+    if (cursor !== undefined) params.set("cursor", this.id(cursor));
+    const value = await this.request(`conversations?${params}`);
+    assert(object(value) && Array.isArray(value.items) && value.items.length <= limit && (value.next_cursor === null || isUuid(value.next_cursor)));
+    let previous = cursor?.toLowerCase() ?? "";
+    const items = value.items.map(item => {
+      const summary = parseConversationSummary(item), id = summary.id.toLowerCase();
+      assert(id > previous);
+      previous = id;
+      return summary;
+    });
+    assert(value.next_cursor === null || (items.length > 0 && value.next_cursor === items.at(-1)!.id));
+    return {items, next_cursor: value.next_cursor};
   }
   async createAnalyticSection(data: AnalyticSectionData, key: string) {
     this.checkAnalyticData(data);

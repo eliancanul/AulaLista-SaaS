@@ -13,14 +13,7 @@ if (!workspace) {
   workspace = crypto.randomUUID();
   sessionStorage.setItem("acenta-api-test-workspace", workspace);
 }
-createRoot(document.getElementById("root")!).render(
-  <AcentaApp
-    controller={
-      new AcentaController(
-        new AcentaApi(__ACENTA_E2E_SESSION__),
-        localStorage,
-        workspace,
-      )
-    }
-  />,
-);
+const controller = new AcentaController(new AcentaApi(__ACENTA_E2E_SESSION__), localStorage, workspace);
+// Dedicated T2/B2/B3 fixture entry; production's default chat has its own runner.
+if (controller.snapshot().view === "home") controller.navigate("example");
+createRoot(document.getElementById("root")!).render(<AcentaApp controller={controller} />);

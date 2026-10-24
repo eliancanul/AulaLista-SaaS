@@ -32,6 +32,7 @@ import { AnalyticSectionController } from "./analytic-controller";
 import { AnalyticExplorerController } from "./analytic-explorer";
 import { AnalyticDerivationController } from "./analytic-derivation";
 import type { AnalyticSectionDocument } from "./analytic-sections";
+import { ChatController } from "./chat-controller";
 
 export type SaveState =
   | "clean"
@@ -41,7 +42,7 @@ export type SaveState =
   | "error"
   | "unknown"
   | "conflict";
-export type View = "home" | "result" | "resources" | "planning" | "analytic";
+export type View = "home" | "chat" | "conversations" | "example" | "result" | "resources" | "planning" | "analytic";
 export type CreateIntent = {
   kind: "create";
   key: string;
@@ -103,6 +104,7 @@ export interface State {
   original: OriginalState | null;
   sourceName: string;
   view: View;
+  chatId: string | null;
   prompt: string;
   guided: GuidedPlanningRequest;
   generationAvailable: boolean;
@@ -137,6 +139,7 @@ const fresh = (): State => ({
   original: null,
   sourceName: "Planeación de ciencias · ejemplo",
   view: "home",
+  chatId: null,
   prompt: "",
   guided: emptyGuidedRequest(),
   generationAvailable: false,
@@ -171,6 +174,7 @@ export function editableResource(
   );
 }
 export class AcentaController {
+  readonly chat: ChatController;
   readonly analytic: AnalyticSectionController;
   readonly analyticExplorer: AnalyticExplorerController;
   readonly analyticDerivation: AnalyticDerivationController;
@@ -201,6 +205,9 @@ export class AcentaController {
     private recovery: EditorRecovery | null = null,
   ) {
     if (!isUuid(workspaceId)) throw Error("Invalid workspace identity");
+    this.chat = new ChatController(api, id => {
+      if (this.state.view === "home" || this.state.view === "chat") this.emit({view: "chat", chatId: id});
+    });
     this.analytic = new AnalyticSectionController(api);
     this.analyticExplorer = new AnalyticExplorerController(api);
     this.analyticDerivation = new AnalyticDerivationController(api);
@@ -389,7 +396,7 @@ export class AcentaController {
         editor: editor ?? null,
         pending: s.pending ?? null,
         submit: s.pending ? "unknown" : "idle",
-        view: ["home", "resources", "planning"].includes(s.view)
+        view: ["home", "example", "resources", "planning"].includes(s.view)
           ? s.view
           : editor || result
             ? "result"
@@ -457,6 +464,7 @@ export class AcentaController {
   }
   /** Suspend callback admission without deleting the in-memory buffer or its pending key. */
   suspend() {
+    this.chat.suspend();
     this.analytic.suspend();
     this.analyticExplorer.suspend();
     this.analyticDerivation.suspend();
@@ -473,7 +481,7 @@ export class AcentaController {
       submit:this.state.pending ? "unknown" : this.state.submit,
       editor:this.state.editor?.pending ? {...this.state.editor,save:"unknown"} : this.state.editor};
   }
-  resume() { this.suspended = false; this.analytic.resume(); this.analyticExplorer.resume(); this.analyticDerivation.resume(); }
+  resume() { this.suspended = false; this.chat.resume(); this.analytic.resume(); this.analyticExplorer.resume(); this.analyticDerivation.resume(); }
   useAnalyticSection(section: AnalyticSectionDocument) {
     if (this.state.closed || this.suspended || this.state.pending || !this.analyticDerivation.choose(section)) return false;
     this.analyticExplorer.close();
@@ -587,20 +595,31 @@ export class AcentaController {
       : this.state.listState;
   }
   navigate(view: View) {
-    if (this.state.closed) return;
+    if (this.state.closed || this.suspended) return;
+    if (view === "home") this.chat.newConversation();
     this.analyticExplorer.close();
     const listState = this.leaveReads();
     this.closeOriginal();
-    this.emit({ view, listState, error: "" });
+    this.emit({ view, listState, error: "", ...(view === "home" ? {chatId: null} : {}) });
     if (view === "resources" && listState === "idle") void this.loadResources();
   }
-  restoreNavigation(location: { view: View; result: PlanningDocument | null }) {
-    if (this.state.closed) return;
+  openChat(id: string) {
+    if (this.state.closed || this.suspended) return;
+    this.analyticExplorer.close();
+    const listState = this.leaveReads();
+    this.closeOriginal();
+    this.emit({view: "chat", chatId: id, listState, error: ""});
+    void this.chat.open(id);
+  }
+  restoreNavigation(location: { view: View; result: PlanningDocument | null; chatId?: string | null }) {
+    if (this.state.closed || this.suspended) return;
     this.analyticExplorer.close();
     const listState = this.leaveReads();
     this.closeOriginal();
     // Navigation never replaces the editor buffer or the next request's source.
-    this.emit({ view: location.view, listState, error: "",
+    if (location.view === "home") this.chat.newConversation();
+    if (location.view === "chat" && location.chatId) void this.chat.open(location.chatId);
+    this.emit({ view: location.view, listState, error: "", chatId: location.chatId ?? null,
       ...(location.view === "result" ? { result: location.result } : {}) });
     if (location.view === "resources" && listState === "idle") void this.loadResources();
   }
@@ -1325,6 +1344,7 @@ export class AcentaController {
     }
   }
   closeSession() {
+    this.chat.close();
     this.analytic.close();
     this.analyticExplorer.dispose();
     this.analyticDerivation.close();
