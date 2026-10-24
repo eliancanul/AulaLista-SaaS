@@ -1,4 +1,4 @@
-/** Production UI + real cookies/CSRF/HTTP/PostgreSQL; no page.route or model calls. */
+/** Production UI + real cookies/CSRF/HTTP/PostgreSQL; synthetic provider only. */
 import { expect, test, type Page } from "@playwright/test";
 import type { ChatDocument } from "../src/acenta/chat-contracts";
 type Session = {principal_id: string; scope_id: string; csrf_token: string};
@@ -111,6 +111,84 @@ test("private multi-turn chat survives reload and account changes without new ge
   expect(external).toEqual([]);
 });
 
+for (const scenario of ["recovery", "budget", "uncertain"] as const) {
+  test(`compaction ${scenario}: keeps history, drafts and a single operation`, async ({page}, info) => {
+    const owner = await login(page, "chat-pilot-a@example.test"), posts: string[] = [];
+    page.on("request", request => { if (request.method() === "POST" && request.url().includes("/scopes/")) posts.push(request.url()); });
+    const input = page.getByLabel("Mensaje para Luna", {exact: true});
+    await input.fill("Inicia el ejemplo de compactación con agua, 30 minutos, no 45.");
+    const initialResponse = page.waitForResponse(response => response.request().method() === "POST" && response.url().endsWith("/turns"));
+    await page.getByRole("button", {name: "Enviar mensaje", exact: true}).click();
+    const first = await initialResponse; expect(first.status()).toBe(201);
+    const initial: ChatDocument = await first.json();
+    await expect(input).toHaveValue("");
+    expect(new TextEncoder().encode(initial.turns[0].assistant_text!).length).toBe(32768);
+    const text = "Continúa con la duración corregida.";
+    if (scenario === "recovery") {
+      // Deliver to the real server, then lose the response after commit. GET must
+      // recover that same operation; no fixture response or second POST is used.
+      await page.evaluate(() => {
+        const send = window.fetch;
+        window.fetch = async (...args: Parameters<typeof fetch>) => {
+          const response = await send(...args);
+          if (args[1]?.method === "POST" && String(args[0]).endsWith("/turns")) {
+            window.fetch = send;
+            throw new TypeError("Synthetic transport loss after server response");
+          }
+          return response;
+        };
+      });
+    }
+    await input.fill(text);
+    const sent = page.waitForResponse(response => response.request().method() === "POST" && response.url().endsWith("/turns"));
+    await page.getByRole("button", {name: "Enviar mensaje", exact: true}).click();
+    expect((await sent).status()).toBe(scenario === "recovery" ? 201 : scenario === "budget" ? 429 : 409);
+    await expect(input).toHaveValue(text);
+    if (scenario === "budget") {
+      await expect(page.getByRole("alert")).toContainText("presupuesto configurado");
+      await expect(input).toBeEnabled();
+      await expect(page.getByRole("button", {name: "Consultar estado del envío", exact: true})).toHaveCount(0);
+    } else {
+      const recover = page.getByRole("button", {name: "Consultar estado del envío", exact: true});
+      await expect(recover).toBeEnabled();
+      await page.getByRole("button", {name: "Soporte", exact: true}).click();
+      await expect(page.getByRole("region", {name: "Soporte", exact: true})).toContainText("Esta ayuda es local");
+      await expect(input).toHaveValue(text); await page.keyboard.press("Escape");
+      await recover.click();
+      if (scenario === "recovery") await expect(input).toHaveValue("");
+      else { await expect(input).toHaveValue(text); await expect(recover).toBeEnabled(); }
+    }
+    await page.getByRole("button", {name: "Revisar contexto", exact: true}).click();
+    const panel = page.getByRole("region", {name: "Contexto del chat", exact: true});
+    if (scenario === "recovery") {
+      await expect(panel.getByRole("heading", {name: "Resumen automático", exact: true})).toBeVisible();
+      await expect(panel).toContainText("30 minutos, no 45");
+      await panel.getByLabel("Notas para el próximo contexto").fill("Corrección pendiente sin guardar");
+      await panel.getByRole("button", {name: "Consultar revisión actual y procedencia", exact: true}).click();
+      await expect(panel.getByText("Resumen del paso 1 y mensajes de origen", {exact: true})).toBeVisible();
+      await panel.getByText("Resumen del paso 1 y mensajes de origen", {exact: true}).click();
+      await expect(panel).toContainText("bytes UTF-8");
+      await panel.getByRole("button", {name: "Ver revisión anterior del contexto", exact: true}).click();
+      await expect(panel).toContainText("Revisión guardada 0 · anterior, sólo lectura");
+      await expect(panel.getByLabel("Notas para el próximo contexto")).toHaveValue("Corrección pendiente sin guardar");
+      await page.setViewportSize({width: 360, height: 540});
+      await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({path: info.outputPath("compaction-review-mobile.png")});
+      await panel.getByRole("button", {name: "Cerrar panel", exact: true}).click();
+      await page.reload();
+      await expect(page.getByText("Contexto activo · revisión 1.", {exact: false})).toBeVisible();
+      await expect(page.getByRole("article", {name: "Respuesta 1", exact: true})).toContainText("30 minutos, no 45");
+      await expect(page.getByRole("article", {name: "Respuesta 2", exact: true})).toContainText("Continuamos con agua");
+    } else await expect(panel).toContainText("Esta revisión no contiene un resumen automático");
+    const doc = await page.request.get(`/scopes/${owner.scope_id}/active-conversation`);
+    const saved: ChatDocument = await doc.json();
+    expect(saved.conversation.id).toBe(initial.conversation.id);
+    expect(saved.turns).toHaveLength(scenario === "budget" ? 1 : 2);
+    expect(saved.context.revision).toBe(scenario === "recovery" ? 1 : 0);
+    expect(posts.filter(path => path.endsWith("/turns"))).toHaveLength(2);
+  });
+}
+
 test("uncertain: explicit logout revokes the session without replaying the turn", async ({page}) => {
   const privateCalls: {method: string; path: string}[] = [];
   page.on("request", request => {
@@ -181,7 +259,7 @@ test("versioned context: manual notes and reset retain one chat and its history"
   await trigger.focus(); await page.keyboard.press("Enter");
   const dialog = page.getByRole("region", {name: "Contexto del chat", exact: true});
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText("Los mensajes anteriores seguirán visibles, pero dejarán de enviarse al modelo.");
+  await expect(dialog).toContainText("los mensajes y las revisiones guardadas siguen disponibles");
   await dialog.getByLabel("Notas para el próximo contexto", {exact: true}).fill("Contexto nuevo: usamos la palabra brújula, no farol.");
   await page.keyboard.press("Escape"); await expect(dialog).toHaveCount(0); await expect(trigger).toBeFocused();
   await expect(input).toHaveValue("¿Qué palabra corresponde al contexto actualizado?");

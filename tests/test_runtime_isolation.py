@@ -44,6 +44,7 @@ PRIVATE_TABLES = (
     "chat_active_conversation",
     "chat_open_operation",
     "chat_context_revision",
+    "chat_compaction_step",
 )
 
 
@@ -482,3 +483,39 @@ def test_generated_artifacts_and_versioned_chat_context(scenario):
         == own.json()
     )
     assert len(s.transport.calls) == 2
+
+
+def test_compaction_summary_and_provenance_are_private_on_recycled_connection(scenario):
+    from test_chat_compaction import FACTS
+
+    s = scenario
+    s.transport.responses = [
+        reply(chat_response("a" * 32768)),
+        *[
+            reply(chat_response(json.dumps({"summary": FACTS, "complete": True})))
+            for _ in range(2)
+        ],
+        reply(chat_response("Final private answer")),
+    ]
+    opened, open_key = s.save("conversations", payload={}, targeted=False)
+    base = f"conversations/{opened['conversation']['id']}"
+    _, first_key = s.save(
+        f"{base}/turns", payload={"text": FACTS, "expected_version": 0}
+    )
+    compacted, second_key = s.save(
+        f"{base}/turns", payload={"text": "Next", "expected_version": 1}
+    )
+    assert compacted["context"]["origin"] == "summary"
+    assert len(s.transport.calls) == 4
+    s.verify(
+        [
+            base,
+            f"conversation-operations/{open_key}",
+            f"{base}/operations/{first_key}",
+            f"{base}/operations/{second_key}",
+            f"{base}/context-revisions/0",
+            f"{base}/context-revisions/1",
+            f"{base}/context-operations/{second_key}",
+        ],
+        ["conversations"],
+    )

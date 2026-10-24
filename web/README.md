@@ -255,9 +255,13 @@ candidato requiere CI exacta, sin trasladar ese éxito por inferencia.
   por ámbito, conserva los chats anteriores como archivo y permite reiniciar o
   actualizar notas de contexto sin borrar mensajes ni recursos. El historial se
   consulta por páginas; el contexto de envío tiene un límite de tamaño explícito.
-  La compactación generada y el contexto de recursos seleccionados siguen en
-  [#11](https://github.com/eliancanul/AulaLista-SaaS/issues/11). Este incremento
-  requiere esquema 0012 y no acredita despliegue ni uso real. Búsqueda global,
+  Al enviar se compacta automáticamente cuando hace falta, reservando resumen
+  y respuesta juntos en el presupuesto compartido. El resumen versionado y sus
+  fuentes se consultan desde «Revisar contexto»; puede perder detalle y no reemplaza
+  el historial. Falta de saldo conserva el borrador sin llamadas; un resultado
+  incierto se consulta sin reenviar. El contexto de recursos seleccionados sigue
+  en [#11](https://github.com/eliancanul/AulaLista-SaaS/issues/11). Este incremento
+  requiere esquema 0013 y no acredita despliegue ni uso real. Búsqueda global,
   ajustes y micrófono no tienen un contrato completo seleccionado. No se declara
   interpretación documental ni validación NEM/curricular. La
   [conciliación](../docs/tickets/CONCILIACION-2026-10-24.md) distingue código,
@@ -275,8 +279,10 @@ Lectores, formularios, editor e impresión conservan sus recorridos y guardias.
 El panel ocupa una columna propia cuando hay espacio y se apila en móvil, sin
 cubrir el compositor. Teclado, Escape, regreso de foco y atrás/adelante conservan
 trabajo y estados pendientes. Los mensajes tardíos no reabren paneles ni roban foco.
-Las herramientas pendientes y soporte indican su estado; no existe un canal de
-atención o envío habilitado por este cambio. La definición sigue en #79.
+Las herramientas pendientes indican su estado. Soporte ofrece ayuda local sobre
+funciones existentes, también accesible antes del login mediante «Ayuda». No envía
+contenido ni promete atención humana o plazos; conserva formularios y operaciones
+pendientes al abrir/cerrar. Es el corte aprobado de #79.
 
 Contrato y límites: [spec 0015](../docs/specs/0015-workspace-navigation.md). Este
 corte no cambia API, esquema o proveedor. Las capturas sintéticas y pruebas de

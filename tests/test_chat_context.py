@@ -119,16 +119,18 @@ def test_manual_context_reset_keeps_history_receipts_and_reservations(
     assert len(transport.calls) == 3
 
 
-def test_context_overflow_can_reset_and_continue_same_chat(runtime_database, actors):
+def test_unaffordable_compaction_can_reset_and_continue_same_chat(
+    runtime_database, actors
+):
     actor, scope = actors[0]
     transport = Transport(
         reply(chat_response("a" * 32768)), reply(chat_response("Continued"))
     )
-    chat = service(runtime_database, actor, scope, transport)
+    chat = service(runtime_database, actor, scope, transport, budget="0.5")
     conversation = create(chat, actor, scope)
     chat.write(actor, scope, conversation, uuid4(), body())
     fails(
-        "chat_context_too_large",
+        "chat_budget_exhausted",
         lambda: chat.write(actor, scope, conversation, uuid4(), body(version=1)),
     )
     chat.update_context(actor, scope, conversation, uuid4(), context_body(1))

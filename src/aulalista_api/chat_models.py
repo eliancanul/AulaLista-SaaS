@@ -115,6 +115,7 @@ class ContextRevision(Base):
     through_turn: Mapped[int]
     notes: Mapped[str]
     origin: Mapped[str]
+    summary: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
@@ -168,3 +169,13 @@ class ChatTurn(Base):
     service_tier: Mapped[str | None]
     provider_request_id: Mapped[str | None]
     error_code: Mapped[str | None]
+
+
+class CompactionStep(Base):
+    __tablename__ = "chat_compaction_step"
+    turn_id: Mapped[UUID] = mapped_column(ForeignKey("chat_turn.id"), primary_key=True)
+    number: Mapped[int] = mapped_column(primary_key=True)
+    payload_sha256: Mapped[str]
+    sources: Mapped[list] = mapped_column(JSONB)
+    summary: Mapped[str]
+    usage: Mapped[dict] = mapped_column(JSONB)

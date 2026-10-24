@@ -102,3 +102,5 @@
   .workspace-panel { position: relative; top: auto; max-height: none; overflow: visible; scroll-padding: 0; }
   .workspace-panel-body { overflow: visible; }
 }
+.chat-context-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-context-revisions { border-block: 1px solid var(--border, #dce3df); margin-block: 1rem; padding-block: .5rem; }

@@ -2,10 +2,10 @@
 
 Las tareas, prioridades, dependencias y estado se mantienen en [GitHub Issues](https://github.com/eliancanul/AulaLista-SaaS/issues). Este directorio conserva contratos de cortes, criterios de aceptación y evidencia histórica; no se elige ni actualiza trabajo desde una tabla de estados local. El [workflow](../workflow.md) define dónde registrar cada cambio.
 
-La [conciliación posterior al chat integrado](CONCILIACION-2026-10-24.md) enlaza
-los tickets publicados de chat único, soporte, barra izquierda y accesos inferiores,
-y los cortes pendientes del catálogo confirmado. Distingue definición,
-implementación y aceptación; no habilita funciones por documentarlas.
+Para preparar el siguiente corte, lee el [delta tras las integraciones 109–111](CONCILIACION-2026-10-24.md#delta-tras-las-integraciones-109111):
+separa funciones integradas, el candidato de compactación/ayuda local, contratos
+pendientes y operación aplazada. Prepara lector/reapertura de #53; las tablas
+posteriores conservan su fotografía histórica y el estado vigente permanece en Issues.
 
 Para conciliar qué falta del MVP de conversación y Planeación y qué queda después,
 consulta [Pendientes Acenta, corte del 24 de octubre de 2026](PENDIENTES-2026-10-24.md):

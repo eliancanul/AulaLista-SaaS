@@ -1,0 +1,36 @@
+.local-help {
+  display: grid;
+  gap: 16px;
+  overflow-wrap: anywhere;
+}
+.local-help p {
+  font-size: 16px;
+  line-height: 1.5;
+}
+.local-help details {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.local-help summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 8px 0;
+}
+.local-help details p {
+  margin-top: 12px;
+}
+.access-help {
+  width: 420px;
+  max-width: calc(100% - 64px);
+  margin: 0 auto 32px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.access-help h2 {
+  font-size: 24px;
+  margin-bottom: 16px;
+}
+.access-help > button {
+  margin-top: 16px;
+}

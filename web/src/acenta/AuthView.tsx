@@ -5,6 +5,7 @@ import React, {
   useSyncExternalStore,
 } from "react";
 import { AuthController } from "./auth";
+import { LocalHelp } from "./LocalHelp";
 interface GoogleIdentity {
   initialize(options: {
     client_id: string;
@@ -117,16 +118,31 @@ export function AuthAccessView({ auth }: { auth: AuthController }) {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [invalid, setInvalid] = useState("");
+  const [helpOpen, setHelpOpen] = useState(false);
+  const helpTrigger = useRef<HTMLButtonElement>(null);
+  const helpHeading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => { if (helpOpen) helpHeading.current?.focus(); }, [helpOpen]);
+  const closeHelp = () => {
+    setHelpOpen(false);
+    helpTrigger.current?.focus();
+  };
   const change = (next: typeof view) => {
     if (!state.busy) {
       setView(next);
+      setHelpOpen(false);
       setInvalid("");
       setCode("");
       auth.resetChallenge();
     }
   };
   return (
-    <main className="access">
+    <main className="access" onKeyDown={event => {
+      if (helpOpen && event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        closeHelp();
+      }
+    }}>
       <div className="access-left">
         <div className="access-brand">
           <img
@@ -358,6 +374,11 @@ export function AuthAccessView({ auth }: { auth: AuthController }) {
             )}
           </section>
         )}
+        {helpOpen && <section id="access-help" className="access-help" role="region" aria-labelledby="access-help-title">
+          <h2 id="access-help-title" ref={helpHeading} tabIndex={-1}>Ayuda de acceso</h2>
+          <LocalHelp accessOnly />
+          <button onClick={closeHelp}>Cerrar ayuda</button>
+        </section>}
         {view !== "legal" && (
           <footer className="access-legal">
             <button disabled={state.busy} onClick={() => change("legal")}>
@@ -366,6 +387,8 @@ export function AuthAccessView({ auth }: { auth: AuthController }) {
             <button disabled={state.busy} onClick={() => change("legal")}>
               Aviso de privacidad
             </button>
+            <button ref={helpTrigger} aria-label="Ayuda de acceso" aria-expanded={helpOpen} aria-controls="access-help"
+              onClick={() => helpOpen ? closeHelp() : setHelpOpen(true)}>Ayuda</button>
           </footer>
         )}
       </div>

@@ -30,7 +30,7 @@ test("explicit panels preserve the same composer, drafts, navigation and honest 
   await panel(page, "Herramientas").getByRole("tab", {name: "Materiales", exact: true}).click();
   await expect(panel(page, "Herramientas")).toContainText("Todavía no disponible");
   await page.getByRole("button", {name: "Soporte", exact: true}).click();
-  await expect(panel(page, "Soporte")).toContainText("Soporte todavía no está disponible en Acenta.");
+  await expect(panel(page, "Soporte")).toContainText("Ayuda dentro de Acenta");
   await expect(panel(page, "Soporte").locator("form, input, textarea, a")).toHaveCount(0);
   await expect(input).toHaveValue("Borrador que debe permanecer"); await expect(input).toHaveAttribute("data-retained-composer", "yes");
   await page.goBack(); await expect(panel(page, "Herramientas")).toBeVisible();
@@ -184,7 +184,7 @@ for (const [width, height] of [[1440, 900], [1024, 600], [390, 844], [360, 540],
           const notes = region.getByLabel("Notas para el próximo contexto");
           await region.getByRole("heading", {name: title, exact: true}).focus();
           await page.keyboard.press("Tab"); await expect(region.getByRole("button", {name: "Cerrar panel", exact: true})).toBeFocused();
-          for (const control of [notes, region.getByRole("button", {name: "Descartar cambios de notas", exact: true}),
+          for (const control of [region.getByRole("button", {name: "Consultar revisión actual y procedencia", exact: true}), notes, region.getByRole("button", {name: "Descartar cambios de notas", exact: true}),
             region.getByRole("button", {name: "Reiniciar contexto sin borrar historial", exact: true}),
             region.getByRole("button", {name: "Guardar notas y comenzar contexto", exact: true})]) {
             await page.keyboard.press("Tab"); await expect(control).toBeFocused();
