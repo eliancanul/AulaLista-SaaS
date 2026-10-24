@@ -35,7 +35,7 @@ def prepare(messages):
             or "\x00" in message["content"]
         ):
             raise ProviderError("invalid_provider_payload", uncertain=False)
-    if len(messages) % 2 != 1 or len(messages) > 39:
+    if len(messages) % 2 != 1:
         raise ProviderError("invalid_provider_payload", uncertain=False)
     payload = {
         "model": MODEL,

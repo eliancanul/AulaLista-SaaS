@@ -152,3 +152,21 @@ def test_profile_violation_retains_observations_without_retry(usage):
         service.generate(prepare([{"role": "user", "content": "Hola"}]))
     assert rejected.value.usage["input_tokens"] == usage["input_tokens"]
     assert len(transport.calls) == 1
+
+
+def test_context_has_no_artificial_message_count_quota():
+    messages = [
+        {"role": "user" if number % 2 == 0 else "assistant", "content": "x"}
+        for number in range(101)
+    ]
+    assert prepare(messages)["input"] == messages
+    with pytest.raises(ProviderError):
+        prepare(messages * 101)
+
+
+@pytest.mark.parametrize("notes", [" ", "\x00", "😀" * 2049, "x" * 4097, "\ud800"])
+def test_context_notes_are_bounded_without_unicode_or_whitespace_bypass(notes):
+    from aulalista_api.chat_models import ContextRequest
+
+    with pytest.raises(ValidationError):
+        ContextRequest(expected_version=0, expected_context_revision=0, notes=notes)

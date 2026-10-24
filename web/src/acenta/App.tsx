@@ -550,10 +550,6 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
           <Icon name="expand" />
           {expanded && <span>Contraer menú</span>}
         </button>
-        <button aria-label="Nueva conversación" onClick={() => controller.navigate("home")}>
-          <Icon name="plus" />
-          {expanded && <span>Nueva conversación</span>}
-        </button>
         <button
           className={s.view === "home" ? "selected" : ""}
           aria-label="Inicio"
@@ -573,10 +569,6 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
         >
           <Icon name="folder" />
           {expanded && <span>Mis recursos</span>}
-        </button>
-        <button aria-label="Conversaciones" className={s.view === "conversations" ? "selected" : ""} onClick={() => controller.navigate("conversations")}>
-          <Icon name="chat" />
-          {expanded && <span>Conversaciones</span>}
         </button>
         <div className="rail-flex" />
         <button disabled aria-label="Ajustes, pendiente">
@@ -892,7 +884,7 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
       <AnalyticExplorer controller={controller} />
       {chatExit && <Dialog title="¿Salir con mensajes pendientes?" onClose={() => setChatExit(false)}>
         <ChatExitGuard controller={controller}
-          onReview={() => { setChatExit(false); controller.navigate("conversations"); }}
+          onReview={() => { setChatExit(false); controller.navigate("home"); }}
           onExit={requestLogout} />
       </Dialog>}
       {derivedExit && <Dialog title="¿Salir con una clase pendiente?" onClose={() => setDerivedExit(false)} className="analytic-exit-dialog">

@@ -37,3 +37,11 @@
   .chat-usage dl { grid-template-columns: 1fr; gap: 3px; }
   .chat-usage dd { margin-bottom: 8px; }
 }
+
+.chat-context-dialog { width: min(680px, calc(100vw - 32px)); padding: 24px; }
+.chat-context-dialog > * + * { margin-top: 16px; }
+.chat-context-dialog header { display: flex; gap: 16px; align-items: center; justify-content: space-between; }
+.chat-context-dialog h2 { font-size: 26px; }
+.chat-context-dialog label { display: block; font-weight: 600; }
+.chat-context-dialog textarea { width: 100%; min-height: 140px; resize: vertical; padding: 12px; border: 1px solid var(--border); border-radius: 8px; }
+.chat-context-dialog .actions { flex-wrap: wrap; }

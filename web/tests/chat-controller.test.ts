@@ -8,7 +8,7 @@ import { json, session } from "./acenta-fixtures";
 async function setup() {
   const server = new ChatServer(), created: string[] = [];
   const c = new ChatController(new AcentaApi(session, server.transport), id => created.push(id));
-  await c.loadAvailability();
+  await c.loadAvailability(); await c.openActive();
   return {server, c, created};
 }
 describe("chat continuity without replay or browser text persistence", () => {
@@ -18,7 +18,7 @@ describe("chat continuity without replay or browser text persistence", () => {
     expect(c.current().draft).toBe(""); expect(created).toHaveLength(1);
     c.setDraft("Ahora hazla más breve"); await c.submit();
     const posts = server.calls.filter(call => call.path.endsWith("/turns"));
-    expect(posts.map(call => call.body)).toEqual([{text: "Una clase sobre agua", expected_version: 0}, {text: "Ahora hazla más breve", expected_version: 1}]);
+    expect(posts.map(call => call.body)).toEqual([{text: "Una clase sobre agua", expected_version: 0, expected_context_revision: 0}, {text: "Ahora hazla más breve", expected_version: 1, expected_context_revision: 0}]);
     expect(c.current().document?.turns[1].assistant_text).toContain("Una clase sobre agua");
     expect(c.hasUnsavedChanges()).toBe(false);
     const reloaded = new ChatController(new AcentaApi(session, server.transport));
@@ -72,7 +72,7 @@ describe("chat continuity without replay or browser text persistence", () => {
     expect(server.calls.filter(call => call.method === "POST")).toHaveLength(1);
     await c.refresh(); await c.submit();
     expect(c.current().document?.conversation.version).toBe(2);
-    expect(server.calls.at(-1)?.body).toEqual({text: "Mi turno", expected_version: 1});
+    expect(server.calls.at(-1)?.body).toEqual({text: "Mi turno", expected_version: 1, expected_context_revision: 0});
   });
   it("queries failed results before permitting an explicitly chosen new attempt", async () => {
     const {server, c} = await setup(); server.documents.set(chatId, chatDocument()); await c.open(chatId);
@@ -86,7 +86,7 @@ describe("chat continuity without replay or browser text persistence", () => {
     expect(c.current()).toMatchObject({pending: null, draft: "Mensaje fallido", status: "error"});
     const originalKey = server.calls.find(call => call.method === "POST")?.key;
     server.intercept = undefined; await c.submit(); expect(server.calls.at(-1)?.key).not.toBe(originalKey);
-    expect(server.calls.at(-1)?.body).toEqual({text: "Mensaje fallido", expected_version: 1});
+    expect(server.calls.at(-1)?.body).toEqual({text: "Mensaje fallido", expected_version: 1, expected_context_revision: 0});
   });
   it.each(["generating", "uncertain"] as const)("reopened %s turns expose only GET recovery", async state => {
     const {server, c} = await setup(); const key = crypto.randomUUID();
@@ -105,15 +105,15 @@ describe("chat continuity without replay or browser text persistence", () => {
     await c.recover(); expect(c.current().pending).toBe(pending);
     expect(server.calls.filter(call => call.method === "POST")).toHaveLength(1);
   });
-  it("keeps a late response in its original conversation and serializes double sends", async () => {
+  it("keeps a late response in the active chat while an archive is read-only", async () => {
     const {server, c} = await setup(); server.documents.set(chatId, chatDocument()); server.documents.set(otherChatId, chatDocument(otherChatId)); await c.open(chatId);
     const gate = deferredResponse(); let confirmed: Response;
     server.intercept = call => { if (call.method === "POST") { confirmed = server.handle(call); return gate.promise; } };
-    c.setDraft("Mensaje A"); const sending = c.submit(); await c.submit(); await c.open(otherChatId); c.setDraft("Borrador B");
+    c.setDraft("Mensaje A"); const sending = c.submit(); await c.submit(); await c.open(otherChatId);
+    expect(c.setDraft("No se escribe en el archivo")).toBe(false); await c.submit(); await c.updateContext(true);
     gate.resolve(confirmed!); await sending;
-    expect(c.snapshot().activeId).toBe(otherChatId);
-    expect(c.current()).toMatchObject({draft: "Borrador B", document: {conversation: {version: 0}}});
-    expect(c.snapshot().threads[chatId].document?.conversation.version).toBe(1);
+    expect(c.snapshot().activeId).toBe(otherChatId); expect(c.current().document?.conversation.version).toBe(0);
+    await c.openActive(); expect(c.current().document?.conversation.version).toBe(1);
     expect(server.calls.filter(call => call.method === "POST")).toHaveLength(1);
   });
   it.each(["suspend", "close"] as const)("rejects late turn completion after %s", async action => {
@@ -145,12 +145,12 @@ describe("chat continuity without replay or browser text persistence", () => {
     server.intercept = undefined; await c.refresh(); gate.resolve(older); await refreshing;
     expect(c.current().document?.conversation.version).toBe(1);
   });
-  it("keeps drafts isolated across conversations and new conversation selection", async () => {
-    const {server, c} = await setup(); server.documents.set(chatId, chatDocument());
-    c.setDraft("Nuevo borrador"); await c.open(chatId); c.setDraft("Borrador A"); c.newConversation();
-    expect(c.current().draft).toBe("Nuevo borrador"); expect(c.pendingDrafts()).toHaveLength(2);
-    await c.open(chatId); expect(c.current().draft).toBe("Borrador A");
+  it("returns to the same active draft after opening an archive without creating", async () => {
+    const {server, c} = await setup(); server.documents.set(chatId, chatDocument()); server.documents.set(otherChatId, chatDocument(otherChatId));
+    await c.open(chatId); c.setDraft("Borrador activo"); await c.open(otherChatId); await c.openActive();
+    expect(c.current().draft).toBe("Borrador activo"); expect(c.snapshot().activeId).toBe(chatId);
     expect(c.discardDrafts()).toBe(true); expect(c.hasUnsavedChanges()).toBe(false);
+    expect(server.calls.every(call => call.method === "GET")).toBe(true);
   });
   it("preserves the prior draft on oversized or invalid replacement without network", async () => {
     const {server, c} = await setup(); c.setDraft("Mi mensaje"); const calls = server.calls.length;

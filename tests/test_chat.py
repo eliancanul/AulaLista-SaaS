@@ -57,8 +57,10 @@ def create(chat, actor, scope):
     return UUID(chat.create(actor, scope, uuid4())["conversation"]["id"])
 
 
-def body(text="Pregunta sintética", version=0):
-    return TurnRequest(text=text, expected_version=version)
+def body(text="Pregunta sintética", version=0, context_revision=0):
+    return TurnRequest(
+        text=text, expected_version=version, expected_context_revision=context_revision
+    )
 
 
 def fails(detail, call):
@@ -93,20 +95,22 @@ def test_two_turns_server_context_replay_restart_and_creation_recovery(
     assert one["conversation"]["title"] == "Primera pregunta"
     assert one["turns"][0]["usage"]["estimated_cost_usd"] == "0.0000006"
     assert two["conversation"]["version"] == 2
-    assert [t["number"] for t in two["turns"]] == [1, 2]
-    assert two["turns"][1]["usage"]["input_tokens"] is None
-    assert two["turns"][1]["usage"]["estimated_cost_usd"] is None
+    assert [t["number"] for t in two["turns"]] == [2]
+    assert two["turns"][0]["usage"]["input_tokens"] is None
+    assert two["turns"][0]["usage"]["estimated_cost_usd"] is None
     assert transport.calls[1][1]["input"] == [
         {"role": "user", "content": "Primera pregunta"},
         {"role": "assistant", "content": "Primera respuesta"},
         {"role": "user", "content": "Segunda pregunta"},
     ]
     restarted = Conversations(runtime_database)
-    assert restarted.read(actor, scope, conversation) == two
-    assert restarted.read(actor, scope, conversation, turn_operation=first) == two
+    saved = restarted.read(actor, scope, conversation)
+    assert [t["number"] for t in saved["turns"]] == [1, 2]
+    first_receipt = restarted.read(actor, scope, conversation, turn_operation=first)
+    assert first_receipt["turns"] == one["turns"]
     assert (
         restarted.write(actor, scope, conversation, first, body("Primera pregunta"))
-        == two
+        == first_receipt
     )
     fails(
         "conflict",
@@ -114,10 +118,7 @@ def test_two_turns_server_context_replay_restart_and_creation_recovery(
     )
     fails("conflict", lambda: chat.write(actor, scope, conversation, uuid4(), body()))
     another = create(chat, actor, scope)
-    fails(
-        "conflict",
-        lambda: chat.write(actor, scope, another, first, body("Primera pregunta")),
-    )
+    assert another == conversation
     assert len(transport.calls) == 2
     with Session(runtime_database) as db:
         reservations = db.scalars(select(BudgetReservation)).all()
@@ -131,13 +132,11 @@ def test_scope_isolation_and_stable_pagination(runtime_database, actors):
     other, other_scope = actors[1]
     chat = Conversations(runtime_database)
     ids = [create(chat, actor, scope) for _ in range(4)]
+    assert len(set(ids)) == 1
     foreign = create(chat, other, other_scope)
     page = chat.list(actor, scope, limit=2)
-    rest = chat.list(actor, scope, limit=2, cursor=UUID(page["next_cursor"]))
-    assert [item["id"] for item in page["items"] + rest["items"]] == list(
-        map(str, sorted(ids))
-    )
-    assert rest["next_cursor"] is None
+    assert [item["id"] for item in page["items"]] == [str(ids[0])]
+    assert page["next_cursor"] is None
     for call in (
         lambda: chat.list(other, scope),
         lambda: chat.list(actor, scope, cursor=foreign),
@@ -264,11 +263,11 @@ def test_context_overflow_rejects_without_truncation_or_reservation(
 
 
 @pytest.mark.parametrize("success", [False, True])
-def test_attempt_and_success_limits_allow_multiple_turns(
+def test_continuity_beyond_previous_attempt_and_success_quotas(
     runtime_database, actors, success
 ):
     actor, scope = actors[0]
-    maximum = 20 if success else 100
+    maximum = 45 if success else 105
     responses = [
         reply(chat_response("A"))
         if success
@@ -287,18 +286,17 @@ def test_attempt_and_success_limits_allow_multiple_turns(
             call()
         else:
             fails("chat_failed", call)
-    assert (
-        fails(
-            "chat_limit_reached",
-            lambda: chat.write(actor, scope, conversation, uuid4(), body("Q", maximum)),
-        )
-        == 422
-    )
     assert len(transport.calls) == maximum
     saved = chat.read(actor, scope, conversation)
-    assert saved["conversation"]["version"] == len(saved["turns"]) == maximum
+    assert saved["conversation"]["version"] == maximum
+    assert len(saved["turns"]) == 20
+    pages = saved["turns"]
+    while saved["next_cursor"]:
+        saved = chat.read(actor, scope, conversation, cursor=int(saved["next_cursor"]))
+        pages = saved["turns"] + pages
+    assert [row["number"] for row in pages] == list(range(1, maximum + 1))
     if success:
-        assert len(transport.calls[-1][1]["input"]) == 39
+        assert len(transport.calls[-1][1]["input"]) == 2 * maximum - 1
 
 
 def test_pending_replay_cas_global_busy_and_no_transaction_over_http(
@@ -329,7 +327,10 @@ def test_pending_replay_cas_global_busy_and_no_transaction_over_http(
                 "conflict",
                 lambda: chat.write(actor, scope, conversation, uuid4(), body()),
             )
-            fails("chat_busy", lambda: chat.write(actor, scope, other, uuid4(), body()))
+            fails(
+                "chat_busy",
+                lambda: chat.write(actor, scope, other, uuid4(), body(version=1)),
+            )
             planning = GeneratedPlannings(runtime_database, chat.provider, chat.profile)
             fails(
                 "generation_busy",

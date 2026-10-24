@@ -251,9 +251,13 @@ candidato requiere CI exacta, sin trasladar ese éxito por inferencia.
   nunca se conecta al runtime; éste usa el envelope mínimo descrito abajo.
 - El catálogo conserva 13 entradas; Planeación tiene recorrido implementado y
   Secuencia didáctica está incluida en ella. Las demás herramientas mantienen
-  sus estados pendientes. #76/#77 incorporaron chat privado de texto con varias
-  conversaciones; el nuevo objetivo de chat único y compactación sigue en
-  [#11](https://github.com/eliancanul/AulaLista-SaaS/issues/11). Búsqueda global,
+  sus estados pendientes. El chat privado vuelve a una única conversación activa
+  por ámbito, conserva los chats anteriores como archivo y permite reiniciar o
+  actualizar notas de contexto sin borrar mensajes ni recursos. El historial se
+  consulta por páginas; el contexto de envío tiene un límite de tamaño explícito.
+  La compactación generada y el contexto de recursos seleccionados siguen en
+  [#11](https://github.com/eliancanul/AulaLista-SaaS/issues/11). Este incremento
+  requiere esquema 0012 y no acredita despliegue ni uso real. Búsqueda global,
   ajustes y micrófono no tienen un contrato completo seleccionado. No se declara
   interpretación documental ni validación NEM/curricular. La
   [conciliación](../docs/tickets/CONCILIACION-2026-10-24.md) distingue código,
