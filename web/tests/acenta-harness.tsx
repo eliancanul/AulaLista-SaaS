@@ -21,4 +21,7 @@ if (recovery) recovery.admit({
 });
 const controller = new AcentaController(new AcentaApi(session), recovery ? null : localStorage, slot, recovery);
 await controller.restoreRecovery();
+// This legacy harness exercises the attached-example composer. Production starts
+// in chat; chat.connected.ts covers that real entrypoint with authenticated HTTP.
+if (controller.snapshot().view === "home") controller.navigate("example");
 createRoot(document.getElementById("root")!).render(<AcentaApp controller={controller} />);

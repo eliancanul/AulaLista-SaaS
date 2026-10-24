@@ -4,6 +4,7 @@ import type { View, EditorState } from "./controller";
 export interface NavigationLocation {
   view: View;
   result: PlanningDocument | null;
+  chatId?: string | null;
 }
 export interface NavigationPosition {
   x: number;
@@ -27,9 +28,11 @@ interface Entry {
 const locationOf = (state: NavigationLocation): NavigationLocation => ({
   view: state.view,
   result: state.view === "result" ? state.result : null,
+  chatId: state.view === "chat" ? state.chatId ?? null : null,
 });
 const sameLocation = (a: NavigationLocation, b: NavigationLocation) =>
   a.view === b.view &&
+  a.chatId === b.chatId &&
   a.result?.receipt.planning_id === b.result?.receipt.planning_id;
 
 /** Documents never enter the URL or browser history: only this tab's opaque marker does. */
