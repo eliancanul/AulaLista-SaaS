@@ -26,7 +26,7 @@ def create_app():
     return _create_app(single=False)
 
 
-def create_single_app():
+def create_window_app():
     return _create_app(single=True)
 
 
@@ -38,16 +38,14 @@ def _create_app(*, single):
         raise ValueError("invalid_pilot_runtime")
     try:
         config = ManualPilotConfig(
-            name="private-single-generation-v1"
-            if single
-            else "private-manual-pilot-v1",
+            name="private-window-budget-v1" if single else "private-manual-pilot-v1",
             actor_id=UUID(os.environ["AULALISTA_PILOT_ACTOR_ID"]),
             scope_id=UUID(os.environ["AULALISTA_PILOT_SCOPE_ID"]),
             budget_usd=Decimal(os.environ["AULALISTA_PILOT_BUDGET_USD"]),
             count_request_reserve_usd=Decimal("0")
             if single
             else Decimal(os.environ["AULALISTA_PILOT_COUNT_RESERVE_USD"]),
-            count_strategy="window-once-v1" if single else "remote-v1",
+            count_strategy="window-v1" if single else "remote-v1",
             additional_reserve_usd=Decimal(
                 os.environ["AULALISTA_PILOT_ADDITIONAL_RESERVE_USD"]
             )

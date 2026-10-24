@@ -23,7 +23,7 @@ from aulalista_api.materials import MaterialError
 from aulalista_api.openai_planning import BASE_URL, MODEL, OpenAIPlanning, ProviderError
 from aulalista_api.pilot import ManualPilotConfig
 from aulalista_api.pilot_runtime import create_app as create_runtime_app
-from aulalista_api.pilot_runtime import create_single_app
+from aulalista_api.pilot_runtime import create_window_app
 from aulalista_api.planning_generation import GenerationAttempt
 
 PILOT_EMAIL = "manual-pilot-a@example.test"
@@ -45,7 +45,7 @@ def pilot_command(scenario):
     ]
 
 
-@pytest.mark.parametrize("scenario", ["success", "uncertain", "busy", "single"])
+@pytest.mark.parametrize("scenario", ["success", "uncertain", "busy", "window"])
 def test_pilot_command_selects_exactly_one_browser_journey(scenario):
     result = subprocess.run(
         [*pilot_command(scenario), "--list", "--reporter=json"],
@@ -62,7 +62,7 @@ def test_pilot_command_selects_exactly_one_browser_journey(scenario):
     assert titles[0].startswith(f"{scenario}:")
 
 
-@pytest.mark.parametrize("scenario", ["success", "uncertain", "busy", "single"])
+@pytest.mark.parametrize("scenario", ["success", "uncertain", "busy", "window"])
 def test_manual_pilot_through_real_auth_browser(
     runtime_database, actors, monkeypatch, scenario
 ):
@@ -111,18 +111,18 @@ def test_manual_pilot_through_real_auth_browser(
         )
 
     config = ManualPilotConfig(
-        name="private-single-generation-v1"
-        if scenario == "single"
+        name="private-window-budget-v1"
+        if scenario == "window"
         else "private-manual-pilot-v1",
         actor_id=actor,
         scope_id=scope,
-        budget_usd=Decimal("1") if scenario == "single" else Decimal("0.1"),
+        budget_usd=Decimal("1") if scenario == "window" else Decimal("0.1"),
         count_request_reserve_usd=Decimal("0")
-        if scenario == "single"
+        if scenario == "window"
         else Decimal("0.0001"),
-        count_strategy="window-once-v1" if scenario == "single" else "remote-v1",
+        count_strategy="window-v1" if scenario == "window" else "remote-v1",
         additional_reserve_usd=Decimal("0.02")
-        if scenario == "single"
+        if scenario == "window"
         else Decimal("0"),
         input_policy="manual-variable-v1",
         provider="openai",
@@ -178,7 +178,7 @@ def test_manual_pilot_through_real_auth_browser(
     )
 
     def pilot_app():
-        app = create_single_app() if scenario == "single" else create_runtime_app()
+        app = create_window_app() if scenario == "window" else create_runtime_app()
         assert not app.dependency_overrides
         return app
 
@@ -192,12 +192,12 @@ def test_manual_pilot_through_real_auth_browser(
     monkeypatch.setattr(auth_harness, "run_process_group", run_pilot)
     auth_harness.test_auth_journey_through_real_api(runtime_database, monkeypatch)
 
-    successes = 1 if scenario == "single" else 2 if scenario == "success" else 0
+    successes = 2 if scenario in {"window", "success"} else 0
     sends = (
-        successes if scenario in {"success", "single"} else int(scenario == "uncertain")
+        successes if scenario in {"success", "window"} else int(scenario == "uncertain")
     )
     expected_paths = (
-        ["responses"] if scenario == "single" else ["input_tokens", "responses"]
+        ["responses"] if scenario == "window" else ["input_tokens", "responses"]
     )
     assert [url.rsplit("/", 1)[-1] for url, _ in calls] == expected_paths * sends
     # No regeneration during editing, reading, printing, 401 or uncertainty GETs.
@@ -236,8 +236,8 @@ def test_manual_pilot_through_real_auth_browser(
             assert attempt.request_fingerprint == hashlib.sha256(raw).hexdigest()
             assert attempt.reserved_usd == profile.reservation_usd
             assert attempt.configuration["input_policy"] == "manual-variable-v1"
-            assert attempt.count_requests == int(scenario != "single")
-            if scenario == "single":
+            assert attempt.count_requests == int(scenario != "window")
+            if scenario == "window":
                 assert attempt.counted_input_tokens is None
             assert attempt.generation_requests == int(scenario != "busy")
         if not successes:

@@ -21,7 +21,6 @@ from sqlalchemy import (
     Index,
     Numeric,
     UniqueConstraint,
-    func,
     select,
     text,
     update,
@@ -29,6 +28,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
+from aulalista_api.ai_budget import GLOBAL_LOCK, budget_busy, reserved_total
 from aulalista_api.auth import AuthError
 from aulalista_api.database import Base
 from aulalista_api.guided_planning import GeneratedPlanningRequest
@@ -55,11 +55,6 @@ from aulalista_api.plannings import (
 
 DEADLINE_SECONDS = 75
 ACTIVE = ("counting", "generating")
-GLOBAL_LOCK = int.from_bytes(
-    hashlib.sha256(b"aulalista-openai-generation-global-v1").digest()[:8],
-    "big",
-    signed=True,
-)
 
 
 def now():
@@ -97,9 +92,9 @@ class GenerationProfile:
             r"[\w.-]{1,100}", self.name, re.ASCII
         ):
             raise ValueError("invalid_generation_profile")
-        if self.count_strategy not in {"remote-v1", "window-once-v1"}:
+        if self.count_strategy not in {"remote-v1", "window-v1"}:
             raise ValueError("invalid_generation_profile")
-        single = self.count_strategy == "window-once-v1"
+        single = self.count_strategy == "window-v1"
         if not isinstance(self.count_request_reserve_usd, Decimal):
             raise ValueError("invalid_generation_profile")
         if single and (
@@ -125,8 +120,6 @@ class GenerationProfile:
                 or not 0 < amount < Decimal("100000000")
             ):
                 raise ValueError("invalid_generation_profile")
-        if single and self.budget_usd > Decimal("2"):
-            raise ValueError("invalid_generation_profile")
         if self.input_policy == "exact-input-v1":
             if (
                 not isinstance(self.allowed_request_sha256, frozenset)
@@ -146,7 +139,7 @@ class GenerationProfile:
 
     @property
     def reservation_usd(self):
-        if self.count_strategy == "window-once-v1":
+        if self.count_strategy == "window-v1":
             return (WINDOW_RESERVE_USD + self.additional_reserve_usd).quantize(
                 Decimal("0.000000001"), rounding=ROUND_CEILING
             )
@@ -190,12 +183,6 @@ class GenerationAttempt(Base):
     __tablename__ = "planning_generation_attempt"
     __table_args__ = (
         Index("ix_generation_state_deadline", "state", "deadline_at"),
-        Index(
-            "uq_generation_single_once",
-            "count_strategy",
-            unique=True,
-            postgresql_where=text("count_strategy = 'window-once-v1'"),
-        ),
         UniqueConstraint("scope_id", "operation_id", name="uq_generation_operation"),
         ForeignKeyConstraint(
             ["planning_revision_id", "scope_id"],
@@ -218,7 +205,7 @@ class GenerationAttempt(Base):
         CheckConstraint("reserved_usd > 0", name="ck_generation_reserve"),
         CheckConstraint(
             "(count_strategy = 'remote-v1' AND count_requests = 1 AND generation_requests BETWEEN 0 AND 1) OR "
-            "(count_strategy = 'window-once-v1' AND count_requests = 0 AND counted_input_tokens IS NULL AND generation_requests = 1 AND state <> 'counting')",
+            "(count_strategy = 'window-v1' AND count_requests = 0 AND counted_input_tokens IS NULL AND generation_requests = 1 AND state <> 'counting')",
             name="ck_generation_calls",
         ),
         CheckConstraint("deadline_at > created_at", name="ck_generation_deadline"),
@@ -264,7 +251,7 @@ class GenerationAttempt(Base):
         ),
         CheckConstraint(
             "state NOT IN ('generating','succeeded') OR "
-            "(count_strategy = 'window-once-v1' OR (generation_requests = 1 AND counted_input_tokens IS NOT NULL "
+            "(count_strategy = 'window-v1' OR (generation_requests = 1 AND counted_input_tokens IS NOT NULL "
             "AND counted_input_tokens BETWEEN 1 AND 2048))",
             name="ck_generation_dispatch",
         ),
@@ -449,34 +436,13 @@ class GeneratedPlannings:
                     )
                     if source_version_id is None:
                         raise MaterialError(404, "not_found")
-                if (
-                    session.scalar(
-                        select(GenerationAttempt.id)
-                        .where(GenerationAttempt.state.in_((*ACTIVE, "uncertain")))
-                        .limit(1)
-                    )
-                    is not None
-                ):
+                if budget_busy(session):
                     outcome = MaterialError(409, "generation_busy")
                     attempt_id = None
                 else:
-                    reserved = session.scalar(
-                        select(
-                            func.coalesce(func.sum(GenerationAttempt.reserved_usd), 0)
-                        )
-                    )
-                    once_used = (
-                        self.profile.count_strategy == "window-once-v1"
-                        and session.scalar(
-                            select(GenerationAttempt.id)
-                            .where(GenerationAttempt.count_strategy == "window-once-v1")
-                            .limit(1)
-                        )
-                        is not None
-                    )
+                    reserved = reserved_total(session)
                     if (
-                        once_used
-                        or reserved + self.profile.reservation_usd
+                        reserved + self.profile.reservation_usd
                         > self.profile.budget_usd
                     ):
                         outcome = MaterialError(429, "generation_budget_exhausted")
@@ -512,7 +478,7 @@ class GeneratedPlannings:
                                 ),
                                 "reservation_usd": str(self.profile.reservation_usd),
                                 "max_input_tokens": MODEL_CONTEXT_TOKENS
-                                if self.profile.count_strategy == "window-once-v1"
+                                if self.profile.count_strategy == "window-v1"
                                 else MAX_INPUT_TOKENS,
                                 "max_output_tokens": MAX_OUTPUT_TOKENS,
                                 "deadline_seconds": DEADLINE_SECONDS,
@@ -532,7 +498,7 @@ class GeneratedPlannings:
                                             ),
                                         }
                                     }
-                                    if self.profile.count_strategy == "window-once-v1"
+                                    if self.profile.count_strategy == "window-v1"
                                     else {}
                                 ),
                                 "request_sha256": fingerprint,
@@ -547,15 +513,15 @@ class GeneratedPlannings:
                             ).hexdigest(),
                             profile_fingerprint=self.profile.fingerprint,
                             state="generating"
-                            if self.profile.count_strategy == "window-once-v1"
+                            if self.profile.count_strategy == "window-v1"
                             else "counting",
                             reserved_usd=self.profile.reservation_usd,
                             count_strategy=self.profile.count_strategy,
                             count_requests=0
-                            if self.profile.count_strategy == "window-once-v1"
+                            if self.profile.count_strategy == "window-v1"
                             else 1,
                             generation_requests=1
-                            if self.profile.count_strategy == "window-once-v1"
+                            if self.profile.count_strategy == "window-v1"
                             else 0,
                             created_at=instant,
                             deadline_at=instant + timedelta(seconds=DEADLINE_SECONDS),

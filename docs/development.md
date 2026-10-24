@@ -22,7 +22,7 @@ Después de editar código local, repetir `uv sync --locked --no-editable
 --reinstall-package aulalista-api` para no probar una wheel anterior de la caché.
 
 Las migraciones requieren el rol dueño de esquema. No se ejecutan en el arranque
-ni desde endpoints. El head único esperado es `0010_single_generation`, posterior a `0009_planning_branches`, que reúne
+ni desde endpoints. El head único esperado es `0010_window_budget`, posterior a `0009_planning_branches`, que reúne
 las dos migraciones 0008 sin modificar sus revisiones ni sus datos. El downgrade
 de `0008_openai_planning` rechaza cualquier intento retenido para no perder
 evidencia de envíos; el de `0008_analytic_sections` rechaza apartados confirmados
@@ -73,6 +73,8 @@ GRANT UPDATE (current_revision) ON planning TO aulalista_runtime;
 GRANT SELECT, INSERT ON planning_draft, planning_draft_revision TO aulalista_runtime;
 GRANT UPDATE (current_revision) ON planning_draft TO aulalista_runtime;
 GRANT SELECT, INSERT ON planning_generation_attempt TO aulalista_runtime;
+GRANT SELECT, INSERT ON ai_budget_reservation TO aulalista_runtime;
+GRANT UPDATE (state) ON ai_budget_reservation TO aulalista_runtime;
 GRANT UPDATE (state, finished_at, counted_input_tokens, generation_requests,
     model, service_tier, provider_request_id, input_tokens, output_tokens, cached_tokens,
     cache_write_tokens, reasoning_tokens, error_code, planning_revision_id)
@@ -107,7 +109,7 @@ cumplir controles equivalentes antes de usar cualquier dato privado.
 
 - `GET /health/live`: 200 `{"status":"ok"}`, independiente de DB.
 - `GET /health/ready`: 200 sólo con conexión y única revisión
-  `0010_single_generation`; fallo/timeout/revisión distinta: 503 sin detalle interno.
+  `0010_window_budget`; fallo/timeout/revisión distinta: 503 sin detalle interno.
 - `AULALISTA_DB_TIMEOUT_SECONDS`: entero 2–30, predeterminado 3. Deadline HTTP de
   readiness completo, incluyendo espera, DNS, conexión y consulta; también fija
   timeouts de driver/servidor. Una sola sonda en vuelo evita acumular hilos.
@@ -444,9 +446,9 @@ credenciales sintéticas y transportes externos falsos. No ejecutar fixtures de
 integración contra Render ni conectar una credencial real a esas pruebas.
 
 
-### Un intento por UI sin conteo remoto (#69)
+### Presupuesto por operación sin conteo remoto (#69)
 
-Variante explícita: `aulalista_api.pilot_runtime:create_single_app`. Conserva el
+Variante explícita: `aulalista_api.pilot_runtime:create_window_app`. Conserva el
 start normal cerrado y el factory remoto anterior. Misma sesión, rutas y UI:
 no ejecutar un adaptador aislado ni fixtures contra Render.
 
@@ -465,28 +467,31 @@ Handoff administrativo para el agente dueño de la DB, **no ejecutado remotament
    administrativo existente. Cerrar admisión; no tocar allowlist ni elevar runtime.
 2. En ventana coordinada y con credencial administrativa sólo en entorno seguro,
    ejecutar `uv run --locked --no-editable alembic current` y confirmar 0009.
-   Aplicar únicamente `uv run --locked --no-editable alembic upgrade 0010_single_generation`;
+   Aplicar únicamente `uv run --locked --no-editable alembic upgrade 0010_window_budget`;
    confirmar `current`, preservar datos/agregados y comprobar grants runtime
    existentes. No poner DSN administrativo en build/start, historial o logs.
-3. El esquema sólo añade estrategia/default, checks e índice: SELECT/INSERT
-   actuales por tabla y UPDATE limitado a columnas anteriores siguen bastando.
+3. La tabla compartida `ai_budget_reservation` copia las reservas anteriores.
+   Sus triggers reflejan nuevas admisiones/estados sin modificar importes. Aplicar
+   los grants mínimos anteriores: SELECT/INSERT y UPDATE sólo de state en ella.
    No conceder UPDATE de `count_strategy`, DELETE, TRUNCATE ni privilegios owner.
 4. Coordinar despliegue del commit revisado que espera 0010; binario anterior
    deja readiness en 503 tras upgrade. Downgrade a 0009 sólo es posible si no
-   existe un intento `window-once-v1`; con uno retenido se conserva 0010 y se
+   existe un intento `window-v1`; con uno retenido se conserva 0010 y se
    cierra la capacidad, sin borrar/reseteos para revertir.
 5. Verificar precios/cargos, saldo total y agregado global de reservas. No iniciar
    si existe intento activo/incierto ni si el nuevo total supera el presupuesto.
-   Todos los procesos deben usar el mismo techo. El índice impide más de un
-   intento de esta variante, sin importar su estado, actor o proceso.
+   Todos los procesos y productos deben usar el mismo ledger y techo. Cada
+   nueva operación reserva su cota; replay nunca reenvía. No existe una cuota
+   permanente de una generación. US$2 configura este encargo de pruebas.
 6. Con autorización separada de configuración/despliegue/uso, arrancar:
 
 ```sh
-.venv/bin/python -m uvicorn aulalista_api.pilot_runtime:create_single_app --factory \
+.venv/bin/python -m uvicorn aulalista_api.pilot_runtime:create_window_app --factory \
   --host 0.0.0.0 --port "$PORT" --no-access-log --no-proxy-headers
 ```
 
 Comprobar readiness y capacidad privada; generar **una** entrada sintética por
-UI autenticada. Conciliar llamadas/tokens observados y reserva con el proveedor;
+UI autenticada para el ensayo acotado. Nuevas operaciones válidas siguen el
+mismo presupuesto compartido. Conciliar llamadas/tokens observados y reserva con el proveedor;
 no presentar reserva como gasto facturado. Ante incertidumbre sólo GET; no reenvío.
 Cerrar con `AULALISTA_PILOT_ENABLED=false` y reiniciar admisores. No liberar reserva.

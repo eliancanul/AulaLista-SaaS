@@ -40,7 +40,7 @@ class ManualPilotConfig:
             raise ValueError("invalid_manual_pilot")
         expected_limit = (
             MODEL_CONTEXT_TOKENS
-            if self.count_strategy == "window-once-v1"
+            if self.count_strategy == "window-v1"
             else MAX_INPUT_TOKENS
         )
         if provider.input_token_limit != expected_limit:

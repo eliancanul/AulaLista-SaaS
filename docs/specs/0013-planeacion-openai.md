@@ -13,9 +13,9 @@ sobre main `51b7d37f263805a55493a073b20d99e5346133dd`: política manual variable
 versionada, distinta del ensayo de entradas exactas. #60 ya está integrado;
 esta ampliación no activa su transporte ni autoriza credenciales, gasto o despliegue.
 
-## Enmienda: un intento sin conteo remoto (#67/#69)
+## Enmienda: presupuesto por ventana sin conteo remoto (#67/#69)
 
-Ajuste autorizado el 24 de octubre de 2026: perfil `window-once-v1` separado del
+Ajuste autorizado el 24 de octubre de 2026: perfil `window-v1` separado del
 perfil histórico `remote-v1`. No habilita gasto, credenciales, migración remota
 ni despliegue por sí mismo. El recorrido sigue usando la UI privada y sus rutas
 HTTP, sesión/CSRF, guardado, edición y recuperación existentes.
@@ -39,8 +39,9 @@ al ledger, y suma de **todas** las reservas anteriores + nueva <= presupuesto.
 Si cargos o saldo no pueden acotarse, no activar. Nunca se libera margen por
 fallo, incertidumbre, reinicio, cambio de actor, key o perfil.
 
-Sólo se admite un intento `window-once-v1` global retenido, aun si falla. Lock
-global y un índice único en PostgreSQL lo hacen cumplir entre procesos. Antes
+Cada operación admite un intento; nuevas operaciones independientes consumen
+la misma reserva global, sin límite permanente a una clase. El lock global
+serializa admisión y presupuesto entre procesos. Antes
 de HTTP se confirma estado `generating`, `generation_requests=1`,
 `count_requests=0`, `counted_input_tokens=NULL` y la reserva. No se registra un
 conteo falso. `usage.input_tokens` se observa después, admitido hasta la ventana
@@ -49,12 +50,18 @@ bytes; ya no se promete un máximo de 2048 tokens para este perfil. Cero retries
 redirecciones o fallback. Una respuesta inválida/incierta conserva la reserva;
 replay/GET no reenvían. El perfil anterior mantiene sus dos etapas y sus reglas.
 
-La migración aditiva `0010_single_generation` desde `0009_planning_branches`
+La migración aditiva `0010_window_budget` desde `0009_planning_branches`
 conserva filas, estados y reservas antiguas, asignándoles `remote-v1` por default.
-No cambia grants. Downgrade rechaza cualquier intento del nuevo modo: no borrar
+Añade `ai_budget_reservation`: copia todas las reservas antiguas y triggers
+las mantienen junto a los intentos sin liberar margen. Es la única suma global
+para Planeación y futuras operaciones de chat; no se crean topes independientes.
+Runtime requiere SELECT/INSERT y UPDATE sólo de `state` en esa tabla, nunca
+UPDATE del importe, DELETE o TRUNCATE. Downgrade rechaza cualquier intento del nuevo modo: no borrar
 historia para recuperar compatibilidad. El binario anterior espera revisión
 0009 en readiness; coordinar mantenimiento y no confundir rollback de código
-con reversión del esquema. Este ensayo de una entrada no acepta por sí solo #69,
+con reversión del esquema. US$2 es configuración del encargo de pruebas, no un límite de clase/turno del
+modelo de producto. El factory de piloto conserva ese techo; el perfil reutilizable
+no lo codifica como una cuota permanente. Este cambio no acepta por sí solo #69,
 que conserva su recorrido y revisión humana pendientes.
 
 ## Contrato
@@ -334,7 +341,8 @@ efectivo. Sin esos datos, no activar ni recargar. `store=false` no promete cero
 retención del proveedor.
 
 Las dos revisiones 0008 conservan su padre `0007_guided_planning` y se reúnen
-en `0009_planning_branches`, el único head admitido por readiness. La actualización
+históricamente en `0009_planning_branches`; el nuevo head de readiness es
+`0010_window_budget`. La actualización
 desde cualquiera de las dos ramas aplica la hermana faltante sin reescribir
 historia. Se conservan los grants, rutas, DTOs y procedencia de apartados,
 así como impresión y foco. Los downgrades de cada rama mantienen sus guardas

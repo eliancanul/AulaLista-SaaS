@@ -67,6 +67,7 @@ def test_empty_database_migrates_and_upgrade_is_repeatable(empty_database):
         "planning_draft",
         "planning_draft_revision",
         "planning_generation_attempt",
+        "ai_budget_reservation",
         "analytic_section",
         "analytic_section_revision",
     }

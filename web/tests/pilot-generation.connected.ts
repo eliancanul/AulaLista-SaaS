@@ -46,34 +46,8 @@ async function fillManual(page: Page, input: typeof cases[number]) {
   await page.getByLabel("Situación hipotética", { exact: true }).setChecked(input.hypothetical);
 }
 
-test("single: one UI generation saves/reopens and rejects another attempt", async ({ page }) => {
-  await login(page, "manual-pilot-a@example.test");
-  await fillManual(page, cases[0]);
-  const created = page.waitForResponse(r => r.request().method() === "POST" && new URL(r.url()).pathname.endsWith("/generated-plannings"));
-  await page.getByRole("button", { name: "Generar con IA", exact: true }).click();
-  expect((await created).status()).toBe(201);
-  const reader = page.getByRole("dialog", { name: "Vista previa", exact: true });
-  await expect(reader).toContainText(cases[0].topic);
-  await reader.getByRole("button", { name: "Editar", exact: true }).click();
-  await page.getByLabel("Propósito", { exact: true }).fill("Corrección sintética del intento único.");
-  const saved = page.waitForResponse(r => r.request().method() === "POST" && new URL(r.url()).pathname.endsWith("/revisions"));
-  await page.getByRole("button", { name: "Guardar", exact: true }).click();
-  expect((await saved).status()).toBe(201);
-  await expect(page.getByText("Guardado confirmado", { exact: true })).toBeVisible();
-  await page.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
-  await page.reload();
-  await page.getByRole("button", { name: "Mis recursos", exact: true }).first().click();
-  await page.getByRole("button", { name: "Consultar planeación", exact: true }).click();
-  await expect(reader).toContainText("Corrección sintética del intento único.");
-  await reader.getByRole("button", { name: "Cerrar vista previa", exact: true }).click();
-  await page.goto("/");
-  await fillManual(page, cases[1]);
-  const denied = page.waitForResponse(r => r.request().method() === "POST" && new URL(r.url()).pathname.endsWith("/generated-plannings"));
-  await page.getByRole("button", { name: "Generar con IA", exact: true }).click();
-  expect((await denied).status()).toBe(429);
-});
-
-test("success: two manual v3 forms remain independent through save/reopen/print", async ({ page }, info) => {
+for (const mode of ["success", "window"]) {
+test(`${mode}: two manual v3 forms remain independent through save/reopen/print`, async ({ page }, info) => {
   // Replace only the OS print dialog. The existing print projection still renders
   // its confirmed document; this is not a claim that a physical printer worked.
   await page.addInitScript(() => {
@@ -224,6 +198,8 @@ test("success: two manual v3 forms remain independent through save/reopen/print"
   expect(external).toEqual([]);
 });
 
+
+}
 
 test("uncertain: timeout stops generation and repeated GETs never publish a result", async ({ page }) => {
   const privateCalls: { method: string; path: string }[] = [];
