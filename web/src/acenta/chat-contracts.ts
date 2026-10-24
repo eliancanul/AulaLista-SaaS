@@ -30,12 +30,17 @@ export interface ChatContext {
   previous_revision: number | null;
   through_turn: number;
   notes: string;
-  origin: "initial" | "reset" | "manual";
+  origin: "initial" | "reset" | "manual" | "summary";
+  summary?: {text: string; from_turn: number; steps: number} | null;
   operation_id: string | null;
   created_at: string;
 }
 export interface ChatDocument { conversation: ConversationSummary; context: ChatContext; turns: ChatTurn[]; next_cursor: string | null }
 export interface ChatContextReceipt { conversation: ConversationSummary; context: ChatContext }
+export interface ChatContextRevision extends ChatContextReceipt {
+  steps: {number: number; payload_sha256: string; summary: string; usage: ChatUsage;
+    sources: {turn: number; role: "user" | "assistant"; start_byte: number; end_byte: number; sha256: string}[]}[];
+}
 export const CHAT_PAGE_BYTES = 262144;
 export const CHAT_MAX_CHARACTERS = 4096;
 export const CHAT_MAX_BYTES = 8192;
@@ -72,7 +77,13 @@ export function parseChatContext(value: unknown): ChatContext {
     (value.revision === 0
       ? value.previous_revision === null && value.operation_id === null && value.origin === "initial" && value.notes === "" && value.through_turn === 0
       : value.previous_revision === Number(value.revision) - 1 && isUuid(value.operation_id) &&
-        (value.notes === "" ? value.origin === "reset" : value.origin === "manual")));
+        (value.origin === "summary" || (value.notes === "" ? value.origin === "reset" : value.origin === "manual"))));
+  if (value.origin === "summary") {
+    assert(object(value.summary) && typeof value.summary.text === "string" &&
+      !!value.summary.text.trim() && validUnicode(value.summary.text) && bytes(JSON.stringify(value.summary.text)) <= 4096 &&
+      count(value.summary.from_turn, Number(value.through_turn)) && Number(value.summary.from_turn) >= 1 &&
+      count(value.summary.steps, 8) && Number(value.summary.steps) >= 1);
+  } else assert(value.summary === undefined || value.summary === null);
   return value as unknown as ChatContext;
 }
 export function parseChatContextReceipt(value: unknown): ChatContextReceipt {
@@ -80,6 +91,28 @@ export function parseChatContextReceipt(value: unknown): ChatContextReceipt {
   const conversation = parseConversationSummary(value.conversation), context = parseChatContext(value.context);
   assert(context.revision <= conversation.context_revision && context.through_turn <= conversation.version);
   return {conversation, context};
+}
+export function parseChatContextRevision(value: unknown): ChatContextRevision {
+  const receipt = parseChatContextReceipt(value);
+  assert(object(value) && Array.isArray(value.steps) && value.steps.length === (receipt.context.summary?.steps ?? 0));
+  const hash = (value: unknown) => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+  value.steps.forEach((step, index) => {
+    assert(object(step) && step.number === index + 1 && hash(step.payload_sha256) &&
+      typeof step.summary === "string" && !!step.summary.trim() && validUnicode(step.summary) && bytes(JSON.stringify(step.summary)) <= 4096 &&
+      Array.isArray(step.sources) && step.sources.length > 0 && step.sources.length <= 64);
+    step.sources.forEach(source => {
+      assert(object(source) && count(source.turn, receipt.context.through_turn) &&
+        Number(source.turn) >= (receipt.context.summary?.from_turn ?? 1) &&
+        ["user", "assistant"].includes(String(source.role)) &&
+        count(source.start_byte, source.role === "user" ? 8192 : 32768) &&
+        count(source.end_byte, source.role === "user" ? 8192 : 32768) &&
+        Number(source.end_byte) > Number(source.start_byte) && hash(source.sha256));
+    });
+    const usage = step.usage;
+    assert(object(usage) && [usage.input_tokens, usage.output_tokens].every(n => n === null || count(n)) &&
+      (usage.estimated_cost_usd === null || money(usage.estimated_cost_usd)) && money(usage.reserved_usd));
+  });
+  return {...receipt, steps: value.steps} as ChatContextRevision;
 }
 export function parseChatDocument(value: unknown): ChatDocument {
   assert(object(value) && bytes(JSON.stringify(value)) <= CHAT_PAGE_BYTES);
@@ -113,6 +146,7 @@ export function chatErrorMessage(error: unknown): string {
     generation_budget_exhausted: "No se inició el turno: el presupuesto configurado está agotado. Tu texto sigue aquí.",
     chat_limit_reached: "El chat alcanzó un límite del servidor. Tu texto sigue aquí.",
     chat_context_too_large: "El contexto activo supera el tamaño permitido. Revisa o reinicia el contexto para continuar; el historial y tu texto se conservan.",
+    chat_compaction_limit: "El contexto necesita más pasos de resumen de los permitidos. No se inició el turno. Revisa las notas o reinicia el contexto; el historial y tu texto se conservan.",
     chat_archived: "Este historial es de sólo lectura. Vuelve al chat activo para continuar.",
     chat_unavailable: "El chat no está disponible. No se inició un turno; tu texto sigue aquí.",
     generation_unavailable: "El chat no está disponible. No se inició un turno; tu texto sigue aquí.",
@@ -133,5 +167,5 @@ export function chatErrorMessage(error: unknown): string {
 }
 /** A rejected admission has no turn; failures after admission require the GET receipt. */
 export function chatAdmissionRejected(error: unknown): boolean {
-  return error instanceof ApiError && (["chat_archived", "chat_budget_exhausted", "generation_budget_exhausted", "chat_limit_reached", "chat_context_too_large", "chat_unavailable", "generation_unavailable", "chat_busy", "generation_busy", "conflict", "invalid_request", "content_too_large", "request_too_large"].includes(error.code));
+  return error instanceof ApiError && (["chat_archived", "chat_budget_exhausted", "generation_budget_exhausted", "chat_limit_reached", "chat_context_too_large", "chat_compaction_limit", "chat_unavailable", "generation_unavailable", "chat_busy", "generation_busy", "conflict", "invalid_request", "content_too_large", "request_too_large"].includes(error.code));
 }

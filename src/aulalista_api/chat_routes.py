@@ -86,6 +86,16 @@ def install_chat_routes(app: FastAPI, engine, *, provider=None, profile=None):
             service.context_operation(actor, scope_id, conversation_id, operation_id)
         )
 
+    @app.get(
+        "/scopes/{scope_id}/conversations/{conversation_id}/context-revisions/{revision}"
+    )
+    def context_revision(
+        scope_id: UUID, conversation_id: UUID, revision: int, actor: Actor
+    ):
+        return response(
+            service.context_revision(actor, scope_id, conversation_id, revision)
+        )
+
     @app.post(
         "/scopes/{scope_id}/conversations/{conversation_id}/context", status_code=201
     )

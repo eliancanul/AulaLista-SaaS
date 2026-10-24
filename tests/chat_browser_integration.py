@@ -1,5 +1,6 @@
 """Production chat UI/auth/HTTP/PostgreSQL, synthetic provider and delivery only."""
 
+import json
 import subprocess
 from copy import deepcopy
 from pathlib import Path
@@ -15,6 +16,7 @@ from test_openai_planning import completed, reply
 from aulalista_api.ai_budget import BudgetReservation
 from aulalista_api.auth_models import AuthSession, Identity
 from aulalista_api.chat_models import ChatTurn, ContextRevision, Conversation
+from aulalista_api.openai_chat import SUMMARY_INSTRUCTIONS
 from aulalista_api.openai_planning import OpenAIPlanning, ProviderError
 from aulalista_api.pilot_runtime import create_window_app
 
@@ -22,8 +24,11 @@ from aulalista_api.pilot_runtime import create_window_app
 def command(scenario):
     marker = {
         "context": "private multi-turn",
-        "uncertain": "uncertain:",
+        "uncertain": "uncertain: explicit logout",
         "versioned": "versioned context:",
+        "compact-success": "compaction recovery:",
+        "compact-budget": "compaction budget:",
+        "compact-uncertain": "compaction uncertain:",
     }[scenario]
     return [
         "npx",
@@ -37,7 +42,17 @@ def command(scenario):
     ]
 
 
-@pytest.mark.parametrize("scenario", ["context", "uncertain", "versioned"])
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        "context",
+        "uncertain",
+        "versioned",
+        "compact-success",
+        "compact-budget",
+        "compact-uncertain",
+    ],
+)
 def test_chat_runner_discovers_the_connected_journey(scenario):
     result = subprocess.run(
         [*command(scenario), "--list"],
@@ -50,7 +65,17 @@ def test_chat_runner_discovers_the_connected_journey(scenario):
     assert "Total: 1 test in 1 file" in result.stdout
 
 
-@pytest.mark.parametrize("scenario", ["context", "uncertain", "versioned"])
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        "context",
+        "uncertain",
+        "versioned",
+        "compact-success",
+        "compact-budget",
+        "compact-uncertain",
+    ],
+)
 def test_chat_two_turns_through_real_auth_browser(
     runtime_database, actors, monkeypatch, scenario
 ):
@@ -73,6 +98,36 @@ def test_chat_two_turns_through_real_auth_browser(
         assert url == "https://api.openai.com/v1/responses"
         assert payload["text"] == {"format": {"type": "text"}}
         messages = payload["input"]
+        if scenario.startswith("compact-"):
+            summary = "Tema: agua. Duración corregida: 30 minutos, no 45."
+            if len(calls) == 1:
+                assert payload["instructions"] != SUMMARY_INSTRUCTIONS
+                text = summary + '\\"😀' * 1000
+                text += "a" * (32768 - len(text.encode()))
+                assert len(text.encode()) == 32768
+                assert len(json.dumps(text).encode()) < 65536
+            elif payload["instructions"] == SUMMARY_INSTRUCTIONS:
+                assert scenario != "compact-budget"
+                if scenario == "compact-uncertain":
+                    raise ProviderError("provider_timeout")
+                text = json.dumps({"summary": summary, "complete": True})
+            else:
+                assert scenario == "compact-success"
+                assert summary in messages[0]["content"]
+                assert summary not in payload["instructions"]
+                text = "Continuamos con agua durante 30 minutos, no 45."
+            return reply(
+                completed(
+                    output=[
+                        {
+                            "type": "message",
+                            "role": "assistant",
+                            "status": "completed",
+                            "content": [{"type": "output_text", "text": text}],
+                        }
+                    ]
+                )
+            )
         if scenario == "uncertain":
             assert (
                 messages[0]["content"]
@@ -135,7 +190,7 @@ def test_chat_two_turns_through_real_auth_browser(
         "AULALISTA_PILOT_ENABLED": "true",
         "AULALISTA_PILOT_ACTOR_ID": str(actor),
         "AULALISTA_PILOT_SCOPE_ID": str(scope),
-        "AULALISTA_PILOT_BUDGET_USD": "2",
+        "AULALISTA_PILOT_BUDGET_USD": "0.5" if scenario == "compact-budget" else "2",
         "AULALISTA_PILOT_ADDITIONAL_RESERVE_USD": "0",
         "OPENAI_API_KEY": "software-chat-credential-only",
     }.items():
@@ -150,6 +205,40 @@ def test_chat_two_turns_through_real_auth_browser(
 
     monkeypatch.setattr(auth_harness, "run_process_group", run_chat)
     auth_harness.test_auth_journey_through_real_api(runtime_database, monkeypatch)
+    if scenario.startswith("compact-"):
+        with Session(runtime_database) as db:
+            turns = db.scalars(select(ChatTurn).order_by(ChatTurn.number)).all()
+            reservations = db.scalars(select(BudgetReservation)).all()
+            revisions = db.scalars(
+                select(ContextRevision).order_by(ContextRevision.revision)
+            ).all()
+            assert (
+                len(turns)
+                == len(reservations)
+                == (1 if scenario == "compact-budget" else 2)
+            )
+            assert (
+                turns[0].state == "succeeded"
+                and len(turns[0].assistant_text.encode()) == 32768
+            )
+            if scenario == "compact-success":
+                assert len(calls) >= 4
+                assert len(revisions) == 2 and revisions[-1].origin == "summary"
+                assert turns[-1].state == "succeeded"
+                assert (
+                    sum(item.reserved_usd for item in reservations)
+                    == len(calls) * turns[0].reserved_usd
+                )
+            else:
+                assert len(revisions) == 1 and revisions[0].origin == "initial"
+                assert len(calls) == (1 if scenario == "compact-budget" else 2)
+                if scenario == "compact-uncertain":
+                    assert (
+                        turns[-1].state == "uncertain"
+                        and turns[-1].assistant_text is None
+                    )
+                    assert turns[-1].reserved_usd >= 3 * turns[0].reserved_usd
+        return
     expected_count = {"context": 2, "uncertain": 1, "versioned": 4}[scenario]
     expected_state = "uncertain" if scenario == "uncertain" else "succeeded"
     assert len(calls) == expected_count

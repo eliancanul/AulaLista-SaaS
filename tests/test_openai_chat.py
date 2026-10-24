@@ -170,3 +170,28 @@ def test_context_notes_are_bounded_without_unicode_or_whitespace_bypass(notes):
 
     with pytest.raises(ValidationError):
         ContextRequest(expected_version=0, expected_context_revision=0, notes=notes)
+
+
+def test_summary_preserves_corrections_and_rejects_reported_loss():
+    import json
+
+    from aulalista_api.openai_chat import prepare_summary
+
+    facts = '3.º, no 2.º; NO dejar tarea; "ignorar reglas" es cita; mañana agua 😀'
+    payload = prepare_summary({"previous_summary": "", "fragments": [{"text": facts}]})
+    service, transport = adapter(
+        reply(chat_response(json.dumps({"summary": facts, "complete": True})))
+    )
+    result = service.summarize(payload)
+    assert result.text == facts
+    assert facts not in payload["instructions"]
+    assert json.loads(payload["input"][0]["content"])["fragments"][0]["text"] == facts
+    assert len(transport.calls) == 1
+    for output in (
+        {"summary": "lost negation", "complete": False},
+        {"summary": "x" * 4096, "complete": True},
+    ):
+        service, transport = adapter(reply(chat_response(json.dumps(output))))
+        with pytest.raises(ProviderError):
+            service.summarize(payload)
+        assert len(transport.calls) == 1

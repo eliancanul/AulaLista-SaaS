@@ -1,5 +1,5 @@
 import { AcentaApi, ApiError } from "./api";
-import { chatAdmissionRejected, chatContextError, chatErrorMessage, chatTextError, type ChatDocument, type ChatContextReceipt, type ConversationSummary } from "./chat-contracts";
+import { chatAdmissionRejected, chatContextError, chatErrorMessage, chatTextError, type ChatDocument, type ChatContextReceipt, type ChatContextRevision, type ConversationSummary } from "./chat-contracts";
 
 type Pending = {kind: "create"; key: string; text: string} |
   {kind: "turn"; key: string; text: string; expected: number; contextRevision: number; id: string} |
@@ -9,6 +9,8 @@ export interface ChatThread {
   draft: string;
   contextDraft: string | null;
   contextNotice: string;
+  contextInspection: ChatContextRevision | null;
+  contextReadStatus: "idle" | "loading" | "error";
   pending: Pending | null;
   status: "idle" | "loading" | "sending" | "unknown" | "error";
   error: string;
@@ -25,7 +27,7 @@ interface ChatState {
   listError: string;
   availability: "idle" | "loading" | "available" | "unavailable";
 }
-const emptyThread = (): ChatThread => ({document: null, draft: "", contextDraft: null, contextNotice: "", pending: null, status: "idle", error: "", needsRefresh: false});
+const emptyThread = (): ChatThread => ({document: null, draft: "", contextDraft: null, contextNotice: "", contextInspection: null, contextReadStatus: "idle", pending: null, status: "idle", error: "", needsRefresh: false});
 const fresh = (): ChatState => ({activeId: null, primaryId: null, activeLoaded: false, threads: {new: emptyThread()}, items: [], cursor: null, listStatus: "idle", listError: "", availability: "idle"});
 const slot = (id: string | null) => id ?? "new";
 const contextDirty = (thread: ChatThread) => thread.contextDraft !== null && thread.contextDraft !== thread.document?.context.notes;
@@ -35,6 +37,7 @@ export class ChatController {
   private listeners = new Set<() => void>();
   private epoch = 0;
   private readGeneration = new Map<string, number>();
+  private contextReadGeneration = new Map<string, number>();
   private activeGeneration = 0;
   private listGeneration = 0;
   private capabilityGeneration = 0;
@@ -201,6 +204,21 @@ export class ChatController {
       await this.run(key, {kind: "turn", key: crypto.randomUUID(), text: current.draft, expected: current.document.conversation.version, contextRevision: current.document.context.revision, id: this.state.activeId}, false);
     } else await this.run("new", {kind: "create", key: crypto.randomUUID(), text: current.draft}, false);
   }
+  async inspectContext(revision: number) {
+    const id = this.state.activeId, epoch = this.epoch;
+    if (!this.live() || !id) return;
+    const generation = (this.contextReadGeneration.get(id) ?? 0) + 1;
+    this.contextReadGeneration.set(id, generation);
+    this.thread(id, {contextReadStatus: "loading"});
+    try {
+      const contextInspection = await this.api.readChatContextRevision(id, revision);
+      if (this.live(epoch) && this.contextReadGeneration.get(id) === generation)
+        this.thread(id, {contextInspection, contextReadStatus: "idle"});
+    } catch {
+      if (this.live(epoch) && this.contextReadGeneration.get(id) === generation)
+        this.thread(id, {contextReadStatus: "error"});
+    }
+  }
   async updateContext(reset = false) {
     if (!this.live() || this.isArchive()) return;
     const current = this.current(), doc = current.document;
@@ -264,8 +282,8 @@ export class ChatController {
     this.emit({listStatus: this.state.listStatus === "loading" ? "idle" : this.state.listStatus,
       availability: this.state.availability === "loading" ? "idle" : this.state.availability,
       threads: Object.fromEntries(Object.entries(this.state.threads).map(([key, thread]) => [key, {...thread,
-        status: thread.pending ? "unknown" : thread.status === "loading" ? "idle" : thread.status}]))});
+        contextReadStatus: "idle", status: thread.pending ? "unknown" : thread.status === "loading" ? "idle" : thread.status}]))});
   }
   resume() { if (!this.closed) this.suspended = false; }
-  close() { this.closed = true; this.epoch++; this.readGeneration.clear(); this.emit(fresh()); }
+  close() { this.closed = true; this.epoch++; this.readGeneration.clear(); this.contextReadGeneration.clear(); this.emit(fresh()); }
 }

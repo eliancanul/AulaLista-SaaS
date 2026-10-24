@@ -74,6 +74,7 @@ def test_empty_database_migrates_and_upgrade_is_repeatable(empty_database):
         "chat_active_conversation",
         "chat_open_operation",
         "chat_context_revision",
+        "chat_compaction_step",
         "analytic_section",
         "analytic_section_revision",
     }

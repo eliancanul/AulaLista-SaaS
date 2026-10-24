@@ -16,7 +16,7 @@ import type {
 } from "./contracts";
 
 import { guidedResources, validateGuidedRequest } from "./guided-planning";
-import { chatTextError, chatContextError, parseChatDocument, parseChatContextReceipt, parseConversationSummary, type ChatDocument, type ChatContextReceipt, type ConversationSummary } from "./chat-contracts";
+import { chatTextError, chatContextError, parseChatDocument, parseChatContextReceipt, parseChatContextRevision, parseConversationSummary, type ChatDocument, type ChatContextReceipt, type ChatContextRevision, type ConversationSummary } from "./chat-contracts";
 import {
   isAnalyticSectionData,
   MAX_ANALYTIC_DATA_BYTES,
@@ -451,6 +451,12 @@ export class AcentaApi {
     assert(doc.conversation.id === id && doc.turns.length === 1 && doc.next_cursor === null && turn.operation_id === key &&
       (text === undefined || turn.user_text === text) && (expected === undefined || turn.number === expected + 1) &&
       (contextRevision === undefined || turn.context_revision === contextRevision));
+  }
+  async readChatContextRevision(id: string, revision: number): Promise<ChatContextRevision> {
+    if (!Number.isSafeInteger(revision) || revision < 0 || revision > 2147483647) throw new ApiError(422, "invalid_request");
+    const receipt = parseChatContextRevision(await this.request(`conversations/${this.id(id)}/context-revisions/${revision}`));
+    assert(receipt.conversation.id === id && receipt.context.revision === revision);
+    return receipt;
   }
   async updateChatContext(id: string, notes: string, expected: number, contextRevision: number, key: string): Promise<ChatContextReceipt> {
     if (chatContextError(notes) || !Number.isInteger(expected) || expected < 0 || !Number.isInteger(contextRevision) || contextRevision < 0)

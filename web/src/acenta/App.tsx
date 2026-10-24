@@ -30,6 +30,7 @@ import { AnalyticForm } from "./AnalyticForm";
 import { AnalyticDerivedForm, AnalyticExplorer } from "./AnalyticPlanning";
 import { fieldLabel, guidedResources, isGuided, planningReference } from "./guided-planning";
 import { Chat, ChatContextEditor, ChatExitGuard, Conversations } from "./Chat";
+import { LocalHelp } from "./LocalHelp";
 import { WorkspacePanel, ResourceLibrary, ToolsCatalog, PendingPlanning } from "./WorkspacePanels";
 export function AccessView() {
   const [auth] = useState(() => new AuthController());
@@ -607,7 +608,7 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
           panel={panelView && <WorkspacePanel view={panelView} onClose={closePanel}>
             {panelView === "resources" ? <ResourceLibrary controller={controller} onEditor={() => setShowEditor(true)} /> :
               panelView === "chat-context" ? <ChatContextEditor controller={controller} /> :
-              panelView === "support" ? <p>Soporte todavía no está disponible en Acenta.</p> : <>
+              panelView === "support" ? <LocalHelp /> : <>
                 <PendingPlanning controller={controller} />
                 <ToolsCatalog category={category} onCategory={setCategory} onPlanning={() => controller.navigate("planning")} />
                 <button className="text-action" onClick={actionExample}>Ajustar planeación · ejemplo</button>

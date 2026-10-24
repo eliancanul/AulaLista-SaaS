@@ -63,6 +63,10 @@ def test_health_and_fail_closed_material_routes_are_registered(client):
             "/scopes/{scope_id}/conversations/{conversation_id}/context-operations/{operation_id}",
             {"GET"},
         ),
+        (
+            "/scopes/{scope_id}/conversations/{conversation_id}/context-revisions/{revision}",
+            {"GET"},
+        ),
         ("/scopes/{scope_id}/conversations/{conversation_id}/context", {"POST"}),
         (
             "/scopes/{scope_id}/conversations/{conversation_id}/operations/{operation_id}",

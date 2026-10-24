@@ -1,4 +1,4 @@
-"""Private, durable chat. One admitted operation dispatches at most once."""
+"""Private durable chat; each reserved provider step dispatches at most once."""
 
 import hashlib
 import time
@@ -15,9 +15,11 @@ from aulalista_api.ai_budget import (
     reserved_total,
 )
 from aulalista_api.auth import AuthError
+from aulalista_api.chat_compaction import answer_payload, plan_context
 from aulalista_api.chat_models import (
     ActiveConversation,
     ChatTurn,
+    CompactionStep,
     ContextRequest,
     ContextRevision,
     Conversation,
@@ -25,7 +27,7 @@ from aulalista_api.chat_models import (
     TurnRequest,
 )
 from aulalista_api.materials import MaterialError, authorize
-from aulalista_api.openai_chat import OpenAIChat, estimated_cost, prepare
+from aulalista_api.openai_chat import OpenAIChat, estimated_cost, prepare_summary
 from aulalista_api.openai_planning import (
     MAX_OUTPUT_TOKENS,
     MODEL_CONTEXT_TOKENS,
@@ -72,13 +74,34 @@ def context_document(revision):
         "through_turn": revision.through_turn,
         "notes": revision.notes,
         "origin": revision.origin,
+        "summary": revision.summary,
         "operation_id": str(revision.operation_id) if revision.operation_id else None,
         "created_at": revision.created_at.astimezone(UTC).isoformat(),
     }
 
 
-def turn_document(turn):
-    cost = estimated_cost(turn.input_tokens, turn.output_tokens)
+def turn_document(session, turn):
+    observations = [
+        {"input_tokens": turn.input_tokens, "output_tokens": turn.output_tokens}
+    ]
+    if turn.configuration.get("summary_steps"):
+        observations += [
+            step.usage
+            for step in session.scalars(
+                select(CompactionStep).where(CompactionStep.turn_id == turn.id)
+            )
+        ]
+    costs = [
+        estimated_cost(item.get("input_tokens"), item.get("output_tokens"))
+        for item in observations
+    ]
+    cost = sum(costs) if all(value is not None for value in costs) else None
+    totals = {
+        key: sum(item[key] for item in observations)
+        if all(item.get(key) is not None for item in observations)
+        else None
+        for key in ("input_tokens", "output_tokens")
+    }
     return {
         "operation_id": str(turn.operation_id),
         "number": turn.number,
@@ -88,8 +111,8 @@ def turn_document(turn):
         "state": turn.state,
         "error_code": turn.error_code,
         "usage": {
-            "input_tokens": turn.input_tokens,
-            "output_tokens": turn.output_tokens,
+            "input_tokens": totals["input_tokens"],
+            "output_tokens": totals["output_tokens"],
             "estimated_cost_usd": format(cost, "f") if cost is not None else None,
             "reserved_usd": str(turn.reserved_usd),
         },
@@ -111,7 +134,7 @@ def document(session, conversation, *, cursor=None, limit=20, turn=None):
         "next_cursor": None,
     }
     if turn is not None:
-        result["turns"] = [turn_document(turn)]
+        result["turns"] = [turn_document(session, turn)]
         return result
     query = select(ChatTurn).where(ChatTurn.conversation_id == conversation.id)
     if cursor is not None:
@@ -133,7 +156,7 @@ def document(session, conversation, *, cursor=None, limit=20, turn=None):
         query.order_by(ChatTurn.number.desc()).limit(limit + 1)
     ).all()
     for row in rows[:limit]:
-        result["turns"].insert(0, turn_document(row))
+        result["turns"].insert(0, turn_document(session, row))
         result["next_cursor"] = str(row.number)
         if len(canonical(result)) > MAX_HISTORY_BYTES:
             result["turns"].pop(0)
@@ -143,58 +166,6 @@ def document(session, conversation, *, cursor=None, limit=20, turn=None):
     elif result["turns"]:
         result["next_cursor"] = str(result["turns"][0]["number"])
     return result
-
-
-def provider_context(session, conversation, user_text):
-    context = session.get(
-        ContextRevision, (conversation.id, conversation.context_revision)
-    )
-    messages = []
-    cursor = context.through_turn
-
-    def prepared():
-        complete = [*messages, {"role": "user", "content": user_text}]
-        if context.notes:
-            # Teacher-authored notes remain user content, never system instructions.
-            complete[0] = {
-                **complete[0],
-                "content": (
-                    "Teacher-provided context notes:\n"
-                    + context.notes
-                    + "\n\nConversation message:\n"
-                    + complete[0]["content"]
-                ),
-            }
-        return prepare(complete)
-
-    try:
-        payload = prepared()
-        while True:
-            chunk = session.scalars(
-                select(ChatTurn)
-                .where(
-                    ChatTurn.conversation_id == conversation.id,
-                    ChatTurn.context_revision == context.revision,
-                    ChatTurn.number > cursor,
-                    ChatTurn.state == "succeeded",
-                )
-                .order_by(ChatTurn.number)
-                .limit(32)
-            ).all()
-            for turn in chunk:
-                messages.extend(
-                    [
-                        {"role": "user", "content": turn.user_text},
-                        {"role": "assistant", "content": turn.assistant_text},
-                    ]
-                )
-                # Stop before fetching another chunk if the complete context cannot fit.
-                payload = prepared()
-                cursor = turn.number
-            if len(chunk) < 32:
-                return payload
-    except ProviderError:
-        raise MaterialError(413, "chat_context_too_large") from None
 
 
 def find_conversation(session, scope, conversation_id):
@@ -392,6 +363,57 @@ class Conversations:
                 "context": context_document(revision),
             }
 
+    def context_revision(self, actor, scope, conversation_id, revision):
+        with Session(self.engine) as session, session.begin():
+            authorize(session, actor, scope)
+            conversation = find_conversation(session, scope, conversation_id)
+            context = session.get(ContextRevision, (conversation_id, revision))
+            if context is None:
+                raise MaterialError(404, "not_found")
+            steps = []
+            if context.summary:
+                turn = session.scalar(
+                    select(ChatTurn).where(
+                        ChatTurn.conversation_id == conversation_id,
+                        ChatTurn.operation_id == context.operation_id,
+                    )
+                )
+                for step in session.scalars(
+                    select(CompactionStep)
+                    .where(CompactionStep.turn_id == turn.id)
+                    .order_by(CompactionStep.number)
+                ):
+                    cost = estimated_cost(
+                        step.usage.get("input_tokens"), step.usage.get("output_tokens")
+                    )
+                    steps.append(
+                        {
+                            "number": step.number,
+                            "payload_sha256": step.payload_sha256,
+                            "sources": step.sources,
+                            "summary": step.summary,
+                            "usage": {
+                                "input_tokens": step.usage.get("input_tokens"),
+                                "output_tokens": step.usage.get("output_tokens"),
+                                "estimated_cost_usd": format(cost, "f")
+                                if cost is not None
+                                else None,
+                                "reserved_usd": turn.configuration[
+                                    "per_request_reservation_usd"
+                                ],
+                            },
+                        }
+                    )
+            result = {
+                "conversation": summary(conversation, active_id(session, scope)),
+                "context": context_document(context),
+                "steps": steps,
+            }
+            if len(canonical(result)) > MAX_HISTORY_BYTES:
+                raise MaterialError(413, "chat_context_too_large")
+            authorize(session, actor, scope)
+            return result
+
     def update_context(self, actor, scope, conversation_id, operation, request):
         if not isinstance(request, ContextRequest):
             raise MaterialError(422, "invalid_request")
@@ -412,6 +434,15 @@ class Conversations:
             if revision is not None:
                 if revision.request_fingerprint != fingerprint:
                     raise MaterialError(409, "conflict")
+            elif (
+                session.scalar(
+                    select(ChatTurn.id).where(
+                        ChatTurn.scope_id == scope, ChatTurn.operation_id == operation
+                    )
+                )
+                is not None
+            ):
+                raise MaterialError(409, "conflict")
             elif active_id(session, scope) != conversation.id:
                 raise MaterialError(409, "chat_archived")
             elif (
@@ -477,7 +508,7 @@ class Conversations:
         ).hexdigest()
         started = time.monotonic()
         outcome, turn_id = None, None
-        with Session(self.engine) as session, session.begin():
+        with Session(self.engine, expire_on_commit=False) as session, session.begin():
             principal = authorize(session, actor, scope)
             session.execute(
                 text("SELECT pg_advisory_xact_lock(:key)"), {"key": GLOBAL_LOCK}
@@ -505,6 +536,13 @@ class Conversations:
                         )
                     )
                     is not None
+                    or session.scalar(
+                        select(ContextRevision.revision).where(
+                            ContextRevision.scope_id == scope,
+                            ContextRevision.operation_id == operation,
+                        )
+                    )
+                    is not None
                     or request.expected_version != conversation.version
                     or request.expected_context_revision
                     != conversation.context_revision
@@ -516,13 +554,13 @@ class Conversations:
                     raise MaterialError(422, "chat_limit_reached")
                 if not self._enabled_for(principal, scope):
                     raise MaterialError(503, "chat_unavailable")
-                payload = provider_context(session, conversation, request.text)
+                payload, context, groups = plan_context(
+                    session, conversation, request.text
+                )
+                reserve = self.profile.reservation_usd * (len(groups) + 1)
                 if budget_busy(session):
                     outcome = MaterialError(409, "chat_busy")
-                elif (
-                    reserved_total(session) + self.profile.reservation_usd
-                    > self.profile.budget_usd
-                ):
+                elif reserved_total(session) + reserve > self.profile.budget_usd:
                     outcome = MaterialError(429, "chat_budget_exhausted")
                 else:
                     instant = now()
@@ -540,18 +578,22 @@ class Conversations:
                         payload_sha256=hashlib.sha256(_encode(payload)).hexdigest(),
                         profile_fingerprint=self.profile.fingerprint,
                         configuration={
-                            "version": "private-chat-v1",
+                            "version": "private-chat-compaction-v1",
                             "provider_payload": {
                                 k: v for k, v in payload.items() if k != "input"
                             },
                             "count_strategy": "window-v1",
                             "count_requests": 0,
-                            "generation_requests": 1,
+                            "generation_requests": len(groups) + 1,
+                            "summary_steps": len(groups),
                             "budget_usd": str(self.profile.budget_usd),
                             "additional_reserve_usd": str(
                                 self.profile.additional_reserve_usd
                             ),
-                            "reservation_usd": str(self.profile.reservation_usd),
+                            "reservation_usd": str(reserve),
+                            "per_request_reservation_usd": str(
+                                self.profile.reservation_usd
+                            ),
                             "max_input_tokens": MODEL_CONTEXT_TOKENS,
                             "max_output_tokens": MAX_OUTPUT_TOKENS,
                             "deadline_seconds": DEADLINE_SECONDS,
@@ -562,7 +604,7 @@ class Conversations:
                         context_revision=conversation.context_revision,
                         user_text=request.text,
                         state="generating",
-                        reserved_usd=self.profile.reservation_usd,
+                        reserved_usd=reserve,
                         created_at=instant,
                         deadline_at=instant + timedelta(seconds=DEADLINE_SECONDS),
                     )
@@ -573,13 +615,52 @@ class Conversations:
             raise outcome
         if turn_id is None:
             return outcome
-        observed = {}
+        observed, observed_step = {}, None
         try:
             # The admission transaction has committed; no lock spans provider HTTP.
             with Session(self.engine) as session, session.begin():
                 authorize(session, actor, scope)
                 turn = session.get(ChatTurn, turn_id, with_for_update=True)
                 self._require_active(turn, started)
+            compacted = context.summary["text"] if context.summary else ""
+            for number, fragments in enumerate(groups, 1):
+                with Session(self.engine) as session, session.begin():
+                    authorize(session, actor, scope)
+                    turn = session.get(ChatTurn, turn_id, with_for_update=True)
+                    self._require_active(turn, started)
+                payload = prepare_summary(
+                    {"previous_summary": compacted, "fragments": fragments}
+                )
+                observed_step = number
+                summarized = OpenAIChat(self.provider).summarize(payload)
+                observed = summarized.usage
+                with Session(self.engine) as session, session.begin():
+                    authorize(session, actor, scope)
+                    turn = session.get(ChatTurn, turn_id, with_for_update=True)
+                    self._require_active(turn, started)
+                    session.add(
+                        CompactionStep(
+                            turn_id=turn_id,
+                            number=number,
+                            payload_sha256=hashlib.sha256(_encode(payload)).hexdigest(),
+                            sources=[
+                                {k: v for k, v in fragment.items() if k != "text"}
+                                for fragment in fragments
+                            ],
+                            summary=summarized.text,
+                            usage=safe_usage(observed),
+                        )
+                    )
+                    session.flush()
+                    authorize(session, actor, scope)
+                    self._require_active(turn, started)
+                compacted, observed, observed_step = summarized.text, {}, None
+            if groups:
+                payload = answer_payload(context.notes, compacted, [], request.text)
+                with Session(self.engine) as session, session.begin():
+                    authorize(session, actor, scope)
+                    turn = session.get(ChatTurn, turn_id, with_for_update=True)
+                    self._require_active(turn, started)
             result = OpenAIChat(self.provider).generate(payload)
             observed = result.usage
             with Session(self.engine) as session, session.begin():
@@ -595,6 +676,30 @@ class Conversations:
                 for key, value in safe_usage(observed).items():
                     setattr(turn, key, value)
                 session.flush()
+                if groups:
+                    conversation.context_revision += 1
+                    conversation.updated_at = now()
+                    session.flush()
+                    session.add(
+                        ContextRevision(
+                            conversation_id=conversation.id,
+                            revision=conversation.context_revision,
+                            scope_id=scope,
+                            actor_id=principal,
+                            operation_id=operation,
+                            request_fingerprint=fingerprint,
+                            through_turn=turn.number - 1,
+                            notes=context.notes,
+                            origin="summary",
+                            summary={
+                                "text": compacted,
+                                "from_turn": context.through_turn + 1,
+                                "steps": len(groups),
+                            },
+                            created_at=now(),
+                        )
+                    )
+                    session.flush()
                 saved = document(session, conversation, turn=turn)
                 # DB reads may wait: revalidate the original session and deadline.
                 authorize(session, actor, scope)
@@ -611,15 +716,22 @@ class Conversations:
                 "uncertain" if error.uncertain else "failed",
                 error.code,
                 observed,
+                observed_step,
             )
             raise MaterialError(409, f"chat_{state}") from None
         except (AuthError, MaterialError):
             self._finish(
-                turn_id, "uncertain", "authorization_or_deadline_changed", observed
+                turn_id,
+                "uncertain",
+                "authorization_or_deadline_changed",
+                observed,
+                observed_step,
             )
             raise
         except Exception:
-            self._finish(turn_id, "uncertain", "operation_interrupted", observed)
+            self._finish(
+                turn_id, "uncertain", "operation_interrupted", observed, observed_step
+            )
             raise MaterialError(409, "chat_uncertain") from None
 
     @staticmethod
@@ -631,9 +743,14 @@ class Conversations:
         ):
             raise ProviderError("operation_expired")
 
-    def _finish(self, turn_id, state, code, observed):
+    def _finish(self, turn_id, state, code, observed, observed_step=None):
         with Session(self.engine) as session, session.begin():
             turn = session.get(ChatTurn, turn_id, with_for_update=True)
+            if (
+                observed_step is not None
+                and session.get(CompactionStep, (turn_id, observed_step)) is not None
+            ):
+                observed = {}
             if turn.state == "generating":
                 turn.state, turn.finished_at, turn.error_code = state, now(), code
                 for key, value in safe_usage(observed).items():

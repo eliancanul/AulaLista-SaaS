@@ -43,14 +43,38 @@ un recurso automáticamente.
 - **Contexto:** mismas notas, revisión, corte de turnos, CAS y consulta de estado
   de 0014, presentados en un panel en flujo. Ocultarlo conserva la edición local;
   guardar o reiniciar sigue requiriendo su acción explícita.
-- **Soporte:** estado pendiente explícito, sin envío, dirección, proveedor, horario
-  o SLA inventados. [#79](https://github.com/eliancanul/AulaLista-SaaS/issues/79)
-  conserva la definición de ayuda/atención. Este acceso no acredita soporte operativo.
+- **Soporte:** ayuda local sobre acceso, chat/contexto, recursos/Planeación y
+  operaciones pendientes, según [#79](https://github.com/eliancanul/AulaLista-SaaS/issues/79).
+  Es contenido del producto, distinguible de Luna. No recibe solicitudes ni promete
+  atención humana, responsable o plazo de respuesta. No necesita suscripción.
 
 Los formularios y lectores/editores de documentos siguen siendo tareas existentes
 abiertas mediante una selección explícita. Sus diálogos no se confunden con los
 paneles de navegación. Impresión, guardado, revisiones, recuperación de Planeación
 y cierre de sesión mantienen sus controles y garantías.
+
+## Ayuda local (#79)
+
+La ruta aprobada es ayuda dentro del producto: el acceso **Soporte** abre contenido
+estático incluido en la aplicación. Antes de iniciar sesión, **Ayuda de acceso**
+está disponible incluso cuando los métodos de acceso no están configurados o
+fallan. El texto explica sólo controles existentes y sus límites: usar el mismo
+método de acceso, consultar estados inciertos, revisar contexto, abrir recursos y
+recuperar lo confirmado. La ayuda no diagnostica una cuenta ni verifica el saldo.
+
+No hay formulario, chat de soporte, enlace externo, correo, adjunto, telemetría ni
+servicio de tickets. Abrir, leer y cerrar ayuda no genera solicitudes de API ni
+adjunta conversación, documentos, cookies, códigos o datos personales a un envío.
+Los recursos estáticos de la aplicación, incluidas sus fuentes locales, se cargan
+del mismo origen; no hay destinos externos de ayuda. Las operaciones de acceso
+siguen sus contratos; la ayuda no las inicia, reintenta o cancela. No existe confirmación de envío porque
+no se ofrece envío. No se inventa canal, proveedor, responsable, horario o SLA.
+
+Abrir/cerrar conserva el chat y las notas, las ediciones de recursos, el formulario
+de acceso y el código en curso. El acceso previo al login usa una región no modal
+en el flujo: abrir enfoca su título; cerrar o Escape devuelve foco al activador.
+Los temas se despliegan con controles nativos. La ayuda de workspace reutiliza
+el mismo panel y sus guardias/foco, sin nuevo estado de conversación ni recuperación.
 
 ## Reflow, teclado y foco
 
@@ -88,5 +112,5 @@ Simular un viewport corto no acredita el teclado virtual físico de un dispositi
 El recorrido conectado usa sesión, HTTP y PostgreSQL desechable con transporte
 sintético. No hay nuevos endpoints, esquema, dependencias, proveedor, credenciales,
 gastos o despliegue. Revisión independiente, tests pertinentes del SHA exacto y
-comprobación de CI preceden a la integración. El soporte real, la implementación
+comprobación de CI preceden a la integración. La atención humana, la implementación
 de las herramientas pendientes y la aceptación visual/docente se registran aparte.

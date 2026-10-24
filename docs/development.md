@@ -23,7 +23,7 @@ Después de editar código local, repetir `uv sync --locked --no-editable
 --reinstall-package aulalista-api` para no probar una wheel anterior de la caché.
 
 Las migraciones requieren el rol dueño de esquema. No se ejecutan en el arranque
-ni desde endpoints. El head único esperado es `0012_chat_context`, posterior a `0009_planning_branches`, que reúne
+ni desde endpoints. El head único esperado es `0013_chat_compaction`, posterior a `0009_planning_branches`, que reúne
 las dos migraciones 0008 sin modificar sus revisiones ni sus datos. El downgrade
 de `0008_openai_planning` rechaza cualquier intento retenido para no perder
 evidencia de envíos; el de `0008_analytic_sections` rechaza apartados confirmados
@@ -77,7 +77,7 @@ GRANT SELECT, INSERT ON planning_generation_attempt TO aulalista_runtime;
 GRANT SELECT, INSERT ON ai_budget_reservation TO aulalista_runtime;
 GRANT UPDATE (state) ON ai_budget_reservation TO aulalista_runtime;
 GRANT SELECT, INSERT ON chat_conversation, chat_turn, chat_active_conversation,
-    chat_open_operation, chat_context_revision TO aulalista_runtime;
+    chat_open_operation, chat_context_revision, chat_compaction_step TO aulalista_runtime;
 GRANT UPDATE (title, version, updated_at, context_revision)
     ON chat_conversation TO aulalista_runtime;
 GRANT UPDATE (state, assistant_text, finished_at, model, service_tier,
@@ -95,6 +95,10 @@ uv run --locked --no-editable uvicorn aulalista_api.app:create_app --factory --h
 ```
 
 Después de nuevas migraciones, revisar los grants necesarios antes de arrancar.
+0013 añade resúmenes y pasos retenidos, sin ejecutar IA ni modificar mensajes.
+Su downgrade rechaza pasos o resúmenes existentes para no destruir procedencia.
+La migración y estos grants sólo se ejecutan aquí en PostgreSQL desechable;
+aplicarlos en un servicio y desplegar son tareas posteriores separadas.
 No dar al runtime el rol dueño/superuser. La autenticación válida aprovisiona principal/ámbito de forma idempotente;
 la app nunca crea roles. El rol runtime puede insertar versiones y avanzar la revisión; no puede
 actualizar/eliminar/truncar versiones, cambiar propietario o desactivar triggers.
@@ -157,7 +161,7 @@ candidato exacto registra resultados y revisión; este documento describe cobert
 
 - `GET /health/live`: 200 `{"status":"ok"}`, independiente de DB.
 - `GET /health/ready`: 200 sólo con conexión y única revisión
-  `0012_chat_context`; fallo/timeout/revisión distinta: 503 sin detalle interno.
+  `0013_chat_compaction`; fallo/timeout/revisión distinta: 503 sin detalle interno.
 - `AULALISTA_DB_TIMEOUT_SECONDS`: entero 2–30, predeterminado 3. Deadline HTTP de
   readiness completo, incluyendo espera, DNS, conexión y consulta; también fija
   timeouts de driver/servidor. Una sola sonda en vuelo evita acumular hilos.
@@ -545,21 +549,22 @@ no presentar reserva como gasto facturado. Ante incertidumbre sólo GET; no reen
 Cerrar con `AULALISTA_PILOT_ENABLED=false` y reiniciar admisores. No liberar reserva.
 
 
-### Chat privado y migraciones 0011–0012
+### Chat privado y migraciones 0011–0013
 
 El mismo factory `aulalista_api.pilot_runtime:create_window_app` conecta chat de
 texto y Planeación al **mismo** presupuesto. No hay clave ni tope independiente.
 El chat guarda historial confirmado por ámbito. La revisión activa de contexto
 identifica las notas escritas por el docente y los turnos posteriores que se
 enviarán; no adjunta recursos automáticamente. El payload permanece acotado a
-32 KiB; el exceso se informa sin truncar ni regenerar. No hay cuota de vida de
+32 KiB; un envío puede compactar automáticamente conservando historia y notas,
+con reserva conjunta de resumen y respuesta según [0014](specs/0014-private-chat.md). No hay cuota de vida de
 20 respuestas o 100 intentos. Reiniciar o actualizar contexto conserva historia,
 recibos y reservas; no genera un resumen automático ni llama al proveedor.
 Consumo observado/estimación/reserva se presentan por separado, nunca como factura.
 
 Tras integrar un candidato revisado, el operador dueño de la DB debe ampliar la
 ventana administrativa anterior: comprobar revisión actual, respaldo y cierre
-de admisión. El upgrade a 0012 indicado abajo recorre 0010 y 0011 si aún están
+de admisión. El upgrade a 0013 indicado abajo recorre 0010, 0011 y 0012 si aún están
 pendientes; no se deben ejecutar destinos anteriores a la revisión actual. La
 credencial administrativa permanece sólo en el mecanismo seguro existente.
 La revisión 0011 es un paso intermedio, no el requisito del nuevo binario.
@@ -590,13 +595,13 @@ Contrato y pruebas: [spec 0014](specs/0014-private-chat.md),
 `tests/chat_browser_integration.py`. Esas pruebas sólo usan transporte externo
 sintético y PostgreSQL local desechable; no acreditan aún respuesta real.
 
-#### Conversación única y contexto versionado: 0012
+#### Conversación única, contexto y resúmenes versionados: 0012–0013
 
 En la misma ventana administrativa coordinada, con admisiones detenidas y un
 respaldo verificado, comprobar `alembic current` y ejecutar únicamente:
 
 ```sh
-uv run --locked --no-editable alembic upgrade 0012_chat_context
+uv run --locked --no-editable alembic upgrade 0013_chat_compaction
 uv run --locked --no-editable alembic current
 ```
 
@@ -613,14 +618,14 @@ mensajes, recursos ni consumo. Aplicar estos grants además de los de 0011:
 
 ```sql
 GRANT SELECT, INSERT ON chat_active_conversation, chat_open_operation,
-    chat_context_revision TO aulalista_runtime;
+    chat_context_revision, chat_compaction_step TO aulalista_runtime;
 GRANT UPDATE (context_revision) ON chat_conversation TO aulalista_runtime;
 ```
 
 Verificar conteos/identificadores previos, suma y estados de reservas, referencias
 de contexto y permisos mínimos. No conceder UPDATE de las revisiones ni DELETE,
 TRUNCATE o privilegios owner al runtime. El binario nuevo requiere exactamente
-0012; coordinar su arranque y sondas con la ventana, sin migración automática.
+0013; coordinar su arranque y sondas con la ventana, sin migración automática.
 Si hay historia retenida, conservar el esquema y cerrar admisión ante un problema;
 un rollback de binario no restaura compatibilidad. Revisar el bloqueo de downgrade
 antes de cualquier plan de reversión, sin borrar datos para forzarlo.
@@ -628,5 +633,9 @@ antes de cualquier plan de reversión, sin borrar datos para forzarlo.
 El ensayo posterior, autorizado y coordinado por separado, debe comprobar que
 dos pestañas abren el mismo chat, que actualizar contexto excluye los turnos
 anteriores del siguiente envío y que éstos siguen disponibles en el historial.
-GET, recarga, apertura y actualización manual no llaman a IA. La compactación
-generada sigue pendiente de su política y presupuesto explícitos en #11.
+GET, recarga, apertura y actualización manual no llaman a IA. 0013 conserva
+resúmenes y pasos con procedencia inmutable; cada envío reserva conjuntamente
+los pasos previstos más una respuesta en el ledger global. Sus pruebas están en
+`tests/test_chat_compaction.py` y en el recorrido de aislamiento runtime.
+Migración/despliegue remotos y ensayo real siguen aplazados; estas instrucciones
+no autorizan su ejecución ni dependen de una máquina personal.

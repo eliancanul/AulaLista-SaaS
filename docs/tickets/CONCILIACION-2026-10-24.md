@@ -1,5 +1,81 @@
 # Conciliación del backlog de Acenta · 24 de octubre de 2026
 
+## Delta tras las integraciones 109–111
+
+Lectura del 24 de octubre de 2026 sobre main
+`695b584619317f04cf21f91cc0451feea5b44495`. **Issues sigue siendo el backlog activo.**
+Las secciones y tablas posteriores conservan la fotografía histórica de `2a608090`;
+este delta distingue funciones, contratos y operación sin crear otra cola.
+
+| Capacidad comprobada en main | Evidencia y límite |
+| --- | --- |
+| Chat único por ámbito, archivo, paginación y contexto manual/reset versionado | [PR #109](https://github.com/eliancanul/AulaLista-SaaS/pull/109), merge `60f97a8`; no incluía compactación ni recursos seleccionados. |
+| Barra izquierda, accesos inferiores y paneles que conservan chat y trabajo | [PR #110](https://github.com/eliancanul/AulaLista-SaaS/pull/110), merge `04ad995`; #78 conserva referencia visual exacta y aceptación humana. |
+| Aislamiento HTTP con sesiones reales y conexión runtime reciclada A→B | [PR #111](https://github.com/eliancanul/AulaLista-SaaS/pull/111), merge `695b584`; #98 cerrado para superficies actuales, sin acreditar RLS o documentos reales. |
+
+Cada PR conserva pruebas y revisión del commit exacto. Su CI no ejecutó pasos y
+se aplicó la excepción autorizada; esa evidencia no equivale a CI verde.
+Planeación manual variable, lectura, edición básica, guardado/reapertura,
+impresión y presupuesto compartido ya están integrados según #52/#61/#62/#68;
+que esos issues sigan abiertos no exige reconstruir dichas funciones.
+
+**Corte de continuación:** compactación automática de
+[#11](https://github.com/eliancanul/AulaLista-SaaS/issues/11) y ayuda local de
+[#79](https://github.com/eliancanul/AulaLista-SaaS/issues/79), rama
+`acenta/chat-compaction-help-20261024`. El PR enlazado desde esos issues conserva
+SHA, pruebas, revisión y resultado de integración; este índice no los sustituye.
+
+Decisiones resueltas: selección determinista del chat activo y reset sin borrar
+historia (#109); resumen automático cuando haga falta, versionado/revisable,
+con reserva conjunta de resumen y respuesta en el ledger compartido; saldo
+insuficiente conserva el borrador y evita la llamada. La ayuda será local sobre
+funciones reales, sin envío ni atención humana prometida: no falta elegir canal,
+responsable humano o SLA para este corte. Historial, recursos y reservas inciertas
+se conservan. Política y límites de compactación constan en la [spec 0014](../specs/0014-private-chat.md).
+
+### Funciones restantes y dependencias
+
+| Corte existente | Pendiente concreto |
+| --- | --- |
+| [#53](https://github.com/eliancanul/AulaLista-SaaS/issues/53) → [#65](https://github.com/eliancanul/AulaLista-SaaS/issues/65) → [#66](https://github.com/eliancanul/AulaLista-SaaS/issues/66) | Lector/reapertura de apartados → composición móvil A → Hoja y clave separada. Hoja requiere concretar tipos/límites, composición y alcance de impresión; sus ejemplos no fijan cuotas. |
+| #53, contexto derivado | Comparar y aplicar/rechazar contexto elegido conservando actividades/correcciones; concretar granularidad visual después de sus cortes previos. |
+| #11, recursos en contexto | Selección explícita de revisión autorizada, procedencia y contenido a enviar; consultar recursos ya funciona sin transmitirlos. Delimitar primer recurso/contenido y límites. |
+| [#80](https://github.com/eliancanul/AulaLista-SaaS/issues/80) | Selector curricular; fuente/edición inicial y derechos/destinos pendientes. El contexto manual sigue siendo válido. |
+| [#86](https://github.com/eliancanul/AulaLista-SaaS/issues/86)–[#89](https://github.com/eliancanul/AulaLista-SaaS/issues/89) | Preguntas, Adaptar, Tarjetas y Bingo: concretar composición/límites del primer recorrido sobre sus propuestas existentes. |
+| [#82](https://github.com/eliancanul/AulaLista-SaaS/issues/82), [#84](https://github.com/eliancanul/AulaLista-SaaS/issues/84), [#85](https://github.com/eliancanul/AulaLista-SaaS/issues/85) | Recuperación tras reautenticación (política entre sesiones), vinculación (prueba fresca de ambos métodos) y consentimiento opcional (finalidad/política). [#83](https://github.com/eliancanul/AulaLista-SaaS/issues/83), OTP real, sigue pospuesto por el usuario. |
+| [#97](https://github.com/eliancanul/AulaLista-SaaS/issues/97), [#99](https://github.com/eliancanul/AulaLista-SaaS/issues/99)–[#104](https://github.com/eliancanul/AulaLista-SaaS/issues/104) | Permisos, admisión, almacenamiento, parser, retención, restore e interpretación. Fijar perfiles/método/cotas aplicables; #99/#100 coordinan contrato sin dependencia circular. #98 sólo acredita superficies actuales. |
+
+### Contratos y operación separados
+
+[#81](https://github.com/eliancanul/AulaLista-SaaS/issues/81) (editor),
+[#90](https://github.com/eliancanul/AulaLista-SaaS/issues/90)–[#96](https://github.com/eliancanul/AulaLista-SaaS/issues/96)
+(siete herramientas), [#105](https://github.com/eliancanul/AulaLista-SaaS/issues/105)
+(web) y [#107](https://github.com/eliancanul/AulaLista-SaaS/issues/107) (suscripción)
+entregan primero contratos/decisiones; no autorizan generadores o cobro por existir.
+#31 requiere reproducir Firefox; #40 conserva investigación parcial; #49 tiene
+preparación offline integrada y CLI pendiente; #106 requiere observación autorizada
+con docentes. No son otra función de chat ni evidencia de aceptación real.
+
+Migración remota, despliegue y acceso al Mac quedan aplazados por instrucción del
+usuario. #69 y la aceptación visual/docente de #11/#78 permanecen separados de
+implementación e integración; proveedores sintéticos no los cierran.
+
+### Siguiente corte preparado: lector y reapertura de #53
+
+La dependencia [PR #64](https://github.com/eliancanul/AulaLista-SaaS/pull/64) ya está
+integrada. Reutilizar `AnalyticContent`, formulario/controlador del apartado y
+`readAnalyticSection(id, revision?)`: guardar → leer revisión confirmada → editar
+esa revisión con CAS → reabrir; derivar conserva origen y correcciones independientes.
+Antes de UI, localizar/visualizar la referencia específica aprobada del lector C:
+[PR #57](https://github.com/eliancanul/AulaLista-SaaS/pull/57) documentó que no pudo
+materializarla; los enlaces de [spec 0012](../specs/0012-apartados-analiticos.md)
+identifican explorador/derivación, no ese lector. C/A ya está elegido.
+Revalidar main/ocupación al asignar escritor; probar revisión exacta, respuesta
+perdida, CAS, buffers independientes, navegación tardía, foco y recorrido conectado.
+No requiere otro backend; móvil A y actualización de contexto son cortes posteriores.
+
+## Fotografía histórica sobre 2a608090
+
 Base comprobada: [2a608090b73136727fef632b0da8db0971e32b1f](https://github.com/eliancanul/AulaLista-SaaS/commit/2a608090b73136727fef632b0da8db0971e32b1f), árbol
 `c3f515c5b0145e46404d53147a691646185dfe3e`. PR [#77](https://github.com/eliancanul/AulaLista-SaaS/pull/77)
 fue integrado por el usuario a las 03:47:15 UTC; el chat sí está en main.

@@ -39,9 +39,33 @@ export function ChatContextEditor({controller}: {controller: AcentaController}) 
   if (!doc) return <p role="status">El contexto estará disponible después de recuperar o iniciar tu chat. Puedes seguir preparando tu mensaje.</p>;
   const busy = thread.status === "sending" || thread.status === "loading";
   const disabled = busy || !!thread.pending || thread.needsRefresh;
+  const inspected = thread.contextInspection;
+  const shown = inspected?.context ?? doc.context;
+  const reading = thread.contextReadStatus === "loading";
   return <div className="chat-context-editor">
-    <p>Revisión guardada {doc.context.revision} · Historial anterior hasta el turno {doc.context.through_turn} excluido del contexto activo.</p>
-    <p>Al guardar, el siguiente mensaje usará estas notas y los turnos posteriores al {doc.conversation.version}. Los mensajes anteriores seguirán visibles, pero dejarán de enviarse al modelo. No se genera un resumen automático.</p>
+    <p>Revisión activa {doc.context.revision} · Los mensajes hasta el turno {doc.context.through_turn} {doc.context.summary ? "están representados por el resumen" : "están excluidos del contexto activo"}.</p>
+    <section aria-label="Revisiones del contexto" className="chat-context-revisions">
+      <h3>Revisión guardada {shown.revision}{shown.revision !== doc.context.revision ? " · anterior, sólo lectura" : " · actual"}</h3>
+      {shown.summary ? <>
+        <h4>Resumen automático</h4><p className="chat-context-text">{shown.summary.text}</p>
+        <p>Turnos {shown.summary.from_turn}–{shown.through_turn} · {shown.summary.steps} pasos. Puede perder detalle: contrástalo con los mensajes originales y conserva las correcciones importantes en tus notas.</p>
+      </> : <p>Esta revisión no contiene un resumen automático.</p>}
+      {shown.notes && <><h4>Notas guardadas</h4><p className="chat-context-text">{shown.notes}</p></>}
+      {inspected?.steps.map(step => <details key={step.number}>
+        <summary>Resumen del paso {step.number} y mensajes de origen</summary>
+        <p className="chat-context-text">{step.summary}</p>
+        <ul>{step.sources.map((source, index) => <li key={index}>Turno {source.turn}, {source.role === "user" ? "tu mensaje" : "Luna"}: bytes UTF-8 {source.start_byte}–{source.end_byte} (fin exclusivo).</li>)}</ul>
+        <p>La fragmentación conserva la referencia al texto original completo del historial.</p>
+        <ChatUsageDetails usage={step.usage} />
+      </details>)}
+      {reading && <p role="status">Consultando revisión…</p>}
+      {thread.contextReadStatus === "error" && <p role="alert">No pudimos consultar esa revisión. El contexto y tus textos siguen intactos; puedes volver a consultar.</p>}
+      <div className="actions">
+        <button disabled={reading || shown.previous_revision === null} onClick={() => void controller.chat.inspectContext(shown.previous_revision!)}>Ver revisión anterior del contexto</button>
+        <button disabled={reading} onClick={() => void controller.chat.inspectContext(doc.context.revision)}>Consultar revisión actual y procedencia</button>
+      </div>
+    </section>
+    <p>Al guardar notas, el siguiente mensaje usará estas notas y los turnos posteriores al {doc.conversation.version}. Reemplaza el resumen activo y el contexto anterior; los mensajes y las revisiones guardadas siguen disponibles. Guardar notas no llama al modelo.</p>
     <p>Reiniciar aplica notas vacías con el mismo corte. Ambas acciones conservan historial, recursos y reservas; no cancelan operaciones.</p>
     <label htmlFor="chat-context-notes">Notas para el próximo contexto</label>
     <textarea id="chat-context-notes" value={thread.contextDraft ?? doc.context.notes} disabled={!!thread.pending}
@@ -90,7 +114,7 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
         <button onClick={() => controller.navigate("conversations")}>Consultar archivo anterior</button>
       </>}
     </div>
-    {!archive && thread.document && <p className="chat-note">Contexto activo · revisión {thread.document.context.revision}. Usa {thread.document.context.notes ? "notas manuales y " : ""}los turnos confirmados posteriores al {thread.document.context.through_turn}. El historial anterior permanece guardado.</p>}
+    {!archive && thread.document && <p className="chat-note">Contexto activo · revisión {thread.document.context.revision}. Usa {thread.document.context.notes ? "notas manuales, " : ""}{thread.document.context.summary ? "un resumen automático y " : ""}los turnos confirmados posteriores al {thread.document.context.through_turn}. El historial anterior permanece guardado.</p>}
     {thread.status === "loading" && <p role="status">Recuperando historial…</p>}
     {thread.document?.next_cursor && <button disabled={busy} onClick={() => void controller.chat.refresh(state.activeId, true)}>Ver mensajes anteriores</button>}
     <ol className="chat-turns" aria-label="Historial de la conversación">
@@ -141,6 +165,7 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
       </div>}
       {state.availability === "loading" && <p role="status">Comprobando disponibilidad del chat…</p>}
       <p className="chat-note">Consultar el historial o guardar contexto no inicia una generación. Los textos sin guardar sólo permanecen en esta pestaña mientras tu sesión siga válida.</p>
+      <p className="chat-note">Al enviar, Luna resume automáticamente el contexto si hace falta. Resumen y respuesta comparten presupuesto; si no alcanza, tu mensaje permanece sin enviar. Puedes revisar el resumen en «Revisar contexto».</p>
       <nav className="chat-shortcuts" aria-label="Accesos del chat">
         <button data-navigation-focus="shortcut-context" aria-controls="workspace-panel" aria-expanded={panelView === "chat-context"} onClick={onContext}>Revisar contexto</button>
         <button data-navigation-focus="shortcut-planning" aria-controls="workspace-panel" aria-expanded={panelView === "tools"} onClick={onPlan}><Icon name="document" small />Planear</button>

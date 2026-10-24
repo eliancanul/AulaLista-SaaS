@@ -243,20 +243,20 @@ def test_chat_and_planning_share_one_retained_budget(
         assert len(db.scalars(select(BudgetReservation)).all()) == 1
 
 
-def test_context_overflow_rejects_without_truncation_or_reservation(
+def test_compaction_budget_rejects_without_truncation_or_reservation(
     runtime_database, actors
 ):
     actor, scope = actors[0]
     transport = Transport(reply(chat_response("a" * 32768)))
-    chat = service(runtime_database, actor, scope, transport)
+    chat = service(runtime_database, actor, scope, transport, budget="0.5")
     conversation = create(chat, actor, scope)
     chat.write(actor, scope, conversation, uuid4(), body())
     assert (
         fails(
-            "chat_context_too_large",
+            "chat_budget_exhausted",
             lambda: chat.write(actor, scope, conversation, uuid4(), body(version=1)),
         )
-        == 413
+        == 429
     )
     assert chat.read(actor, scope, conversation)["conversation"]["version"] == 1
     assert len(transport.calls) == 1
