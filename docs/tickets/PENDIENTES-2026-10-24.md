@@ -314,7 +314,7 @@ Pruebas de autoridad/revisiones/aislamiento y selector conectado. El cierre
 documental de #18 no exige importar un corpus. **Evidencia:** [0010 §6/11](../specs/0010-herramientas-contexto-curricular.md);
 recomendación 2025 no es decisión adoptada; prototipo aún referencia 2024.
 
-### F7. Conversación con contexto y recursos reutilizables — P2 · parcial
+### F7. Conversación, contexto derivado y recursos reutilizables — P2 · parcial
 
 **Issues:** #11/#18; base de biblioteca [#17](https://github.com/eliancanul/AulaLista-SaaS/issues/17)
 y originales [#36](https://github.com/eliancanul/AulaLista-SaaS/issues/36) cerrados.
@@ -323,15 +323,26 @@ sin perder conversación. **Alcance/exclusiones:** selección explícita de recu
 clase/sesión o contexto autorizado, referencias exactas y cambios propuestos
 distintos de aplicados; no CRUD escolar, marketplace ni envío implícito de biblioteca.
 Biblioteca mínima/original exacto ya existen; no reconstruirlos.
-**Dependencias:** M1 y contrato de cada incorporación de contexto/destino; documentos
-reales esperan F12 sólo cuando formen parte del envío.
+La actualización voluntaria del contexto de una Planeación derivada, mostrando
+diferencias sin reescribir actividades confirmadas, está aprobada en 0010 §5 y
+pendiente de implementación. **Dependencias:** M1 para conversación y contrato
+de cada incorporación de contexto/destino; la actualización derivada reutiliza
+#53 y sus revisiones, sin depender del chat. Documentos reales esperan F12 sólo
+cuando formen parte del envío.
 
 **Aceptación/pruebas:** abrir/cerrar recurso mantiene conversación y compositor;
 selección muestra qué revisión se usará y otra cuenta/revocación la deniega.
 Material ausente no tiene preview ficticia. Proponer cambios no modifica el
 recurso hasta la acción definida; reversión se ofrece sólo con soporte probado.
+Para contexto derivado: crear apartado → derivar Planeación → corregirla →
+editar apartado → comparar diferencias → aplicar o rechazar voluntariamente.
+Rechazar conserva el contexto; aplicar actualiza sólo el contexto elegido y
+conserva actividades confirmadas y correcciones propias. Ambas rutas preservan
+el historial y la revisión de origen, sin actualización silenciosa al reabrir.
 Pruebas de navegación/foco, versiones, aislamiento, red observada y no envío al
-consultar. **Evidencia:** #11, #18 y [catálogo de fuentes](../specs/0006-catalogo-fuentes.md).
+consultar; pruebas de guardar/reabrir tras aplicar y rechazar el contexto derivado.
+**Evidencia:** #11, #18, [0010 §5](../specs/0010-herramientas-contexto-curricular.md#5-programa-analítico-y-reutilización)
+y [catálogo de fuentes](../specs/0006-catalogo-fuentes.md).
 
 ### F8. Editor de texto enriquecido — P2 · no implementado
 
@@ -455,7 +466,7 @@ Aceptación: reconciliar cierre del corte offline con su PR/CI; si se retoma CLI
 resolver el acceso permitido y registrar ejecución real, sin sortear la restricción.
 Ver [README de Promptfoo](../../evaluation/promptfoo/README.md).
 
-## Incertidumbres y decisiones que no son features aprobadas
+## Incertidumbres de implementación y decisiones pendientes
 
 1. Los SHA locales de chat/presupuesto cambian mientras se implementan. El
    coordinador debe enlazar el candidato publicado y su nueva revisión/CI en
@@ -467,10 +478,12 @@ Ver [README de Promptfoo](../../evaluation/promptfoo/README.md).
    contrato completo para voz o ajustes generales; no cuentan como terminados ni
    se convierten aquí en tickets de implementación. La búsqueda de apartados sí
    existe; eso no demuestra búsqueda global de conversaciones/recursos.
-4. El alcance exacto de secuencias de varias sesiones, actualización voluntaria
-   de contexto con diferencias y exploración visual de todo el historial requiere
-   concretar contrato en #18/#11 si se selecciona; conservar revisiones en DB no
-   demuestra esas interfaces. No agregar otra tarjeta de Secuencia.
+4. El alcance exacto de secuencias de varias sesiones y exploración visual de todo
+   el historial requiere concretar contrato en #18/#11 si se selecciona; conservar
+   revisiones en DB no demuestra esas interfaces. No agregar otra tarjeta de
+   Secuencia. Para la actualización de contexto aprobada en F7 sólo quedan por
+   concretar la composición y granularidad de comparación/aplicación; la capacidad
+   ya está respaldada por 0010 §5 y #18.
 5. La suscripción futura está en [ADR 0001](../adr/0001-fundacion-personal.md),
    pero precio, cobro/cancelación y soporte no tienen corte ejecutable aprobado
    localizado. Resolver con evidencia H4 y decisión del propietario antes de un
