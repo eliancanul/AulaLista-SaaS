@@ -4,6 +4,23 @@ import type { ChatUsage } from "./chat-contracts";
 import { Icon, Logo } from "./ui";
 import "./chat.css";
 
+export function ChatExitGuard({controller, onReview, onExit}: {
+  controller: AcentaController; onReview: () => void; onExit: () => void;
+}) {
+  const pending = controller.chat.hasPending();
+  return <section className="exit-guard">
+    <h2>¿Salir con mensajes pendientes?</h2>
+    <p>El texto sin enviar sólo está en esta pestaña. El historial confirmado permanece en tu cuenta.</p>
+    {pending && <p>Hay un envío sin confirmar. Al cerrar sesión perderás el texto y el estado local de este intento. Cerrar sesión no cancela el procesamiento ni elimina los registros o reservas del servidor.</p>}
+    <div className="actions">
+      <button autoFocus onClick={onReview}>Revisar mensajes pendientes</button>
+      {pending
+        ? <button onClick={onExit}>Continuar cierre de sesión sin confirmar el envío</button>
+        : <button onClick={() => { if (controller.chat.discardDrafts()) onExit(); }}>Descartar mensajes sin enviar y continuar salida</button>}
+    </div>
+  </section>;
+}
+
 export function ChatUsageDetails({usage}: {usage: ChatUsage}) {
   return <details className="chat-usage">
     <summary>Consumo de este turno</summary>

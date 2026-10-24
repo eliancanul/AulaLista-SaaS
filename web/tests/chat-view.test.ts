@@ -1,12 +1,13 @@
-import { createElement } from "react";
+import { Children, createElement, isValidElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
 import { AcentaApi } from "../src/acenta/api";
 import { AuthApi, AuthController } from "../src/acenta/auth";
 import { AcentaController } from "../src/acenta/controller";
-import { Chat, ChatUsageDetails, Conversations } from "../src/acenta/Chat";
+import { Chat, ChatExitGuard, ChatUsageDetails, Conversations } from "../src/acenta/Chat";
+import { EditorExitGuard } from "../src/acenta/editor-exit";
 import { appendTurn, chatDocument, chatId, ChatServer, deferredResponse } from "./chat-fixtures";
-import { json, session } from "./acenta-fixtures";
+import { json, planning, session } from "./acenta-fixtures";
 vi.mock("react", async original => {
   const react = await original<typeof import("react")>();
   return {...react, useSyncExternalStore: <T,>(_subscribe: unknown, snapshot: () => T) => snapshot()};
@@ -47,17 +48,18 @@ it("history errors differ from empty state and retained drafts stay discoverable
 });
 function authenticated() {
   const server = new ChatServer();
+  const logout = vi.fn();
   let identity = {...session, csrf: "chat-session-csrf"};
   let privateStatus = 200;
   const auth = new AuthController(new AuthApi(async (input, init) => {
     const path = String(input);
     if (path === "/auth/session") return json({principal_id: identity.actorId, scope_id: identity.scopeId, csrf_token: identity.csrf});
     if (path === "/auth/bootstrap") return json({csrf_token: "pre", google_nonce: "nonce", google_client_id: null, email_available: false});
-    if (path === "/auth/logout") return new Response(null, {status: 204});
+    if (path === "/auth/logout") { logout(); return new Response(null, {status: 204}); }
     if (privateStatus !== 200) return json({detail: "unauthorized"}, privateStatus);
     return server.transport(input, init);
   }));
-  return {auth, server, deny: (status: number) => {privateStatus = status;}, change: () => {identity = {...identity, actorId: crypto.randomUUID(), scopeId: crypto.randomUUID()};}};
+  return {auth, server, logout, deny: (status: number) => {privateStatus = status;}, change: () => {identity = {...identity, actorId: crypto.randomUUID(), scopeId: crypto.randomUUID()};}};
 }
 it("actual auth wrapper attaches CSRF to chat writes and purges memory on logout", async () => {
   const {auth, server} = authenticated(); await auth.start(); const c = auth.snapshot().controller!;
@@ -90,4 +92,67 @@ it("auth suspension keeps pending memory but admits a response only after matchi
   expect(c.chat.hasUnsavedChanges()).toBe(true); await auth.revalidate(true); await c.chat.recover();
   expect(c.chat.current().document?.turns).toHaveLength(1); expect(c.chat.current().draft).toBe("");
   expect(server.calls.filter(call => call.method === "POST")).toHaveLength(1);
+});
+
+// Inspect the rendered guard's actual button callback without a browser/DOM shim.
+function pendingExitButton(node: ReactNode): () => void {
+  let click: (() => void) | undefined;
+  const visit = (child: ReactNode) => {
+    if (!isValidElement<{children?: ReactNode; onClick?: () => void; disabled?: boolean}>(child)) return;
+    if (child.type === "button" && child.props.children === "Continuar cierre de sesión sin confirmar el envío") {
+      expect(child.props.disabled).not.toBe(true);
+      click = child.props.onClick;
+    } else Children.forEach(child.props.children, visit);
+  };
+  visit(node);
+  expect(click).toBeTypeOf("function");
+  return click!;
+}
+
+it.each(["durable uncertain turn", "lost creation with GET 404"] as const)("explicit logout remains available after %s and only purges local memory", async scenario => {
+  const {auth, server, logout} = authenticated(); await auth.start();
+  const c = auth.snapshot().controller!;
+  if (scenario === "durable uncertain turn") {
+    server.documents.set(chatId, appendTurn(chatDocument(), crypto.randomUUID(), "Intento incierto privado", "uncertain"));
+    await c.chat.open(chatId); await c.chat.recover();
+  } else {
+    await c.chat.loadAvailability();
+    server.intercept = call => { if (call.path === "conversations" && call.method === "POST") throw Error("Request delivery unknown"); };
+    c.chat.setDraft("Creación privada sin confirmar"); await c.chat.submit(); await c.chat.recover();
+    expect(server.calls.at(-1)?.path).toMatch(/^conversation-operations\//);
+    expect(server.documents.size).toBe(0);
+  }
+  expect(c.chat.hasPending()).toBe(true);
+  const remoteBefore = structuredClone([...server.documents]);
+  const callsBefore = server.calls.length;
+  let closing: Promise<void> | undefined;
+  const onExit = vi.fn(() => { closing = auth.logout(); });
+  const guard = ChatExitGuard({controller: c, onReview: vi.fn(), onExit});
+  const html = renderToStaticMarkup(guard);
+  expect(html).toContain("perderás el texto y el estado local");
+  expect(html).toContain("Cerrar sesión no cancela el procesamiento");
+  expect(html).toContain("ni elimina los registros o reservas del servidor");
+  pendingExitButton(guard)(); await closing;
+  expect(onExit).toHaveBeenCalledTimes(1); expect(logout).toHaveBeenCalledTimes(1);
+  expect(c.snapshot().closed).toBe(true); expect(c.chat.hasUnsavedChanges()).toBe(false);
+  expect(JSON.stringify(c.chat.snapshot())).not.toMatch(/Intento incierto privado|Creación privada sin confirmar/);
+  expect([...server.documents]).toEqual(remoteBefore);
+  expect(server.calls).toHaveLength(callsBefore);
+  expect(server.calls.filter(call => call.method === "POST")).toHaveLength(scenario === "durable uncertain turn" ? 0 : 1);
+});
+
+it("continuing past the chat warning still respects the existing planning editor guard", async () => {
+  const server = new ChatServer(), c = new AcentaController(new AcentaApi(session, server.transport));
+  server.documents.set(chatId, appendTurn(chatDocument(), crypto.randomUUID(), "Turno incierto", "uncertain"));
+  await c.chat.open(chatId);
+  c.openEditor(planning()); c.edit("Edición de planeación pendiente");
+  const logout = vi.fn(() => c.closeSession()), editorGuard = new EditorExitGuard(c, logout);
+  const chatGuard = ChatExitGuard({controller: c, onReview: vi.fn(), onExit: () => editorGuard.request()});
+  pendingExitButton(chatGuard)();
+  expect(editorGuard.snapshot().open).toBe(true); expect(logout).not.toHaveBeenCalled();
+  expect(c.snapshot().closed).toBe(false); expect(c.snapshot().editor?.text).toBe("Edición de planeación pendiente");
+  expect(c.chat.hasPending()).toBe(true);
+  editorGuard.cancel(); expect(c.chat.hasPending()).toBe(true);
+  expect(server.calls.every(call => call.method === "GET")).toBe(true);
+  editorGuard.dispose();
 });

@@ -27,7 +27,7 @@ import { GuidedForm, GuidedReader } from "./GuidedPlanning";
 import { AnalyticForm } from "./AnalyticForm";
 import { AnalyticDerivedForm, AnalyticExplorer } from "./AnalyticPlanning";
 import { fieldLabel, guidedResources, isGuided, planningReference } from "./guided-planning";
-import { Chat, Conversations } from "./Chat";
+import { Chat, ChatExitGuard, Conversations } from "./Chat";
 export function AccessView() {
   const [auth] = useState(() => new AuthController());
   useEffect(() => { void auth.start(); }, [auth]);
@@ -883,15 +883,9 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
       </main>
       <AnalyticExplorer controller={controller} />
       {chatExit && <Dialog title="¿Salir con mensajes pendientes?" onClose={() => setChatExit(false)}>
-        <section className="exit-guard">
-          <h2>¿Salir con mensajes pendientes?</h2>
-          <p>El texto sin enviar sólo está en esta pestaña. El historial confirmado permanece en tu cuenta.</p>
-          <div className="actions">
-            <button autoFocus onClick={() => { setChatExit(false); controller.navigate("conversations"); }}>Revisar mensajes pendientes</button>
-            {controller.chat.hasPending() ? <p>Hay un envío sin confirmar. Consulta su estado desde la conversación antes de salir.</p> :
-              <button onClick={() => { if (controller.chat.discardDrafts()) requestLogout(); }}>Descartar mensajes sin enviar y continuar salida</button>}
-          </div>
-        </section>
+        <ChatExitGuard controller={controller}
+          onReview={() => { setChatExit(false); controller.navigate("conversations"); }}
+          onExit={requestLogout} />
       </Dialog>}
       {derivedExit && <Dialog title="¿Salir con una clase pendiente?" onClose={() => setDerivedExit(false)} className="analytic-exit-dialog">
         <section className="exit-guard">
