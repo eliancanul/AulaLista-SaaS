@@ -26,6 +26,7 @@ from test_pilot_composition import sign_in
 from test_pilot_configuration import pilot_config
 
 from aulalista_api.ai_budget import BudgetReservation
+from aulalista_api.database import SCHEMA_REVISION
 from aulalista_api.openai_planning import OpenAIPlanning, ProviderError
 from aulalista_api.planning_generation import GenerationAttempt
 
@@ -353,7 +354,7 @@ def test_window_sql_constraints_and_retained_attempt_prevent_downgrade(empty_dat
     with empty_database.connect() as connection:
         assert (
             connection.scalar(text("SELECT version_num FROM alembic_version"))
-            == "0010_window_budget"
+            == SCHEMA_REVISION
         )
         assert (
             connection.scalar(text("SELECT count(*) FROM planning_generation_attempt"))
