@@ -1,5 +1,10 @@
 # Pendientes Acenta: referencia para los tickets existentes
 
+> Fotografía histórica. La [conciliación posterior](CONCILIACION-2026-10-24.md)
+> enlaza los tickets reales y el estado tras integrar #77. La nueva dirección es
+> un chat único continuo; la descripción multichat de este corte no es el objetivo
+> vigente. Se conserva el texto inferior como evidencia de su fecha.
+
 Corte documental: **24 de octubre de 2026, 02:44 UTC**. Base inspeccionada:
 [`33fb285eedf67e88b9151284db1b194227531517`](https://github.com/eliancanul/AulaLista-SaaS/commit/33fb285eedf67e88b9151284db1b194227531517).
 Autor: agente Astra, por delegación del coordinador. Lectura de código, specs,

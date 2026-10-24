@@ -249,10 +249,15 @@ candidato requiere CI exacta, sin trasladar ese éxito por inferencia.
   El cambio/cierre de sesión elimina el estado privado visible y descarta callbacks
   tardíos; también purga el respaldo si un harness lo configuró. El formato legacy
   nunca se conecta al runtime; éste usa el envelope mínimo descrito abajo.
-- Las 13 entradas del catálogo se identifican como herramientas futuras;
-  Secuencia didáctica se incluye dentro de Planeación de clase. Búsqueda,
-  nueva conversación, ajustes y micrófono están pendientes. No hay generación
-  libre, interpretación documental ni validación NEM/curricular declarada.
+- El catálogo conserva 13 entradas; Planeación tiene recorrido implementado y
+  Secuencia didáctica está incluida en ella. Las demás herramientas mantienen
+  sus estados pendientes. #76/#77 incorporaron chat privado de texto con varias
+  conversaciones; el nuevo objetivo de chat único y compactación sigue en
+  [#11](https://github.com/eliancanul/AulaLista-SaaS/issues/11). Búsqueda global,
+  ajustes y micrófono no tienen un contrato completo seleccionado. No se declara
+  interpretación documental ni validación NEM/curricular. La
+  [conciliación](../docs/tickets/CONCILIACION-2026-10-24.md) distingue código,
+  uso real y trabajo pendiente.
 
 ## Diseño y assets
 
