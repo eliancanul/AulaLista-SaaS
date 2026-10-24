@@ -25,7 +25,7 @@ async function login(page: Page, email: string): Promise<Session> {
   return response.json();
 }
 
-test("private multi-turn chat survives reload and account changes without new generation", async ({page}) => {
+test("private multi-turn chat survives reload and account changes without new generation", async ({page}, info) => {
   const privateCalls: {method: string; path: string}[] = [], external: string[] = [];
   page.on("request", request => {
     const url = new URL(request.url());
@@ -62,8 +62,10 @@ test("private multi-turn chat survives reload and account changes without new ge
   await expect(usage).toContainText("Tokens de entrada observados");
   await expect(usage).toContainText("Reserva del intento");
   await expect(usage).toContainText("no es consumo observado ni una factura");
+  await page.screenshot({path: info.outputPath("chat-synthetic-desktop.png")});
   await page.setViewportSize({width: 360, height: 800});
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({path: info.outputPath("chat-synthetic-mobile.png")});
   await page.setViewportSize({width: 1280, height: 900});
 
   // No confirmed conversation or draft enters browser storage/history/URL.
