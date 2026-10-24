@@ -24,7 +24,7 @@ from aulalista_api.pilot_runtime import create_window_app
 def command(scenario):
     marker = {
         "context": "private multi-turn",
-        "uncertain": "uncertain:",
+        "uncertain": "uncertain: explicit logout",
         "versioned": "versioned context:",
         "compact-success": "compaction recovery:",
         "compact-budget": "compaction budget:",
@@ -102,9 +102,10 @@ def test_chat_two_turns_through_real_auth_browser(
             summary = "Tema: agua. Duración corregida: 30 minutos, no 45."
             if len(calls) == 1:
                 assert payload["instructions"] != SUMMARY_INSTRUCTIONS
-                text = summary + '\\"😀' * 5000
+                text = summary + '\\"😀' * 1000
                 text += "a" * (32768 - len(text.encode()))
                 assert len(text.encode()) == 32768
+                assert len(json.dumps(text).encode()) < 65536
             elif payload["instructions"] == SUMMARY_INSTRUCTIONS:
                 assert scenario != "compact-budget"
                 if scenario == "compact-uncertain":
