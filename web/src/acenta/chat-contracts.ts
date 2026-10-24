@@ -4,6 +4,8 @@ export interface ConversationSummary {
   id: string;
   title: string;
   version: number;
+  context_revision: number;
+  active: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -16,13 +18,25 @@ export interface ChatUsage {
 export interface ChatTurn {
   operation_id: string;
   number: number;
+  context_revision: number;
   user_text: string;
   assistant_text: string | null;
   state: "generating" | "succeeded" | "failed" | "uncertain";
   error_code: string | null;
   usage: ChatUsage;
 }
-export interface ChatDocument { conversation: ConversationSummary; turns: ChatTurn[] }
+export interface ChatContext {
+  revision: number;
+  previous_revision: number | null;
+  through_turn: number;
+  notes: string;
+  origin: "initial" | "reset" | "manual";
+  operation_id: string | null;
+  created_at: string;
+}
+export interface ChatDocument { conversation: ConversationSummary; context: ChatContext; turns: ChatTurn[]; next_cursor: string | null }
+export interface ChatContextReceipt { conversation: ConversationSummary; context: ChatContext }
+export const CHAT_PAGE_BYTES = 262144;
 export const CHAT_MAX_CHARACTERS = 4096;
 export const CHAT_MAX_BYTES = 8192;
 const bytes = (text: string) => new TextEncoder().encode(text).length;
@@ -34,6 +48,9 @@ export function chatTextError(text: string): string {
     return "El mensaje admite hasta 4096 caracteres y 8192 bytes. Conservamos tu texto.";
   return "";
 }
+export function chatContextError(text: string): string {
+  return text === "" ? "" : chatTextError(text);
+}
 function assert(value: unknown): asserts value {
   if (!value) throw new ApiError(0, "invalid_response");
 }
@@ -44,18 +61,36 @@ const count = (value: unknown, max = Number.MAX_SAFE_INTEGER) => Number.isSafeIn
 const money = (value: unknown): value is string => typeof value === "string" && value.length <= 40 && /^\d+(?:\.\d+)?$/.test(value) && Number.isFinite(Number(value));
 export function parseConversationSummary(value: unknown): ConversationSummary {
   assert(object(value) && isUuid(value.id) && typeof value.title === "string" &&
-    value.title.length <= 4096 && validUnicode(value.title) && count(value.version, 100) &&
+    value.title.length <= 4096 && validUnicode(value.title) && count(value.version, 2147483647) && count(value.context_revision, 2147483647) && typeof value.active === "boolean" &&
     [value.created_at, value.updated_at].every(date => typeof date === "string" && Number.isFinite(Date.parse(date))));
   return value as unknown as ConversationSummary;
 }
+export function parseChatContext(value: unknown): ChatContext {
+  assert(object(value) && count(value.revision, 2147483647) && count(value.through_turn, 2147483647) &&
+    typeof value.notes === "string" && !chatContextError(value.notes) &&
+    typeof value.created_at === "string" && Number.isFinite(Date.parse(value.created_at)) &&
+    (value.revision === 0
+      ? value.previous_revision === null && value.operation_id === null && value.origin === "initial" && value.notes === "" && value.through_turn === 0
+      : value.previous_revision === Number(value.revision) - 1 && isUuid(value.operation_id) &&
+        (value.notes === "" ? value.origin === "reset" : value.origin === "manual")));
+  return value as unknown as ChatContext;
+}
+export function parseChatContextReceipt(value: unknown): ChatContextReceipt {
+  assert(object(value) && bytes(JSON.stringify(value)) <= CHAT_PAGE_BYTES);
+  const conversation = parseConversationSummary(value.conversation), context = parseChatContext(value.context);
+  assert(context.revision <= conversation.context_revision && context.through_turn <= conversation.version);
+  return {conversation, context};
+}
 export function parseChatDocument(value: unknown): ChatDocument {
-  assert(object(value) && bytes(JSON.stringify(value)) <= 5 * 1024 * 1024);
-  const summary = parseConversationSummary(value.conversation);
-  assert(Array.isArray(value.turns) && value.turns.length <= 100 && value.turns.length === summary.version);
+  assert(object(value) && bytes(JSON.stringify(value)) <= CHAT_PAGE_BYTES);
+  const {conversation: summary, context} = parseChatContextReceipt(value);
+  assert(context.revision === summary.context_revision && Array.isArray(value.turns) && value.turns.length <= 50);
   const operations = new Set<string>();
-  value.turns.forEach((turn, index) => {
+  let previous = 0;
+  value.turns.forEach(turn => {
     assert(object(turn) && isUuid(turn.operation_id) && !operations.has(turn.operation_id) &&
-      turn.number === index + 1 && typeof turn.user_text === "string" && !chatTextError(turn.user_text) &&
+      count(turn.number, summary.version) && Number(turn.number) > previous && (!previous || turn.number === previous + 1) &&
+      count(turn.context_revision, summary.context_revision) && typeof turn.user_text === "string" && !chatTextError(turn.user_text) &&
       ["generating", "succeeded", "failed", "uncertain"].includes(String(turn.state)) &&
       (turn.error_code === null || (typeof turn.error_code === "string" && turn.error_code.length <= 200)) &&
       (turn.state === "succeeded"
@@ -65,7 +100,10 @@ export function parseChatDocument(value: unknown): ChatDocument {
     assert(object(usage) && [usage.input_tokens, usage.output_tokens].every(n => n === null || count(n)) &&
       (usage.estimated_cost_usd === null || money(usage.estimated_cost_usd)) && money(usage.reserved_usd));
     operations.add(turn.operation_id);
+    previous = Number(turn.number);
   });
+  assert(value.next_cursor === null || (typeof value.next_cursor === "string" && /^[1-9]\d*$/.test(value.next_cursor) &&
+    value.turns.length > 0 && value.next_cursor === String((value.turns[0] as ChatTurn).number) && Number(value.next_cursor) > 1));
   return value as unknown as ChatDocument;
 }
 export function chatErrorMessage(error: unknown): string {
@@ -73,8 +111,9 @@ export function chatErrorMessage(error: unknown): string {
   const messages: Record<string, string> = {
     chat_budget_exhausted: "No se inició el turno: el presupuesto configurado está agotado. Tu texto sigue aquí.",
     generation_budget_exhausted: "No se inició el turno: el presupuesto configurado está agotado. Tu texto sigue aquí.",
-    chat_limit_reached: "Esta conversación alcanzó su límite de intentos. Puedes iniciar otra; tu texto sigue aquí.",
-    chat_context_too_large: "El historial supera el contexto permitido. Puedes iniciar otra conversación; tu texto sigue aquí.",
+    chat_limit_reached: "El chat alcanzó un límite del servidor. Tu texto sigue aquí.",
+    chat_context_too_large: "El contexto activo supera el tamaño permitido. Revisa o reinicia el contexto para continuar; el historial y tu texto se conservan.",
+    chat_archived: "Este historial es de sólo lectura. Vuelve al chat activo para continuar.",
     chat_unavailable: "El chat no está disponible. No se inició un turno; tu texto sigue aquí.",
     generation_unavailable: "El chat no está disponible. No se inició un turno; tu texto sigue aquí.",
     chat_busy: "No se inició el turno. Intenta enviar más tarde; tu texto sigue aquí.",
@@ -94,5 +133,5 @@ export function chatErrorMessage(error: unknown): string {
 }
 /** A rejected admission has no turn; failures after admission require the GET receipt. */
 export function chatAdmissionRejected(error: unknown): boolean {
-  return error instanceof ApiError && (["chat_budget_exhausted", "generation_budget_exhausted", "chat_limit_reached", "chat_context_too_large", "chat_unavailable", "generation_unavailable", "chat_busy", "generation_busy", "conflict", "invalid_request", "content_too_large", "request_too_large"].includes(error.code));
+  return error instanceof ApiError && (["chat_archived", "chat_budget_exhausted", "generation_budget_exhausted", "chat_limit_reached", "chat_context_too_large", "chat_unavailable", "generation_unavailable", "chat_busy", "generation_busy", "conflict", "invalid_request", "content_too_large", "request_too_large"].includes(error.code));
 }

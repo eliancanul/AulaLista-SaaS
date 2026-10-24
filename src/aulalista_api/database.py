@@ -11,7 +11,7 @@ from sqlalchemy.pool import NullPool
 
 from aulalista_api.config import Settings
 
-SCHEMA_REVISION = "0011_private_chat"
+SCHEMA_REVISION = "0012_chat_context"
 
 
 class Base(DeclarativeBase):

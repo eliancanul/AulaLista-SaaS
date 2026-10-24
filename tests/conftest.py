@@ -127,6 +127,9 @@ def runtime_database(migrated_database, actors, monkeypatch):
             GRANT UPDATE (state) ON ai_budget_reservation TO aulalista_runtime;
             GRANT SELECT, INSERT ON chat_conversation, chat_turn TO aulalista_runtime;
             GRANT UPDATE (title, version, updated_at) ON chat_conversation TO aulalista_runtime;
+            GRANT SELECT, INSERT ON chat_active_conversation, chat_open_operation,
+                chat_context_revision TO aulalista_runtime;
+            GRANT UPDATE (context_revision) ON chat_conversation TO aulalista_runtime;
             GRANT UPDATE (state, assistant_text, finished_at, model, service_tier,
                 provider_request_id, input_tokens, output_tokens, cached_tokens,
                 cache_write_tokens, reasoning_tokens, error_code)

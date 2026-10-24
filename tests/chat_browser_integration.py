@@ -14,13 +14,17 @@ from test_openai_planning import completed, reply
 
 from aulalista_api.ai_budget import BudgetReservation
 from aulalista_api.auth_models import AuthSession, Identity
-from aulalista_api.chat_models import ChatTurn
+from aulalista_api.chat_models import ChatTurn, ContextRevision, Conversation
 from aulalista_api.openai_planning import OpenAIPlanning, ProviderError
 from aulalista_api.pilot_runtime import create_window_app
 
 
 def command(scenario):
-    marker = "private multi-turn" if scenario == "context" else "uncertain:"
+    marker = {
+        "context": "private multi-turn",
+        "uncertain": "uncertain:",
+        "versioned": "versioned context:",
+    }[scenario]
     return [
         "npx",
         "--no-install",
@@ -33,7 +37,7 @@ def command(scenario):
     ]
 
 
-@pytest.mark.parametrize("scenario", ["context", "uncertain"])
+@pytest.mark.parametrize("scenario", ["context", "uncertain", "versioned"])
 def test_chat_runner_discovers_the_connected_journey(scenario):
     result = subprocess.run(
         [*command(scenario), "--list"],
@@ -46,7 +50,7 @@ def test_chat_runner_discovers_the_connected_journey(scenario):
     assert "Total: 1 test in 1 file" in result.stdout
 
 
-@pytest.mark.parametrize("scenario", ["context", "uncertain"])
+@pytest.mark.parametrize("scenario", ["context", "uncertain", "versioned"])
 def test_chat_two_turns_through_real_auth_browser(
     runtime_database, actors, monkeypatch, scenario
 ):
@@ -75,7 +79,32 @@ def test_chat_two_turns_through_real_auth_browser(
                 == "Provoca incertidumbre sintética sin datos privados."
             )
             raise ProviderError("provider_timeout")
-        if len(messages) == 1:
+        if scenario == "versioned" and len(calls) >= 3:
+            notes = "Contexto nuevo: usamos la palabra brújula, no farol."
+            assert notes in messages[0]["content"]
+            assert notes not in payload["instructions"]
+            assert all(
+                "Recuerda la palabra farol" not in message["content"]
+                and "Recordaré farol" not in message["content"]
+                and "Contexto confirmado: farol" not in message["content"]
+                for message in messages
+            )
+            if len(calls) == 3:
+                assert len(messages) == 1
+                assert messages[0]["role"] == "user"
+                assert messages[0]["content"].endswith(
+                    "¿Qué palabra corresponde al contexto actualizado?"
+                )
+                text = "Contexto actualizado: brújula"
+            else:
+                assert len(calls) == 4
+                assert [m["role"] for m in messages] == ["user", "assistant", "user"]
+                assert messages[1]["content"] == "Contexto actualizado: brújula"
+                assert (
+                    messages[2]["content"] == "Confirma la palabra del contexto nuevo."
+                )
+                text = "Contexto confirmado: brújula"
+        elif len(messages) == 1:
             assert (
                 messages[0]["content"]
                 == "Recuerda la palabra farol para esta conversación sintética."
@@ -121,8 +150,8 @@ def test_chat_two_turns_through_real_auth_browser(
 
     monkeypatch.setattr(auth_harness, "run_process_group", run_chat)
     auth_harness.test_auth_journey_through_real_api(runtime_database, monkeypatch)
-    expected_count = 2 if scenario == "context" else 1
-    expected_state = "succeeded" if scenario == "context" else "uncertain"
+    expected_count = {"context": 2, "uncertain": 1, "versioned": 4}[scenario]
+    expected_state = "uncertain" if scenario == "uncertain" else "succeeded"
     assert len(calls) == expected_count
     with Session(runtime_database) as db:
         turns = db.scalars(select(ChatTurn)).all()
@@ -135,6 +164,28 @@ def test_chat_two_turns_through_real_auth_browser(
             item.kind == "chat" and item.state == expected_state
             for item in reservations
         )
+
+        if scenario == "versioned":
+            conversations = db.scalars(select(Conversation)).all()
+            revisions = db.scalars(
+                select(ContextRevision).order_by(ContextRevision.revision)
+            ).all()
+            assert len(conversations) == 1
+            assert conversations[0].version == 4
+            assert conversations[0].context_revision == 2
+            assert [revision.origin for revision in revisions] == [
+                "initial",
+                "manual",
+                "reset",
+            ]
+            assert [revision.through_turn for revision in revisions] == [0, 2, 4]
+            assert [
+                turn.context_revision for turn in sorted(turns, key=lambda t: t.number)
+            ] == [0, 0, 1, 1]
+            assert (
+                sum(item.reserved_usd for item in reservations)
+                == 4 * reservations[0].reserved_usd
+            )
 
         if scenario == "uncertain":
             assert turns[0].assistant_text is None

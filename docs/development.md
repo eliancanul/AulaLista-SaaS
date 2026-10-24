@@ -22,7 +22,7 @@ Después de editar código local, repetir `uv sync --locked --no-editable
 --reinstall-package aulalista-api` para no probar una wheel anterior de la caché.
 
 Las migraciones requieren el rol dueño de esquema. No se ejecutan en el arranque
-ni desde endpoints. El head único esperado es `0011_private_chat`, posterior a `0009_planning_branches`, que reúne
+ni desde endpoints. El head único esperado es `0012_chat_context`, posterior a `0009_planning_branches`, que reúne
 las dos migraciones 0008 sin modificar sus revisiones ni sus datos. El downgrade
 de `0008_openai_planning` rechaza cualquier intento retenido para no perder
 evidencia de envíos; el de `0008_analytic_sections` rechaza apartados confirmados
@@ -75,6 +75,13 @@ GRANT UPDATE (current_revision) ON planning_draft TO aulalista_runtime;
 GRANT SELECT, INSERT ON planning_generation_attempt TO aulalista_runtime;
 GRANT SELECT, INSERT ON ai_budget_reservation TO aulalista_runtime;
 GRANT UPDATE (state) ON ai_budget_reservation TO aulalista_runtime;
+GRANT SELECT, INSERT ON chat_conversation, chat_turn, chat_active_conversation,
+    chat_open_operation, chat_context_revision TO aulalista_runtime;
+GRANT UPDATE (title, version, updated_at, context_revision)
+    ON chat_conversation TO aulalista_runtime;
+GRANT UPDATE (state, assistant_text, finished_at, model, service_tier,
+    provider_request_id, input_tokens, output_tokens, cached_tokens, cache_write_tokens,
+    reasoning_tokens, error_code) ON chat_turn TO aulalista_runtime;
 GRANT UPDATE (state, finished_at, counted_input_tokens, generation_requests,
     model, service_tier, provider_request_id, input_tokens, output_tokens, cached_tokens,
     cache_write_tokens, reasoning_tokens, error_code, planning_revision_id)
@@ -109,7 +116,7 @@ cumplir controles equivalentes antes de usar cualquier dato privado.
 
 - `GET /health/live`: 200 `{"status":"ok"}`, independiente de DB.
 - `GET /health/ready`: 200 sólo con conexión y única revisión
-  `0011_private_chat`; fallo/timeout/revisión distinta: 503 sin detalle interno.
+  `0012_chat_context`; fallo/timeout/revisión distinta: 503 sin detalle interno.
 - `AULALISTA_DB_TIMEOUT_SECONDS`: entero 2–30, predeterminado 3. Deadline HTTP de
   readiness completo, incluyendo espera, DNS, conexión y consulta; también fija
   timeouts de driver/servidor. Una sola sonda en vuelo evita acumular hilos.
@@ -497,21 +504,25 @@ no presentar reserva como gasto facturado. Ante incertidumbre sólo GET; no reen
 Cerrar con `AULALISTA_PILOT_ENABLED=false` y reiniciar admisores. No liberar reserva.
 
 
-### Chat privado y migración 0011
+### Chat privado y migraciones 0011–0012
 
 El mismo factory `aulalista_api.pilot_runtime:create_window_app` conecta chat de
 texto y Planeación al **mismo** presupuesto. No hay clave ni tope independiente.
-El chat guarda historial confirmado por ámbito; sólo ese texto y el mensaje
-nuevo forman contexto, sin adjuntar recursos automáticamente. Hasta 20 turnos
-confirmados y contexto acotado; exceso se informa sin truncar ni regenerar.
+El chat guarda historial confirmado por ámbito. La revisión activa de contexto
+identifica las notas escritas por el docente y los turnos posteriores que se
+enviarán; no adjunta recursos automáticamente. El payload permanece acotado a
+32 KiB; el exceso se informa sin truncar ni regenerar. No hay cuota de vida de
+20 respuestas o 100 intentos. Reiniciar o actualizar contexto conserva historia,
+recibos y reservas; no genera un resumen automático ni llama al proveedor.
 Consumo observado/estimación/reserva se presentan por separado, nunca como factura.
 
 Tras integrar un candidato revisado, el operador dueño de la DB debe ampliar la
-ventana administrativa anterior: verificar 0009, respaldo y cierre de admisión;
-`uv run --locked --no-editable alembic upgrade 0010_window_budget` y luego
-`uv run --locked --no-editable alembic upgrade 0011_private_chat`, con la credencial
-administrativa sólo en el mecanismo seguro existente. `alembic current` debe
-mostrar 0011; el nuevo binario exige esa revisión. No ejecutar estas instrucciones
+ventana administrativa anterior: comprobar revisión actual, respaldo y cierre
+de admisión. El upgrade a 0012 indicado abajo recorre 0010 y 0011 si aún están
+pendientes; no se deben ejecutar destinos anteriores a la revisión actual. La
+credencial administrativa permanece sólo en el mecanismo seguro existente.
+La revisión 0011 es un paso intermedio, no el requisito del nuevo binario.
+No ejecutar estas instrucciones
 contra Render como parte de tests ni poner el DSN dueño en build/start.
 
 Además de los grants de 0010, el runtime necesita únicamente:
@@ -537,3 +548,44 @@ Contrato y pruebas: [spec 0014](specs/0014-private-chat.md),
 `tests/test_openai_chat.py`, `tests/test_chat.py`, `tests/test_chat_routes.py` y
 `tests/chat_browser_integration.py`. Esas pruebas sólo usan transporte externo
 sintético y PostgreSQL local desechable; no acreditan aún respuesta real.
+
+#### Conversación única y contexto versionado: 0012
+
+En la misma ventana administrativa coordinada, con admisiones detenidas y un
+respaldo verificado, comprobar `alembic current` y ejecutar únicamente:
+
+```sh
+uv run --locked --no-editable alembic upgrade 0012_chat_context
+uv run --locked --no-editable alembic current
+```
+
+El operador usa su mecanismo seguro existente para el DSN administrativo, sin
+imprimirlo ni guardarlo en historial, build/start o archivos versionados. Estas
+instrucciones son un handoff; las pruebas nunca las ejecutan contra Render.
+
+La migración conserva conversaciones, turnos, operaciones y reservas. Elige una
+conversación activa por ámbito por `updated_at DESC, id DESC`; las demás quedan
+como historia consultable, sin mezclar sus mensajes. La revisión inicial conserva
+el contexto anterior. Nuevas aperturas regresan al mismo chat. Una actualización
+o reinicio crea una revisión inmutable con el número de turno cubierto; no borra
+mensajes, recursos ni consumo. Aplicar estos grants además de los de 0011:
+
+```sql
+GRANT SELECT, INSERT ON chat_active_conversation, chat_open_operation,
+    chat_context_revision TO aulalista_runtime;
+GRANT UPDATE (context_revision) ON chat_conversation TO aulalista_runtime;
+```
+
+Verificar conteos/identificadores previos, suma y estados de reservas, referencias
+de contexto y permisos mínimos. No conceder UPDATE de las revisiones ni DELETE,
+TRUNCATE o privilegios owner al runtime. El binario nuevo requiere exactamente
+0012; coordinar su arranque y sondas con la ventana, sin migración automática.
+Si hay historia retenida, conservar el esquema y cerrar admisión ante un problema;
+un rollback de binario no restaura compatibilidad. Revisar el bloqueo de downgrade
+antes de cualquier plan de reversión, sin borrar datos para forzarlo.
+
+El ensayo posterior, autorizado y coordinado por separado, debe comprobar que
+dos pestañas abren el mismo chat, que actualizar contexto excluye los turnos
+anteriores del siguiente envío y que éstos siguen disponibles en el historial.
+GET, recarga, apertura y actualización manual no llaman a IA. La compactación
+generada sigue pendiente de su política y presupuesto explícitos en #11.

@@ -16,7 +16,7 @@ import type {
 } from "./contracts";
 
 import { guidedResources, validateGuidedRequest } from "./guided-planning";
-import { chatTextError, parseChatDocument, parseConversationSummary, type ChatDocument, type ConversationSummary } from "./chat-contracts";
+import { chatTextError, chatContextError, parseChatDocument, parseChatContextReceipt, parseConversationSummary, type ChatDocument, type ChatContextReceipt, type ConversationSummary } from "./chat-contracts";
 import {
   isAnalyticSectionData,
   MAX_ANALYTIC_DATA_BYTES,
@@ -412,35 +412,62 @@ export class AcentaApi {
     assert(object(value) && typeof value.available === "boolean");
     return value.available;
   }
+  async activeConversation(): Promise<ChatDocument> {
+    const doc = parseChatDocument(await this.request("active-conversation"));
+    assert(doc.conversation.active);
+    return doc;
+  }
   async createConversation(key: string): Promise<ChatDocument> {
     const doc = parseChatDocument(await this.request("conversations", "POST", {}, key));
-    assert(doc.conversation.version === 0);
+    assert(doc.conversation.active);
     return doc;
   }
   async conversationOperation(key: string): Promise<ChatDocument> {
-    return parseChatDocument(await this.request(`conversation-operations/${this.id(key)}`));
-  }
-  async readConversation(id: string): Promise<ChatDocument> {
-    const doc = parseChatDocument(await this.request(`conversations/${this.id(id)}`));
-    assert(doc.conversation.id === id);
+    const doc = parseChatDocument(await this.request(`conversation-operations/${this.id(key)}`));
+    assert(doc.conversation.active);
     return doc;
   }
-  async sendChatTurn(id: string, text: string, expected: number, key: string): Promise<ChatDocument> {
-    if (chatTextError(text) || !Number.isInteger(expected) || expected < 0 || expected >= 100)
+  async readConversation(id: string, cursor?: string): Promise<ChatDocument> {
+    if (cursor !== undefined && (!/^[1-9]\d*$/.test(cursor) || !Number.isSafeInteger(Number(cursor)))) throw new ApiError(422, "invalid_request");
+    const query = cursor === undefined ? "" : `?cursor=${cursor}&limit=20`;
+    const doc = parseChatDocument(await this.request(`conversations/${this.id(id)}${query}`));
+    assert(doc.conversation.id === id && (cursor === undefined || doc.turns.every(turn => turn.number < Number(cursor))));
+    return doc;
+  }
+  async sendChatTurn(id: string, text: string, expected: number, key: string, contextRevision: number): Promise<ChatDocument> {
+    if (chatTextError(text) || !Number.isInteger(expected) || expected < 0 || expected >= 2147483647 || !Number.isInteger(contextRevision) || contextRevision < 0)
       throw new ApiError(422, "invalid_request");
-    const doc = parseChatDocument(await this.request(`conversations/${this.id(id)}/turns`, "POST", {text, expected_version: expected}, key, false, 32768));
-    this.matchChatTurn(doc, id, key, text, expected);
+    const doc = parseChatDocument(await this.request(`conversations/${this.id(id)}/turns`, "POST", {text, expected_version: expected, expected_context_revision: contextRevision}, key, false, 32768));
+    this.matchChatTurn(doc, id, key, text, expected, contextRevision);
     return doc;
   }
-  async chatTurnOperation(id: string, key: string, text?: string, expected?: number): Promise<ChatDocument> {
+  async chatTurnOperation(id: string, key: string, text?: string, expected?: number, contextRevision?: number): Promise<ChatDocument> {
     const doc = parseChatDocument(await this.request(`conversations/${this.id(id)}/operations/${this.id(key)}`));
-    this.matchChatTurn(doc, id, key, text, expected);
+    this.matchChatTurn(doc, id, key, text, expected, contextRevision);
     return doc;
   }
-  private matchChatTurn(doc: ChatDocument, id: string, key: string, text?: string, expected?: number) {
-    const turn = doc.turns.find(turn => turn.operation_id === key);
-    assert(doc.conversation.id === id && turn && (text === undefined || turn.user_text === text) &&
-      (expected === undefined || turn.number === expected + 1));
+  private matchChatTurn(doc: ChatDocument, id: string, key: string, text?: string, expected?: number, contextRevision?: number) {
+    const turn = doc.turns[0];
+    assert(doc.conversation.id === id && doc.turns.length === 1 && doc.next_cursor === null && turn.operation_id === key &&
+      (text === undefined || turn.user_text === text) && (expected === undefined || turn.number === expected + 1) &&
+      (contextRevision === undefined || turn.context_revision === contextRevision));
+  }
+  async updateChatContext(id: string, notes: string, expected: number, contextRevision: number, key: string): Promise<ChatContextReceipt> {
+    if (chatContextError(notes) || !Number.isInteger(expected) || expected < 0 || !Number.isInteger(contextRevision) || contextRevision < 0)
+      throw new ApiError(422, "invalid_request");
+    const receipt = parseChatContextReceipt(await this.request(`conversations/${this.id(id)}/context`, "POST",
+      {notes, expected_version: expected, expected_context_revision: contextRevision}, key, false, 32768));
+    this.matchChatContext(receipt, id, notes, expected, contextRevision, key);
+    return receipt;
+  }
+  async chatContextOperation(id: string, notes: string, expected: number, contextRevision: number, key: string): Promise<ChatContextReceipt> {
+    const receipt = parseChatContextReceipt(await this.request(`conversations/${this.id(id)}/context-operations/${this.id(key)}`));
+    this.matchChatContext(receipt, id, notes, expected, contextRevision, key);
+    return receipt;
+  }
+  private matchChatContext(receipt: ChatContextReceipt, id: string, notes: string, expected: number, contextRevision: number, key: string) {
+    assert(receipt.conversation.id === id && receipt.context.operation_id === key && receipt.context.notes === notes &&
+      receipt.context.through_turn === expected && receipt.context.previous_revision === contextRevision && receipt.context.revision === contextRevision + 1);
   }
   async listConversations(cursor?: string, limit = 50): Promise<Page<ConversationSummary>> {
     if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw new ApiError(422, "invalid_request");

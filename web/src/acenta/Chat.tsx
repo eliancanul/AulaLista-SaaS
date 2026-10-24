@@ -1,7 +1,7 @@
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { AcentaController } from "./controller";
 import type { ChatUsage } from "./chat-contracts";
-import { Icon, Logo } from "./ui";
+import { Dialog, Icon, Logo } from "./ui";
 import "./chat.css";
 
 export function ChatExitGuard({controller, onReview, onExit}: {
@@ -10,7 +10,7 @@ export function ChatExitGuard({controller, onReview, onExit}: {
   const pending = controller.chat.hasPending();
   return <section className="exit-guard">
     <h2>¿Salir con mensajes pendientes?</h2>
-    <p>El texto sin enviar sólo está en esta pestaña. El historial confirmado permanece en tu cuenta.</p>
+    <p>El mensaje y los cambios de contexto sin guardar sólo están en esta pestaña. El historial confirmado permanece en tu cuenta.</p>
     {pending && <p>Hay un envío sin confirmar. Al cerrar sesión perderás el texto y el estado local de este intento. Cerrar sesión no cancela el procesamiento ni elimina los registros o reservas del servidor.</p>}
     <div className="actions">
       <button autoFocus onClick={onReview}>Revisar mensajes pendientes</button>
@@ -33,31 +33,64 @@ export function ChatUsageDetails({usage}: {usage: ChatUsage}) {
     <p>La reserva limita el intento; no es consumo observado ni una factura. El saldo disponible no está informado.</p>
   </details>;
 }
+function ContextEditor({controller, onClose}: {controller: AcentaController; onClose: () => void}) {
+  const thread = controller.chat.current(), doc = thread.document!;
+  const busy = thread.status === "sending" || thread.status === "loading";
+  const disabled = busy || !!thread.pending || thread.needsRefresh;
+  return <Dialog title="Contexto del chat" className="chat-context-dialog" onClose={onClose}>
+    <header><h2>Contexto del chat</h2><button onClick={onClose}>Cerrar</button></header>
+    <p>Revisión guardada {doc.context.revision} · Historial anterior hasta el turno {doc.context.through_turn} excluido del contexto activo.</p>
+    <p>Al guardar, el siguiente mensaje usará estas notas y los turnos posteriores al {doc.conversation.version}. Los mensajes anteriores seguirán visibles, pero dejarán de enviarse al modelo. No se genera un resumen automático.</p>
+    <p>Reiniciar aplica notas vacías con el mismo corte. Ambas acciones conservan historial, recursos y reservas; no cancelan operaciones.</p>
+    <label htmlFor="chat-context-notes">Notas para el próximo contexto</label>
+    <textarea id="chat-context-notes" value={thread.contextDraft ?? doc.context.notes} disabled={!!thread.pending}
+      onChange={event => controller.chat.setContextDraft(event.target.value)} />
+    <p className="field-hint">Texto manual · hasta 4096 caracteres y 8192 bytes. Se enviará sólo cuando decidas enviar otro mensaje. Las notas no modifican tus recursos.</p>
+    {thread.contextDraft !== null && thread.contextDraft !== doc.context.notes && <p role="status">Cambios de contexto sin guardar en esta pestaña.</p>}
+    {thread.error && <p role="alert">{thread.error}</p>}
+    {thread.contextNotice && <p role="status">{thread.contextNotice}</p>}
+    {thread.needsRefresh && <button disabled={busy} onClick={() => void controller.chat.refresh()}>Actualizar historial y contexto</button>}
+    {thread.pending?.kind === "context" && <button disabled={busy} onClick={() => void controller.chat.recover()}>Consultar estado del cambio de contexto</button>}
+    <div className="actions">
+      <button disabled={disabled} onClick={() => controller.chat.discardContextDraft()}>Descartar cambios de notas</button>
+      <button disabled={disabled} onClick={() => void controller.chat.updateContext(true)}>Reiniciar contexto sin borrar historial</button>
+      <button className="primary" disabled={disabled || thread.contextDraft === null || !thread.contextDraft.trim()}
+        onClick={() => void controller.chat.updateContext()}>Guardar notas y comenzar contexto</button>
+    </div>
+  </Dialog>;
+}
 export function Chat({controller, onExample, onTools}: {
   controller: AcentaController; onExample: () => void; onTools: () => void;
 }) {
   const state = useSyncExternalStore(controller.chat.subscribe, controller.chat.snapshot);
   const thread = controller.chat.current();
+  const archive = controller.chat.isArchive();
+  const [contextOpen, setContextOpen] = useState(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const previous = useRef(thread.status);
-  useEffect(() => { void controller.chat.loadAvailability(); }, [controller]);
+  useEffect(() => { void controller.chat.loadAvailability(); if (!state.activeId) void controller.chat.openActive(); }, [controller]);
+  useEffect(() => { setContextOpen(false); }, [state.activeId]);
   useEffect(() => {
-    if (previous.current === "sending" && thread.status !== "sending") input.current?.focus();
+    if (previous.current === "sending" && thread.status !== "sending" && !contextOpen) input.current?.focus();
     previous.current = thread.status;
-  }, [thread.status]);
+  }, [thread.status, contextOpen]);
   const busy = thread.status === "sending" || thread.status === "loading";
-  const title = thread.document?.conversation.title || "¿Qué trabajamos hoy?";
   return <section className="chat-panel" aria-labelledby="chat-title">
     <header className="chat-heading">
-      {!state.activeId && <Logo />}
-      <h1 id="chat-title">{title}</h1>
-      <p>Conversación privada · El historial confirmado se conserva en tu cuenta.</p>
+      <Logo />
+      <h1 id="chat-title">{archive ? thread.document?.conversation.title || "Historial anterior" : "Tu chat con Luna"}</h1>
+      <p>{archive ? "Archivo de sólo lectura. Sus mensajes no se incorporan al chat activo." : "Un espacio continuo y privado. El historial confirmado se conserva en tu cuenta."}</p>
     </header>
     <div className="chat-toolbar">
       {state.activeId && <button disabled={busy} onClick={() => void controller.chat.refresh()}>Actualizar historial</button>}
-      <button onClick={() => controller.navigate("conversations")}>Ver conversaciones</button>
+      {archive ? <button onClick={() => controller.navigate("home")}>Volver al chat activo</button> : <>
+        <button onClick={() => controller.navigate("conversations")}>Consultar archivo anterior</button>
+        {thread.document && <button aria-haspopup="dialog" aria-expanded={contextOpen} onClick={() => setContextOpen(true)}>Revisar contexto</button>}
+      </>}
     </div>
+    {!archive && thread.document && <p className="chat-note">Contexto activo · revisión {thread.document.context.revision}. Usa {thread.document.context.notes ? "notas manuales y " : ""}los turnos confirmados posteriores al {thread.document.context.through_turn}. El historial anterior permanece guardado.</p>}
     {thread.status === "loading" && <p role="status">Recuperando historial…</p>}
+    {thread.document?.next_cursor && <button disabled={busy} onClick={() => void controller.chat.refresh(state.activeId, true)}>Ver mensajes anteriores</button>}
     <ol className="chat-turns" aria-label="Historial de la conversación">
       {thread.document?.turns.map(turn => <li key={turn.operation_id} className="chat-turn">
         <article className="chat-message chat-user" aria-label={`Tu mensaje ${turn.number}`}>
@@ -67,72 +100,74 @@ export function Chat({controller, onExample, onTools}: {
           <h2>Luna</h2>
           {turn.state === "succeeded" ? <p>{turn.assistant_text}</p> :
             <p>{turn.state === "failed" ? "Este intento falló. No hay respuesta confirmada." : turn.state === "generating" ? "Respuesta en proceso; consulta su estado." : "Resultado incierto; consulta su estado antes de enviar otro mensaje."}</p>}
+          <p className="chat-note">Contexto usado · revisión {turn.context_revision}</p>
           <ChatUsageDetails usage={turn.usage} />
         </article>
       </li>)}
     </ol>
     <div role="status" aria-live="polite" className="chat-status">
-      {thread.status === "sending" ? "Consultando el servidor…" :
-        thread.document?.turns.at(-1)?.state === "succeeded" ? "Respuesta confirmada. Puedes continuar la conversación." : ""}
+      {thread.status === "sending" ? "Consultando el servidor…" : thread.contextNotice ||
+        (thread.document?.turns.at(-1)?.state === "succeeded" ? "Respuesta confirmada. Puedes continuar la conversación." : "")}
     </div>
     {thread.error && <p role="alert" className="chat-error">{thread.error}</p>}
-    {thread.pending && <button className="primary" disabled={busy} onClick={() => void controller.chat.recover()}>Consultar estado del envío</button>}
-    <form className="chat-composer" onSubmit={event => { event.preventDefault(); void controller.chat.submit(); }}>
-      <label htmlFor="chat-message">Mensaje para Luna</label>
-      <textarea id="chat-message" ref={input} value={thread.draft} disabled={!!thread.pending}
-        placeholder="Cuéntame qué necesitas para tu clase…" aria-describedby="chat-input-hint"
-        onChange={event => controller.chat.setDraft(event.target.value)}
-        onKeyDown={event => {
-          if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && !event.nativeEvent.isComposing) {
-            event.preventDefault(); void controller.chat.submit();
-          }
-        }} />
-      <div className="chat-composer-actions">
-        <p id="chat-input-hint">Hasta 4096 caracteres y 8192 bytes · Ctrl/⌘ + Enter</p>
-        <button type="submit" className="primary" disabled={busy || !!thread.pending || thread.needsRefresh || !thread.draft.trim() || state.availability !== "available"}>
-          <Icon name="send" small /> Enviar mensaje
-        </button>
+    {!state.activeLoaded && !busy && !archive && <button onClick={() => void controller.chat.openActive()}>Recuperar chat activo</button>}
+    {thread.needsRefresh && <p role="status">Actualiza el historial y revisa el contexto antes de continuar.</p>}
+    {thread.pending && <button className="primary" disabled={busy} onClick={() => void controller.chat.recover()}>{thread.pending.kind === "context" ? "Consultar estado del cambio de contexto" : "Consultar estado del envío"}</button>}
+    {!archive && <>
+      <form className="chat-composer" onSubmit={event => { event.preventDefault(); void controller.chat.submit(); }}>
+        <label htmlFor="chat-message">Mensaje para Luna</label>
+        <textarea id="chat-message" ref={input} value={thread.draft} disabled={!!thread.pending}
+          placeholder="Cuéntame qué necesitas para tu clase…" aria-describedby="chat-input-hint"
+          onChange={event => controller.chat.setDraft(event.target.value)}
+          onKeyDown={event => {
+            if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && !event.nativeEvent.isComposing) {
+              event.preventDefault(); void controller.chat.submit();
+            }
+          }} />
+        <div className="chat-composer-actions">
+          <p id="chat-input-hint">Hasta 4096 caracteres y 8192 bytes · Ctrl/⌘ + Enter</p>
+          <button type="submit" className="primary" disabled={busy || !!thread.pending || thread.needsRefresh || !state.activeLoaded || !thread.draft.trim() || state.availability !== "available"}>
+            <Icon name="send" small /> Enviar mensaje
+          </button>
+        </div>
+      </form>
+      {state.availability === "unavailable" && <div className="chat-availability">
+        <p role="status">El chat no está disponible en este momento. Tu texto permanece en esta pestaña.</p>
+        <button onClick={() => void controller.chat.loadAvailability()}>Comprobar disponibilidad</button>
+      </div>}
+      {state.availability === "loading" && <p role="status">Comprobando disponibilidad del chat…</p>}
+      <p className="chat-note">Consultar el historial o guardar contexto no inicia una generación. Los textos sin guardar sólo permanecen en esta pestaña mientras tu sesión siga válida.</p>
+      <div className="tool-tray">
+        <button onClick={() => controller.navigate("planning")}><Icon name="document" small />Crear planeación</button>
+        <button onClick={onExample}>Ajustar planeación</button>
+        <button onClick={() => controller.navigate("resources")}><Icon name="folder-small" small />Mis recursos</button>
+        <button onClick={onTools}>Más herramientas ⌄</button>
       </div>
-    </form>
-    {state.availability === "unavailable" && <div className="chat-availability">
-      <p role="status">El chat no está disponible en este momento. Tu texto permanece en esta pestaña.</p>
-      <button onClick={() => void controller.chat.loadAvailability()}>Comprobar disponibilidad</button>
-    </div>}
-    {state.availability === "loading" && <p role="status">Comprobando disponibilidad del chat…</p>}
-    <p className="chat-note">El servidor usa los turnos confirmados de esta conversación como contexto. Consultar el historial no inicia una generación. El texto sin enviar sólo permanece en esta pestaña mientras tu sesión siga válida.</p>
-    <div className="tool-tray">
-      <button onClick={() => controller.navigate("planning")}><Icon name="document" small />Crear planeación</button>
-      <button onClick={onExample}>Ajustar planeación</button>
-      <button onClick={() => controller.navigate("resources")}><Icon name="folder-small" small />Mis recursos</button>
-      <button onClick={onTools}>Más herramientas ⌄</button>
-    </div>
+    </>}
+    {contextOpen && thread.document && !archive && <ContextEditor controller={controller} onClose={() => setContextOpen(false)} />}
   </section>;
 }
 export function Conversations({controller}: {controller: AcentaController}) {
   const state = useSyncExternalStore(controller.chat.subscribe, controller.chat.snapshot);
   useEffect(() => { void controller.chat.list(); }, [controller]);
-  const pending = controller.chat.pendingDrafts();
+  const archived = state.items.filter(item => !item.active);
   return <section className="chat-panel">
-    <h1>Conversaciones</h1>
-    <p>Historial privado de esta cuenta. Abrir una conversación no genera otro turno.</p>
+    <h1>Archivo anterior</h1>
+    <p>Se continúa el chat más recientemente actualizado al habilitar el chat único; en caso de empate, se usa su identificador. Las demás conversaciones se conservan aquí, sin mezclar su contenido y sólo para consulta.</p>
     <div className="chat-toolbar">
-      <button onClick={() => controller.navigate("home")}>Nueva conversación</button>
-      <button disabled={state.listStatus === "loading"} onClick={() => void controller.chat.list()}>Actualizar conversaciones</button>
+      <button onClick={() => controller.navigate("home")}>Volver al chat activo</button>
+      <button disabled={state.listStatus === "loading"} onClick={() => void controller.chat.list()}>Actualizar archivo</button>
     </div>
-    {!!pending.length && <section className="chat-drafts" aria-label="Texto pendiente en esta pestaña">
-      <h2>Texto pendiente en esta pestaña</h2>
-      {pending.map(item => <button key={item.id ?? "new"} onClick={() => item.id ? controller.openChat(item.id) : controller.navigate("home")}>{item.title} · Retomar</button>)}
-    </section>}
-    {state.listStatus === "loading" && <p role="status">Recuperando conversaciones…</p>}
+    {state.listStatus === "loading" && <p role="status">Recuperando archivo…</p>}
     {state.listError && <p role="alert">{state.listError}</p>}
-    {state.listStatus === "ready" && !state.items.length && <p>Aún no tienes conversaciones guardadas.</p>}
+    {state.listStatus === "ready" && !archived.length && <p>{state.cursor ? "No hay historiales anteriores en esta página." : "No hay historiales anteriores guardados."}</p>}
     <ul className="chat-list">
-      {state.items.map(item => <li key={item.id}>
-        <h2>{item.title || "Nueva conversación"}</h2>
+      {archived.map(item => <li key={item.id}>
+        <h2>{item.title || "Historial anterior"}</h2>
         <p>{item.version} intentos · <time dateTime={item.updated_at}>{new Date(item.updated_at).toLocaleString("es-MX")}</time></p>
-        <button data-navigation-focus={`chat-${item.id}`} onClick={() => controller.openChat(item.id)}>Abrir conversación</button>
+        <button data-navigation-focus={`chat-${item.id}`} onClick={() => controller.openChat(item.id)}>Consultar historial anterior</button>
       </li>)}
     </ul>
-    {state.cursor && <button disabled={state.listStatus === "loading"} onClick={() => void controller.chat.list(true)}>Ver más conversaciones</button>}
+    {state.cursor && <button disabled={state.listStatus === "loading"} onClick={() => void controller.chat.list(true)}>Ver más del archivo</button>}
   </section>;
 }

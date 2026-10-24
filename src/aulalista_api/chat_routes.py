@@ -9,7 +9,7 @@ from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
 from aulalista_api.chat import Conversations
-from aulalista_api.chat_models import CreateConversation, TurnRequest
+from aulalista_api.chat_models import ContextRequest, CreateConversation, TurnRequest
 from aulalista_api.material_routes import Actor, Operation, bounded_content
 from aulalista_api.materials import MaterialError
 
@@ -38,6 +38,10 @@ def install_chat_routes(app: FastAPI, engine, *, provider=None, profile=None):
     def capability(scope_id: UUID, actor: Actor):
         return response(service.capability(actor, scope_id))
 
+    @app.get("/scopes/{scope_id}/active-conversation")
+    def active(scope_id: UUID, actor: Actor):
+        return response(service.active(actor, scope_id))
+
     @app.get("/scopes/{scope_id}/conversations")
     def listing(
         scope_id: UUID,
@@ -61,8 +65,49 @@ def install_chat_routes(app: FastAPI, engine, *, provider=None, profile=None):
         return response(service.read(actor, scope_id, creation_operation=operation_id))
 
     @app.get("/scopes/{scope_id}/conversations/{conversation_id}")
-    def read(scope_id: UUID, conversation_id: UUID, actor: Actor):
-        return response(service.read(actor, scope_id, conversation_id))
+    def read(
+        scope_id: UUID,
+        conversation_id: UUID,
+        actor: Actor,
+        cursor: Annotated[int | None, Query(ge=1, le=2_147_483_647)] = None,
+        limit: Annotated[int, Query(ge=1, le=50)] = 20,
+    ):
+        return response(
+            service.read(actor, scope_id, conversation_id, cursor=cursor, limit=limit)
+        )
+
+    @app.get(
+        "/scopes/{scope_id}/conversations/{conversation_id}/context-operations/{operation_id}"
+    )
+    def context_operation(
+        scope_id: UUID, conversation_id: UUID, operation_id: UUID, actor: Actor
+    ):
+        return response(
+            service.context_operation(actor, scope_id, conversation_id, operation_id)
+        )
+
+    @app.post(
+        "/scopes/{scope_id}/conversations/{conversation_id}/context", status_code=201
+    )
+    async def update_context(
+        scope_id: UUID,
+        conversation_id: UUID,
+        actor: Actor,
+        operation: Operation,
+        request: Request,
+    ):
+        body = await parse_body(request, ContextRequest)
+        return response(
+            await run_in_threadpool(
+                service.update_context,
+                actor,
+                scope_id,
+                conversation_id,
+                operation,
+                body,
+            ),
+            201,
+        )
 
     @app.get(
         "/scopes/{scope_id}/conversations/{conversation_id}/operations/{operation_id}"

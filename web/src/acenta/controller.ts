@@ -596,7 +596,7 @@ export class AcentaController {
   }
   navigate(view: View) {
     if (this.state.closed || this.suspended) return;
-    if (view === "home") this.chat.newConversation();
+    if (view === "home") void this.chat.openActive();
     this.analyticExplorer.close();
     const listState = this.leaveReads();
     this.closeOriginal();
@@ -617,7 +617,7 @@ export class AcentaController {
     const listState = this.leaveReads();
     this.closeOriginal();
     // Navigation never replaces the editor buffer or the next request's source.
-    if (location.view === "home") this.chat.newConversation();
+    if (location.view === "home") void this.chat.openActive();
     if (location.view === "chat" && location.chatId) void this.chat.open(location.chatId);
     this.emit({ view: location.view, listState, error: "", chatId: location.chatId ?? null,
       ...(location.view === "result" ? { result: location.result } : {}) });

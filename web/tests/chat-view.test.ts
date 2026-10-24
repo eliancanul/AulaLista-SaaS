@@ -37,14 +37,14 @@ it("shows an accessible text-only composer and preserves planning entry points",
   expect(html).toContain("Enviar mensaje"); expect(html).toContain("Crear planeación"); expect(html).toContain("Ajustar planeación");
   expect(html).toContain("Mis recursos"); expect(html).not.toContain("Adjuntar");
 });
-it("history errors differ from empty state and retained drafts stay discoverable", async () => {
+it("archive errors differ from empty state and do not expose drafts", async () => {
   const server = new ChatServer(), c = new AcentaController(new AcentaApi(session, server.transport));
   c.chat.setDraft("Privado sin confirmar"); server.intercept = () => json({detail: "unavailable"}, 503);
   await c.chat.list(); let html = renderToStaticMarkup(createElement(Conversations, {controller: c}));
-  expect(html).toContain('role="alert"'); expect(html).not.toContain("Aún no tienes conversaciones");
-  expect(html).toContain("Texto pendiente en esta pestaña"); expect(html).not.toContain("Privado sin confirmar");
+  expect(html).toContain('role="alert"'); expect(html).not.toContain("No hay historiales anteriores");
+  expect(html).toContain("Volver al chat activo"); expect(html).not.toContain("Privado sin confirmar");
   server.intercept = undefined; await c.chat.list(); html = renderToStaticMarkup(createElement(Conversations, {controller: c}));
-  expect(html).toContain("Aún no tienes conversaciones");
+  expect(html).toContain("No hay historiales anteriores");
 });
 function authenticated() {
   const server = new ChatServer();
@@ -63,7 +63,7 @@ function authenticated() {
 }
 it("actual auth wrapper attaches CSRF to chat writes and purges memory on logout", async () => {
   const {auth, server} = authenticated(); await auth.start(); const c = auth.snapshot().controller!;
-  await c.chat.loadAvailability(); c.chat.setDraft("Mensaje autenticado"); await c.chat.submit();
+  await c.chat.loadAvailability(); await c.chat.openActive(); c.chat.setDraft("Mensaje autenticado"); await c.chat.submit();
   expect(server.calls.filter(call => call.method === "POST").map(call => new Headers(call.init.headers).get("X-CSRF-Token"))).toEqual(["chat-session-csrf", "chat-session-csrf"]);
   c.chat.setDraft("Texto aún sin enviar"); await auth.logout();
   expect(c.snapshot().closed).toBe(true); expect(c.chat.hasUnsavedChanges()).toBe(false);
@@ -71,7 +71,7 @@ it("actual auth wrapper attaches CSRF to chat writes and purges memory on logout
 });
 it.each([401, 403])("auth status %i clears drafts and rejects the late private response", async status => {
   const {auth, deny} = authenticated(); await auth.start(); const c = auth.snapshot().controller!;
-  await c.chat.loadAvailability(); c.chat.setDraft("Texto privado"); deny(status); await c.chat.submit();
+  await c.chat.loadAvailability(); await c.chat.openActive(); c.chat.setDraft("Texto privado"); deny(status); await c.chat.submit();
   expect(c.snapshot().closed).toBe(true); expect(c.chat.hasUnsavedChanges()).toBe(false);
   expect(JSON.stringify(c.chat.snapshot())).not.toContain("Texto privado");
 });
@@ -84,7 +84,7 @@ it("revalidation of a different account discards the previous chat controller", 
 });
 it("auth suspension keeps pending memory but admits a response only after matching session recovery", async () => {
   const {auth, server} = authenticated(); await auth.start(); const c = auth.snapshot().controller!;
-  await c.chat.loadAvailability(); server.documents.set(chatId, chatDocument()); await c.chat.open(chatId);
+  await c.chat.loadAvailability(); await c.chat.openActive(); server.documents.set(chatId, chatDocument()); await c.chat.open(chatId);
   const gate = deferredResponse(); let confirmed: Response;
   server.intercept = call => { if (call.method === "POST") {confirmed = server.handle(call); return gate.promise;} };
   c.chat.setDraft("Envío privado pendiente"); const sending = c.chat.submit(); auth.suspend();
@@ -116,7 +116,7 @@ it.each(["durable uncertain turn", "lost creation with GET 404"] as const)("expl
     server.documents.set(chatId, appendTurn(chatDocument(), crypto.randomUUID(), "Intento incierto privado", "uncertain"));
     await c.chat.open(chatId); await c.chat.recover();
   } else {
-    await c.chat.loadAvailability();
+    await c.chat.loadAvailability(); await c.chat.openActive();
     server.intercept = call => { if (call.path === "conversations" && call.method === "POST") throw Error("Request delivery unknown"); };
     c.chat.setDraft("Creación privada sin confirmar"); await c.chat.submit(); await c.chat.recover();
     expect(server.calls.at(-1)?.path).toMatch(/^conversation-operations\//);
