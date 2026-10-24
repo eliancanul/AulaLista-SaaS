@@ -46,7 +46,8 @@ async function fillManual(page: Page, input: typeof cases[number]) {
   await page.getByLabel("Situación hipotética", { exact: true }).setChecked(input.hypothetical);
 }
 
-test("success: two manual v3 forms remain independent through save/reopen/print", async ({ page }, info) => {
+for (const mode of ["success", "window"]) {
+test(`${mode}: two manual v3 forms remain independent through save/reopen/print`, async ({ page }, info) => {
   // Replace only the OS print dialog. The existing print projection still renders
   // its confirmed document; this is not a claim that a physical printer worked.
   await page.addInitScript(() => {
@@ -197,6 +198,8 @@ test("success: two manual v3 forms remain independent through save/reopen/print"
   expect(external).toEqual([]);
 });
 
+
+}
 
 test("uncertain: timeout stops generation and repeated GETs never publish a result", async ({ page }) => {
   const privateCalls: { method: string; path: string }[] = [];

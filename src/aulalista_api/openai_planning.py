@@ -19,6 +19,9 @@ import requests
 
 MODEL = "gpt-6-luna"
 MAX_INPUT_TOKENS = 2048
+MODEL_CONTEXT_TOKENS = 1_050_000
+# Standard long-context rates: 2x input, 1.5x output, no cache writes/tools.
+WINDOW_RESERVE_USD = Decimal("0.210768")
 MAX_OUTPUT_TOKENS = 1024
 MAX_RESPONSE_BYTES = 65536
 MAX_PAYLOAD_BYTES = 32768
@@ -234,9 +237,15 @@ class _NoRedirectSession(requests.Session):
 class OpenAIPlanning:
     protected_placeholder: str | None = field(default=None, repr=False)
     transport: Transport | None = field(default=None, repr=False)
+    input_token_limit: int = field(default=MAX_INPUT_TOKENS, kw_only=True)
     server_api_key: str | None = field(default=None, repr=False, kw_only=True)
 
     def __post_init__(self):
+        if type(self.input_token_limit) is not int or self.input_token_limit not in {
+            MAX_INPUT_TOKENS,
+            MODEL_CONTEXT_TOKENS,
+        }:
+            raise ProviderError("provider_unconfigured", uncertain=False)
         credentials = [
             value
             for value in (self.protected_placeholder, self.server_api_key)
@@ -354,7 +363,9 @@ class OpenAIPlanning:
             ):
                 raise ProviderError("provider_profile_mismatch")
             usage = response["usage"]
-            input_tokens = _tokens(usage["input_tokens"], MAX_INPUT_TOKENS, minimum=1)
+            input_tokens = _tokens(
+                usage["input_tokens"], self.input_token_limit, minimum=1
+            )
             output_tokens = _tokens(
                 usage["output_tokens"], MAX_OUTPUT_TOKENS, minimum=1
             )

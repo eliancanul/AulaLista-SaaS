@@ -65,7 +65,7 @@ jobs:
       - name: Test installed API and configuration
         run: uv run --locked --no-editable pytest tests/test_app.py tests/test_config.py tests/test_pilot_configuration.py tests/test_pilot_runtime.py tests/test_browser_runner.py tests/test_auth_unit.py tests/test_auth_google_signature.py tests/test_web.py tests/test_web_packaging.py tests/test_planning_result.py tests/test_guided_planning.py tests/test_analytic_sections.py tests/test_generated_contract.py tests/test_openai_planning.py tests/test_promptfoo.py
       - name: Required PostgreSQL integration tests (no skip or fallback)
-        run: uv run --locked --no-editable pytest tests/test_postgres.py tests/test_materials.py tests/test_plannings.py tests/test_water_fixture.py tests/test_attachment_fixtures.py tests/test_planning_edits.py tests/test_auth_integration.py tests/test_auth_proxy.py tests/test_guided_planning_integration.py tests/test_analytic_sections_integration.py tests/test_planning_generation.py tests/test_generated_routes.py tests/test_manual_generation.py tests/test_pilot_composition.py
+        run: uv run --locked --no-editable pytest tests/test_postgres.py tests/test_materials.py tests/test_plannings.py tests/test_water_fixture.py tests/test_attachment_fixtures.py tests/test_planning_edits.py tests/test_auth_integration.py tests/test_auth_proxy.py tests/test_guided_planning_integration.py tests/test_analytic_sections_integration.py tests/test_planning_generation.py tests/test_generated_routes.py tests/test_manual_generation.py tests/test_pilot_composition.py tests/test_window_generation.py
       - name: Verify PostgreSQL logs exclude private rows and parameters
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}

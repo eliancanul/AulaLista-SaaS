@@ -21,7 +21,6 @@ from sqlalchemy import (
     Index,
     Numeric,
     UniqueConstraint,
-    func,
     select,
     text,
     update,
@@ -29,6 +28,12 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
+from aulalista_api.ai_budget import (
+    GLOBAL_LOCK,
+    BudgetReservation,
+    budget_busy,
+    reserved_total,
+)
 from aulalista_api.auth import AuthError
 from aulalista_api.database import Base
 from aulalista_api.guided_planning import GeneratedPlanningRequest
@@ -37,6 +42,8 @@ from aulalista_api.openai_planning import (
     MAX_INPUT_TOKENS,
     MAX_OUTPUT_TOKENS,
     MODEL,
+    MODEL_CONTEXT_TOKENS,
+    WINDOW_RESERVE_USD,
     ProviderError,
     cost_usd,
     maximum_cost_usd,
@@ -53,11 +60,6 @@ from aulalista_api.plannings import (
 
 DEADLINE_SECONDS = 75
 ACTIVE = ("counting", "generating")
-GLOBAL_LOCK = int.from_bytes(
-    hashlib.sha256(b"aulalista-openai-generation-global-v1").digest()[:8],
-    "big",
-    signed=True,
-)
 
 
 def now():
@@ -85,6 +87,8 @@ class GenerationProfile:
     count_request_reserve_usd: Decimal
     allowed_request_sha256: frozenset[str] | None
     input_policy: str = "exact-input-v1"
+    count_strategy: str = "remote-v1"
+    additional_reserve_usd: Decimal | None = None
 
     def __post_init__(self):
         if not isinstance(self.actor_id, UUID) or not isinstance(self.scope_id, UUID):
@@ -93,7 +97,30 @@ class GenerationProfile:
             r"[\w.-]{1,100}", self.name, re.ASCII
         ):
             raise ValueError("invalid_generation_profile")
-        for amount in (self.budget_usd, self.count_request_reserve_usd):
+        if self.count_strategy not in {"remote-v1", "window-v1"}:
+            raise ValueError("invalid_generation_profile")
+        single = self.count_strategy == "window-v1"
+        if self.additional_reserve_usd is None and not single:
+            object.__setattr__(self, "additional_reserve_usd", Decimal("0"))
+        if not isinstance(self.count_request_reserve_usd, Decimal):
+            raise ValueError("invalid_generation_profile")
+        if single and (
+            self.input_policy != "manual-variable-v1"
+            or self.count_request_reserve_usd != 0
+        ):
+            raise ValueError("invalid_generation_profile")
+        if (
+            not isinstance(self.additional_reserve_usd, Decimal)
+            or not self.additional_reserve_usd.is_finite()
+            or not 0 <= self.additional_reserve_usd < Decimal("100000000")
+            or (not single and self.additional_reserve_usd != 0)
+        ):
+            raise ValueError("invalid_generation_profile")
+        for amount in (
+            (self.budget_usd,)
+            if single
+            else (self.budget_usd, self.count_request_reserve_usd)
+        ):
             if (
                 not isinstance(amount, Decimal)
                 or not amount.is_finite()
@@ -119,6 +146,10 @@ class GenerationProfile:
 
     @property
     def reservation_usd(self):
+        if self.count_strategy == "window-v1":
+            return (WINDOW_RESERVE_USD + self.additional_reserve_usd).quantize(
+                Decimal("0.000000001"), rounding=ROUND_CEILING
+            )
         return (
             maximum_cost_usd(MAX_INPUT_TOKENS) + self.count_request_reserve_usd
         ).quantize(Decimal("0.000000001"), rounding=ROUND_CEILING)
@@ -128,6 +159,8 @@ class GenerationProfile:
         return hashlib.sha256(
             canonical(
                 {
+                    "count_strategy": self.count_strategy,
+                    "additional_reserve_usd": str(self.additional_reserve_usd),
                     "version": "openai-guided-v1",
                     "name": self.name,
                     "actor_id": str(self.actor_id),
@@ -142,7 +175,9 @@ class GenerationProfile:
                         else None
                     ),
                     "model": MODEL,
-                    "max_input_tokens": MAX_INPUT_TOKENS,
+                    "max_input_tokens": MODEL_CONTEXT_TOKENS
+                    if self.count_strategy == "window-v1"
+                    else MAX_INPUT_TOKENS,
                     "max_output_tokens": MAX_OUTPUT_TOKENS,
                     "deadline_seconds": DEADLINE_SECONDS,
                     "max_concurrency": 1,
@@ -178,7 +213,8 @@ class GenerationAttempt(Base):
         ),
         CheckConstraint("reserved_usd > 0", name="ck_generation_reserve"),
         CheckConstraint(
-            "count_requests = 1 AND generation_requests BETWEEN 0 AND 1",
+            "(count_strategy = 'remote-v1' AND count_requests = 1 AND generation_requests BETWEEN 0 AND 1) OR "
+            "(count_strategy = 'window-v1' AND count_requests = 0 AND counted_input_tokens IS NULL AND generation_requests = 1 AND state <> 'counting')",
             name="ck_generation_calls",
         ),
         CheckConstraint("deadline_at > created_at", name="ck_generation_deadline"),
@@ -224,8 +260,8 @@ class GenerationAttempt(Base):
         ),
         CheckConstraint(
             "state NOT IN ('generating','succeeded') OR "
-            "(generation_requests = 1 AND counted_input_tokens IS NOT NULL "
-            "AND counted_input_tokens BETWEEN 1 AND 2048)",
+            "(count_strategy = 'window-v1' OR (generation_requests = 1 AND counted_input_tokens IS NOT NULL "
+            "AND counted_input_tokens BETWEEN 1 AND 2048))",
             name="ck_generation_dispatch",
         ),
     )
@@ -240,6 +276,7 @@ class GenerationAttempt(Base):
     profile_fingerprint: Mapped[str]
     state: Mapped[str]
     reserved_usd: Mapped[Decimal] = mapped_column(Numeric(18, 9))
+    count_strategy: Mapped[str] = mapped_column(server_default="remote-v1")
     count_requests: Mapped[int]
     generation_requests: Mapped[int]
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -379,6 +416,18 @@ class GeneratedPlannings:
             else:
                 if (
                     session.scalar(
+                        select(BudgetReservation.id)
+                        .where(
+                            BudgetReservation.scope_id == scope,
+                            BudgetReservation.operation_id == operation,
+                        )
+                        .limit(1)
+                    )
+                    is not None
+                ):
+                    raise MaterialError(409, "conflict")
+                if (
+                    session.scalar(
                         select(PlanningRevision.id).where(
                             PlanningRevision.scope_id == scope,
                             PlanningRevision.operation_id == operation,
@@ -408,22 +457,11 @@ class GeneratedPlannings:
                     )
                     if source_version_id is None:
                         raise MaterialError(404, "not_found")
-                if (
-                    session.scalar(
-                        select(GenerationAttempt.id)
-                        .where(GenerationAttempt.state.in_((*ACTIVE, "uncertain")))
-                        .limit(1)
-                    )
-                    is not None
-                ):
+                if budget_busy(session):
                     outcome = MaterialError(409, "generation_busy")
                     attempt_id = None
                 else:
-                    reserved = session.scalar(
-                        select(
-                            func.coalesce(func.sum(GenerationAttempt.reserved_usd), 0)
-                        )
-                    )
+                    reserved = reserved_total(session)
                     if (
                         reserved + self.profile.reservation_usd
                         > self.profile.budget_usd
@@ -445,6 +483,10 @@ class GeneratedPlannings:
                             configuration={
                                 "version": "openai-guided-v1",
                                 "input_policy": self.profile.input_policy,
+                                "count_strategy": self.profile.count_strategy,
+                                "additional_reserve_usd": str(
+                                    self.profile.additional_reserve_usd
+                                ),
                                 "provider_payload": {
                                     k: v for k, v in payload.items() if k != "input"
                                 },
@@ -456,7 +498,9 @@ class GeneratedPlannings:
                                     self.profile.count_request_reserve_usd
                                 ),
                                 "reservation_usd": str(self.profile.reservation_usd),
-                                "max_input_tokens": MAX_INPUT_TOKENS,
+                                "max_input_tokens": MODEL_CONTEXT_TOKENS
+                                if self.profile.count_strategy == "window-v1"
+                                else MAX_INPUT_TOKENS,
                                 "max_output_tokens": MAX_OUTPUT_TOKENS,
                                 "deadline_seconds": DEADLINE_SECONDS,
                                 "concurrency": 1,
@@ -464,6 +508,20 @@ class GeneratedPlannings:
                                 "currency": "USD",
                                 "input_usd_per_token": str(cost_usd(1, 0)),
                                 "output_usd_per_token": str(cost_usd(0, 1)),
+                                **(
+                                    {
+                                        "price_bound": {
+                                            "input_usd_per_million": "0.20",
+                                            "output_usd_per_million": "0.75",
+                                            "context_window_tokens": MODEL_CONTEXT_TOKENS,
+                                            "provider_reserve_usd": str(
+                                                WINDOW_RESERVE_USD
+                                            ),
+                                        }
+                                    }
+                                    if self.profile.count_strategy == "window-v1"
+                                    else {}
+                                ),
                                 "request_sha256": fingerprint,
                                 **(
                                     {"approved_request_sha256": fingerprint}
@@ -475,10 +533,17 @@ class GeneratedPlannings:
                                 canonical(payload)
                             ).hexdigest(),
                             profile_fingerprint=self.profile.fingerprint,
-                            state="counting",
+                            state="generating"
+                            if self.profile.count_strategy == "window-v1"
+                            else "counting",
                             reserved_usd=self.profile.reservation_usd,
-                            count_requests=1,
-                            generation_requests=0,
+                            count_strategy=self.profile.count_strategy,
+                            count_requests=0
+                            if self.profile.count_strategy == "window-v1"
+                            else 1,
+                            generation_requests=1
+                            if self.profile.count_strategy == "window-v1"
+                            else 0,
                             created_at=instant,
                             deadline_at=instant + timedelta(seconds=DEADLINE_SECONDS),
                         )
@@ -494,19 +559,27 @@ class GeneratedPlannings:
             # Admission is committed and all authorization/operation locks released.
             if time.monotonic() - started >= DEADLINE_SECONDS:
                 raise ProviderError("operation_expired")
-            counted = self.provider.count(payload)
-            if type(counted) is int and 0 <= counted <= 2_147_483_647:
-                observed["counted_input_tokens"] = counted
-            if type(counted) is not int or not 1 <= counted <= MAX_INPUT_TOKENS:
-                raise ProviderError("provider_input_limit", uncertain=False)
-            with Session(self.engine) as session, session.begin():
-                authorize(session, actor, scope)
-                attempt = session.get(
-                    GenerationAttempt, attempt_id, with_for_update=True
-                )
-                self._require_active(attempt, "counting", started)
-                attempt.counted_input_tokens = counted
-                attempt.state, attempt.generation_requests = "generating", 1
+            if self.profile.count_strategy == "remote-v1":
+                counted = self.provider.count(payload)
+                if type(counted) is int and 0 <= counted <= 2_147_483_647:
+                    observed["counted_input_tokens"] = counted
+                if type(counted) is not int or not 1 <= counted <= MAX_INPUT_TOKENS:
+                    raise ProviderError("provider_input_limit", uncertain=False)
+                with Session(self.engine) as session, session.begin():
+                    authorize(session, actor, scope)
+                    attempt = session.get(
+                        GenerationAttempt, attempt_id, with_for_update=True
+                    )
+                    self._require_active(attempt, "counting", started)
+                    attempt.counted_input_tokens = counted
+                    attempt.state, attempt.generation_requests = "generating", 1
+            else:
+                with Session(self.engine) as session, session.begin():
+                    authorize(session, actor, scope)
+                    attempt = session.get(
+                        GenerationAttempt, attempt_id, with_for_update=True
+                    )
+                    self._require_active(attempt, "generating", started)
             result = self.provider.generate(payload)
             observed.update(
                 {
