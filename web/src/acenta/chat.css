@@ -1,0 +1,39 @@
+.chat-panel { width: min(100%, 880px); margin: 36px auto; display: flex; flex-direction: column; gap: 20px; }
+.chat-heading { display: grid; gap: 12px; }
+.chat-heading h1 { overflow-wrap: anywhere; }
+.chat-heading > p, .chat-note, .chat-availability, .chat-composer-actions > p { color: var(--secondary); }
+.chat-heading .logo { max-width: 180px; }
+.chat-toolbar, .chat-composer-actions, .chat-drafts { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.chat-drafts h2 { width: 100%; font-size: 22px; }
+.chat-turns, .chat-list { padding: 0; list-style: none; display: grid; gap: 28px; }
+.chat-turn { display: grid; gap: 14px; min-width: 0; }
+.chat-message { padding: 20px; border: 1px solid var(--border); border-radius: 16px; background: white; min-width: 0; }
+.chat-message h2 { font-size: 18px; margin-bottom: 12px; }
+.chat-message > p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-user { background: var(--selection); margin-left: min(8%, 60px); }
+.chat-assistant { margin-right: min(8%, 60px); }
+.chat-usage { margin-top: 18px; color: var(--secondary); font-size: 14px; }
+.chat-usage summary { cursor: pointer; }
+.chat-usage dl { display: grid; grid-template-columns: 1fr auto; gap: 8px 16px; }
+.chat-usage dd { margin: 0; overflow-wrap: anywhere; }
+.chat-usage p { max-width: 560px; }
+.chat-composer { display: grid; gap: 12px; padding: 18px; background: white; border: 1px solid var(--border); border-radius: 18px; }
+.chat-composer label { font-weight: 600; }
+.chat-composer textarea { width: 100%; min-height: 110px; max-height: 320px; resize: vertical; border-radius: 8px; padding: 12px; border: 1px solid var(--border); }
+.chat-composer-actions { justify-content: space-between; }
+.chat-composer-actions button { display: flex; gap: 8px; align-items: center; }
+.chat-composer-actions > p { font-size: 14px; }
+.chat-error { color: #962e20; }
+.chat-status:empty { display: none; }
+.chat-note { font-size: 14px; }
+.chat-list > li { display: grid; gap: 12px; padding: 20px; border: 1px solid var(--border); border-radius: 16px; }
+.chat-list h2 { font-size: 24px; overflow-wrap: anywhere; }
+.chat-list button { justify-self: start; }
+@media (max-width: 600px) {
+  .chat-panel { margin: 20px auto; gap: 16px; }
+  .chat-heading h1 { font-size: 34px; }
+  .chat-message { padding: 14px; }
+  .chat-assistant { margin-right: 0; }
+  .chat-usage dl { grid-template-columns: 1fr; gap: 3px; }
+  .chat-usage dd { margin-bottom: 8px; }
+}
