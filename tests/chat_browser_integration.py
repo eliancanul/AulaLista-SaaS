@@ -6,19 +6,21 @@ from pathlib import Path
 from uuid import uuid4
 
 import auth_browser_integration as auth_harness
+import pytest
 from browser_integration import run_process_group
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from test_openai_planning import completed, reply
 
 from aulalista_api.ai_budget import BudgetReservation
-from aulalista_api.auth_models import Identity
+from aulalista_api.auth_models import AuthSession, Identity
 from aulalista_api.chat_models import ChatTurn
-from aulalista_api.openai_planning import OpenAIPlanning
+from aulalista_api.openai_planning import OpenAIPlanning, ProviderError
 from aulalista_api.pilot_runtime import create_window_app
 
 
-def command():
+def command(scenario):
+    marker = "private multi-turn" if scenario == "context" else "uncertain:"
     return [
         "npx",
         "--no-install",
@@ -26,12 +28,15 @@ def command():
         "test",
         "--config",
         "playwright.chat.config.ts",
+        "--grep",
+        marker,
     ]
 
 
-def test_chat_runner_discovers_the_connected_journey():
+@pytest.mark.parametrize("scenario", ["context", "uncertain"])
+def test_chat_runner_discovers_the_connected_journey(scenario):
     result = subprocess.run(
-        [*command(), "--list"],
+        [*command(scenario), "--list"],
         cwd=Path(__file__).resolve().parents[1] / "web",
         capture_output=True,
         text=True,
@@ -41,8 +46,9 @@ def test_chat_runner_discovers_the_connected_journey():
     assert "Total: 1 test in 1 file" in result.stdout
 
 
+@pytest.mark.parametrize("scenario", ["context", "uncertain"])
 def test_chat_two_turns_through_real_auth_browser(
-    runtime_database, actors, monkeypatch
+    runtime_database, actors, monkeypatch, scenario
 ):
     actor, scope = actors[0]
     with Session(runtime_database) as db, db.begin():
@@ -63,6 +69,12 @@ def test_chat_two_turns_through_real_auth_browser(
         assert url == "https://api.openai.com/v1/responses"
         assert payload["text"] == {"format": {"type": "text"}}
         messages = payload["input"]
+        if scenario == "uncertain":
+            assert (
+                messages[0]["content"]
+                == "Provoca incertidumbre sintética sin datos privados."
+            )
+            raise ProviderError("provider_timeout")
         if len(messages) == 1:
             assert (
                 messages[0]["content"]
@@ -105,18 +117,29 @@ def test_chat_two_turns_through_real_auth_browser(
     monkeypatch.setattr(auth_harness, "create_app", create_window_app)
 
     def run_chat(_command, **kwargs):
-        run_process_group([*command(), "--reporter=line"], **kwargs)
+        run_process_group([*command(scenario), "--reporter=line"], **kwargs)
 
     monkeypatch.setattr(auth_harness, "run_process_group", run_chat)
     auth_harness.test_auth_journey_through_real_api(runtime_database, monkeypatch)
-    assert len(calls) == 2
+    expected_count = 2 if scenario == "context" else 1
+    expected_state = "succeeded" if scenario == "context" else "uncertain"
+    assert len(calls) == expected_count
     with Session(runtime_database) as db:
         turns = db.scalars(select(ChatTurn)).all()
         reservations = db.scalars(select(BudgetReservation)).all()
-        assert len(turns) == len(reservations) == 2
+        assert len(turns) == len(reservations) == expected_count
         assert all(
-            turn.state == "succeeded" and turn.scope_id == scope for turn in turns
+            turn.state == expected_state and turn.scope_id == scope for turn in turns
         )
         assert all(
-            item.kind == "chat" and item.state == "succeeded" for item in reservations
+            item.kind == "chat" and item.state == expected_state
+            for item in reservations
         )
+
+        if scenario == "uncertain":
+            assert turns[0].assistant_text is None
+            assert str(reservations[0].reserved_usd) == "0.210768000"
+            sessions = db.scalars(
+                select(AuthSession).where(AuthSession.principal_id == actor)
+            ).all()
+            assert sessions and all(session.revoked for session in sessions)
