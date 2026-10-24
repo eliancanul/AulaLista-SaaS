@@ -22,6 +22,7 @@ from aulalista_api.auth_models import Identity
 from aulalista_api.materials import MaterialError
 from aulalista_api.openai_planning import BASE_URL, MODEL, OpenAIPlanning, ProviderError
 from aulalista_api.pilot import ManualPilotConfig
+from aulalista_api.pilot_runtime import create_app as create_runtime_app
 from aulalista_api.planning_generation import GenerationAttempt
 
 PILOT_EMAIL = "manual-pilot-a@example.test"
@@ -109,7 +110,7 @@ def test_manual_pilot_through_real_auth_browser(
         )
 
     config = ManualPilotConfig(
-        name="browser-manual-pilot-software-only",
+        name="private-manual-pilot-v1",
         actor_id=actor,
         scope_id=scope,
         budget_usd=Decimal("0.1"),
@@ -119,8 +120,7 @@ def test_manual_pilot_through_real_auth_browser(
         destination=BASE_URL,
         model=MODEL,
     )
-    provider = OpenAIPlanning("software-placeholder-only", transport=transport)
-    profile = config.generation_profile(provider)
+    profile = config.validated_profile()
     expected_actor, expected_scope = actor, scope
     if scenario == "busy":
         # Seed a real durable uncertain attempt belonging to a different actor.
@@ -154,11 +154,21 @@ def test_manual_pilot_through_real_auth_browser(
             service.engine.dispose()
         assert len(seed_calls) == 1
 
+    for key, value in {
+        "AULALISTA_PILOT_ENABLED": "true",
+        "AULALISTA_PILOT_ACTOR_ID": str(actor),
+        "AULALISTA_PILOT_SCOPE_ID": str(scope),
+        "AULALISTA_PILOT_BUDGET_USD": str(config.budget_usd),
+        "AULALISTA_PILOT_COUNT_RESERVE_USD": str(config.count_request_reserve_usd),
+        "OPENAI_API_KEY": "software-server-credential-only",
+    }.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setattr(
+        OpenAIPlanning, "_send", lambda self, url, payload: transport(url, payload)
+    )
+
     def pilot_app():
-        app = create_app(
-            planning_provider=provider,
-            pilot_config=config,
-        )
+        app = create_runtime_app()
         assert not app.dependency_overrides
         return app
 

@@ -97,12 +97,14 @@ en el error. Los límites de tokens, concurrencia, plazos y reintentos no son
 opciones configurables nuevas. Se conserva la inyección técnica anterior de
 `generation_profile`, incluida su política exact-input, sin cambiar su contrato.
 
-El proveedor se inyecta por separado con `protected_placeholder`: un marcador
-de Network secret protegido y verificado en el entorno autorizado, no una API
-key literal. Ni el tipo `OpenAIPlanning` ni una cadena no vacía prueban esa
-procedencia, protección, permisos o acceso al destino. No se inventa una regex
-para certificar secretos y no se lee `OPENAI_API_KEY`. Las pruebas usan un
-marcador sintético **junto con transporte falso**, nunca con transporte de red.
+El proveedor se inyecta por separado. `protected_placeholder` identifica el
+marcador de un Network secret protegido y verificado en Codex; `server_api_key`
+identifica una credencial privada del servidor, como la suministrada al runtime
+de Render. Los modos son explícitos y mutuamente excluyentes. Un servidor no
+obtiene sustitución de marcadores por tener una variable de entorno; no se
+presupone un proxy de Codex en Render. Ni el tipo `OpenAIPlanning` ni una cadena
+no vacía prueban protección, permisos o acceso al destino. El adaptador no busca
+credenciales. Las pruebas usan valores sintéticos **con transporte falso**.
 La [ruta ejecutable offline](../development.md#componer-el-piloto-manual-offline-68)
 demuestra la configuración y el recorrido sin activar un proveedor real.
 
@@ -128,6 +130,48 @@ propia, revisión independiente y CI exacta. Permisos de transmisión, categorí
 de datos, cuenta/proyecto, protección del secreto, tarifas/saldo, destino de
 servicio, auth, retención y recuperación siguen siendo puertas independientes;
 aprobar software no autoriza credenciales, gastos, despliegue ni uso real.
+
+### Arranque opt-in del servidor (#69)
+
+`aulalista_api.pilot_runtime:create_app` es el factory de servidor explícito;
+`aulalista_api.app:create_app` conserva su comportamiento cerrado y no lee estas
+variables ni una credencial, aunque estén presentes. El nuevo factory admite
+`AULALISTA_PILOT_ENABLED=false` o ausencia como apagado: sirve el recorrido
+normal sin leer la configuración piloto ni `OPENAI_API_KEY`. Sólo el valor
+exacto `true` solicita composición; cualquier otro valor falla cerrado.
+El interruptor configura capacidad, no acredita autorización operativa.
+
+Al habilitar exige `AULALISTA_PILOT_ACTOR_ID`, `AULALISTA_PILOT_SCOPE_ID`,
+`AULALISTA_PILOT_BUDGET_USD` y `AULALISTA_PILOT_COUNT_RESERVE_USD`. Valida los
+UUID y el perfil no secreto antes de leer la credencial o crear recursos DB.
+Nombre `private-manual-pilot-v1`, proveedor, destino, modelo, política, límites,
+concurrencia y cero reintentos quedan fijados por código. El presupuesto debe
+ser positivo, cubrir una reserva completa y no superar USD 2; la reserva del
+conteo es obligatoria, positiva y sin valor por omisión. No se inventa su tarifa.
+Se conserva precisión de nueve decimales. Configuración incompleta, dinero
+inválido o credencial ausente/inválida produce sólo `invalid_pilot_runtime`.
+
+Después de validar, este factory lee `OPENAI_API_KEY` como secreto privado del
+servidor e inyecta `OpenAIPlanning(server_api_key=...)`. El valor no se incluye
+en repr, errores seguros, configuración durable, UI o logs de la aplicación.
+El operador debe garantizar su procedencia/protección y auditar logs externos;
+la variable no es un Network secret de Codex. Esta preparación no lee ni
+configura una credencial real y no autoriza su transmisión.
+
+La admisión reutiliza el ledger y lock globales existentes. El techo configurado
+se compara con la suma de **todas** las reservas retenidas de la misma DB, entre
+actores, estados, procesos y reinicios; no es un presupuesto nuevo por proceso.
+Todos los procesos habilitados deben usar el mismo techo conservador de hasta
+USD 2. El consumo de este encargo fuera de ese ledger y los costes adicionales
+deben descontarse antes de configurarlo: el factory no consulta el saldo ni
+impone un límite a otros consumidores de la cuenta OpenAI. Cerrar exige apagar
+o retirar la composición en todos los procesos; conserva intentos y reservas.
+
+Las pruebas de configuración no abren red. `test_pilot_composition.py` recorre
+la inyección anterior y el nuevo arranque con auth/CSRF/PostgreSQL y transportes
+sintéticos; verifica reinicio sin presupuesto fresco. El runner Chromium usa
+el factory de servidor y una credencial sintética, sustituyendo únicamente el
+transporte externo del modelo y el correo. No acredita una llamada real.
 
 ## Intento, presupuesto y recuperación
 
@@ -231,13 +275,17 @@ Los mocks UI de `guided.browser.ts` no publican resultado mientras están
 pendientes y nunca convierten incertidumbre en éxito. Son fixtures de UI, no
 evidencia del backend ni sustituto de Chromium conectado/PDF inspeccionado.
 
-Antes de una llamada real: verificar en metadatos seguros `OPENAI_API_KEY` de tipo
-Network secret ligado únicamente al destino autorizado `api.openai.com`; entrada
+Antes de una llamada real: verificar la credencial existente y su cuenta/proyecto
+mediante metadatos seguros. En Codex, Network secret ligado únicamente a
+`api.openai.com`; en servidor, entrega privada server-side al factory opt-in,
+sin exponer el valor en código, cliente, logs o historial y sin simular un proxy.
+Verificar entrada
 real exacta aprobada para exact-input o categoría manual variable acotada y
 autorizada para el piloto, con actor/ámbito y límites de sesión/periodo/volumen
 definidos; cuenta/proyecto y permiso tanto de conteo como generación;
-precio/costo del conteo; tarifas vigentes, impuestos/conversión, saldo remanente
-dentro de MXN 100 totales ya recargados; revisión independiente y límite de gasto
+precio/costo del conteo; tarifas vigentes, impuestos/conversión y saldo remanente
+dentro del límite de USD 2 totales para este encargo, descontando gasto ya realizado
+y sin presumir saldo o recargas históricas; revisión independiente y límite de gasto
 efectivo. Sin esos datos, no activar ni recargar. `store=false` no promete cero
 retención del proveedor.
 

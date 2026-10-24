@@ -6,6 +6,7 @@ PYTEST_DONT_REWRITE: never expand session/CSRF/OTP arguments on failure.
 import json
 from copy import deepcopy
 from dataclasses import replace
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
@@ -23,6 +24,7 @@ from test_pilot_configuration import pilot_config
 from aulalista_api.app import create_app
 from aulalista_api.auth_models import Identity
 from aulalista_api.openai_planning import OpenAIPlanning, ProviderError
+from aulalista_api.pilot_runtime import create_app as create_runtime_app
 from aulalista_api.planning_generation import GenerationAttempt
 
 
@@ -43,16 +45,39 @@ def composed(auth_factory, runtime_database, actors):
     return pilot_config(actor_id=actor, scope_id=scope)
 
 
-def application(config, transport):
-    app = create_app(
-        pilot_config=config,
-        planning_provider=OpenAIPlanning(
-            "software-placeholder-only", transport=transport
-        ),
-    )
-    app.state.auth.sender = CapturingSender()
-    assert not app.dependency_overrides
-    return app
+@pytest.fixture(params=["injected", "server-runtime"])
+def application(request, monkeypatch):
+    def build(config, transport):
+        if request.param == "injected":
+            app = create_app(
+                pilot_config=config,
+                planning_provider=OpenAIPlanning(
+                    "software-placeholder-only", transport=transport
+                ),
+            )
+        else:
+            for key, value in {
+                "AULALISTA_PILOT_ENABLED": "true",
+                "AULALISTA_PILOT_ACTOR_ID": str(config.actor_id),
+                "AULALISTA_PILOT_SCOPE_ID": str(config.scope_id),
+                "AULALISTA_PILOT_BUDGET_USD": str(config.budget_usd),
+                "AULALISTA_PILOT_COUNT_RESERVE_USD": str(
+                    config.count_request_reserve_usd
+                ),
+                "OPENAI_API_KEY": "software-server-credential-only",
+            }.items():
+                monkeypatch.setenv(key, value)
+            monkeypatch.setattr(
+                OpenAIPlanning,
+                "_send",
+                lambda self, url, payload: transport(url, payload),
+            )
+            app = create_runtime_app()
+        app.state.auth.sender = CapturingSender()
+        assert not app.dependency_overrides
+        return app
+
+    return build
 
 
 def sign_in(client):
@@ -83,7 +108,9 @@ def ledger(engine):
         ]
 
 
-def test_composed_two_inputs_edit_reopen_and_restart_closed(composed, runtime_database):
+def test_composed_two_inputs_edit_reopen_and_restart_closed(
+    composed, runtime_database, application
+):
     provider_response = completed()
     provider_response["output"][0]["content"][0]["text"] = json.dumps(provider_output())
     transport = Transport(
@@ -158,7 +185,7 @@ def test_composed_two_inputs_edit_reopen_and_restart_closed(composed, runtime_da
 
 @pytest.mark.parametrize("stage", ["count", "generate"])
 def test_composition_uncertainty_and_reserve_survive_close_reopen(
-    composed, runtime_database, stage
+    composed, runtime_database, stage, application
 ):
     calls = []
 
@@ -204,7 +231,7 @@ def test_composition_uncertainty_and_reserve_survive_close_reopen(
 
 
 def test_composition_rejects_unauthorized_inputs_before_transport(
-    composed, runtime_database
+    composed, runtime_database, application
 ):
     transport = Transport()
     app = application(composed, transport)
@@ -229,3 +256,41 @@ def test_composition_rejects_unauthorized_inputs_before_transport(
             }
     assert ledger(runtime_database) == []
     assert transport.calls == []
+
+
+def test_global_budget_survives_a_new_factory(composed, runtime_database, application):
+    config = replace(
+        composed,
+        budget_usd=Decimal("2"),
+        count_request_reserve_usd=Decimal("1"),
+    )
+    result = completed()
+    result["output"][0]["content"][0]["text"] = json.dumps(provider_output())
+    transport = Transport(
+        reply({"object": "response.input_tokens", "input_tokens": 120}), reply(result)
+    )
+    with TestClient(application(config, transport), base_url=ORIGIN) as client:
+        scope, headers = sign_in(client)
+        original = submit(client, scope, headers=headers)
+        assert original.status_code == 201
+        before = ledger(runtime_database)
+        assert len(before) == 1
+        assert before[0][5] == Decimal("1.000716800")
+        with TestClient(application(config, transport), base_url=ORIGIN) as restarted:
+            restarted.cookies.update(client.cookies)
+            blocked = submit(restarted, scope, headers=headers)
+            assert blocked.status_code == 429
+            assert blocked.json() == {"detail": "generation_budget_exhausted"}
+            saved = original.json()
+            assert (
+                submit(
+                    restarted,
+                    scope,
+                    saved["request"],
+                    saved["receipt"]["operation_id"],
+                    headers,
+                ).json()
+                == saved
+            )
+        assert ledger(runtime_database) == before
+    assert len(transport.calls) == 2

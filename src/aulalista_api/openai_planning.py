@@ -1,7 +1,8 @@
 """Small, bounded OpenAI transport. Authorization and durable admission live above it.
 
-Only a verified platform network-secret placeholder may be supplied; this module
-never discovers credentials. Counting also transmits content and needs permission.
+Credentials are explicitly injected as a platform Network-secret placeholder or
+a server-side API key. This module never discovers credentials. Counting also
+transmits content and needs permission.
 Prices are the Standard short-context rates observed on 2026-10-18, not an invoice.
 Revalidate the model/rates and all execution gates before a real request.
 """
@@ -213,12 +214,12 @@ def maximum_cost_usd(input_tokens: int) -> Decimal:
     return cost_usd(input_tokens, MAX_OUTPUT_TOKENS)
 
 
-class _PlaceholderAuth(requests.auth.AuthBase):
-    def __init__(self, placeholder: str):
-        self._placeholder = placeholder
+class _BearerAuth(requests.auth.AuthBase):
+    def __init__(self, credential: str):
+        self._credential = credential
 
     def __call__(self, request):
-        request.headers["Authorization"] = "Bearer " + self._placeholder
+        request.headers["Authorization"] = "Bearer " + self._credential
         return request
 
 
@@ -231,16 +232,23 @@ class _NoRedirectSession(requests.Session):
 
 @dataclass
 class OpenAIPlanning:
-    protected_placeholder: str = field(repr=False)
+    protected_placeholder: str | None = field(default=None, repr=False)
     transport: Transport | None = field(default=None, repr=False)
+    server_api_key: str | None = field(default=None, repr=False, kw_only=True)
 
     def __post_init__(self):
+        credentials = [
+            value
+            for value in (self.protected_placeholder, self.server_api_key)
+            if value is not None
+        ]
         if (
-            not isinstance(self.protected_placeholder, str)
-            or not self.protected_placeholder
-            or len(self.protected_placeholder) > 1024
-            or not self.protected_placeholder.isascii()
-            or any(char.isspace() for char in self.protected_placeholder)
+            len(credentials) != 1
+            or not isinstance(credentials[0], str)
+            or not credentials[0]
+            or len(credentials[0]) > 1024
+            or not credentials[0].isascii()
+            or any(char.isspace() for char in credentials[0])
         ):
             raise ProviderError("provider_unconfigured", uncertain=False)
 
@@ -258,7 +266,11 @@ class OpenAIPlanning:
                     "Accept": "application/json",
                     "Accept-Encoding": "identity",
                 },
-                auth=_PlaceholderAuth(self.protected_placeholder),
+                auth=_BearerAuth(
+                    self.server_api_key
+                    if self.server_api_key is not None
+                    else self.protected_placeholder
+                ),
                 stream=True,
                 allow_redirects=False,
                 timeout=(5, 25),

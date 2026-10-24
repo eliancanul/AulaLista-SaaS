@@ -2,7 +2,8 @@
 
 This validates software configuration, not permission, funding, current pricing
 or protection of a credential. The existing provider must be injected separately
-with a verified platform Network-secret placeholder, never a raw API key.
+with an explicit credential source. Server credentials and platform Network
+secrets have different delivery guarantees; neither is certified by this type.
 """
 
 from dataclasses import dataclass
@@ -27,9 +28,14 @@ class ManualPilotConfig:
 
     def generation_profile(self, provider: OpenAIPlanning) -> GenerationProfile:
         """Validate before the factory creates DB resources or invokes a provider."""
+        if not isinstance(provider, OpenAIPlanning):
+            raise ValueError("invalid_manual_pilot")
+        return self.validated_profile()
+
+    def validated_profile(self) -> GenerationProfile:
+        """Validate public configuration before a startup factory reads a secret."""
         if (
-            not isinstance(provider, OpenAIPlanning)
-            or self.provider != "openai"
+            self.provider != "openai"
             or self.destination != BASE_URL
             or self.model != MODEL
             or self.input_policy != "manual-variable-v1"

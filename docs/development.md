@@ -331,8 +331,7 @@ de CI, nunca como equivalencia.
 
 ### Componer el piloto manual offline (#68)
 
-No hay comando que lea claves, archivo JSON, variable de activación ni segundo
-launcher. Se usa el mismo `create_app` con `ManualPilotConfig` no secreto y un
+La composición offline usa el mismo `create_app` con `ManualPilotConfig` no secreto y un
 `OpenAIPlanning` explícito. Este ejemplo sólo demuestra composición sintética;
 su transporte rechaza sin red. Los UUID son ilustrativos, no atajos de sesión.
 Requiere el DSN de desarrollo preparado como arriba, y no escucha en ningún puerto:
@@ -377,8 +376,69 @@ separa `success`, `uncertain` y `busy`. Sólo el transporte externo es falso;
 compilar o listar pruebas no acredita ejecutarlas ni inspeccionar capturas/PDF.
 
 No quitar el transporte falso del ejemplo ni reemplazar el marcador por una
-API key. La composición no verifica protección de un Network secret, permisos,
+API key. La composición no verifica protección de una credencial, permisos,
 tarifas vigentes o saldo. Antes de cualquier uso real resolver el preflight de
 [spec 0013](specs/0013-planeacion-openai.md) y la aceptación operativa #69.
 Cerrar mediante `create_app()` en todos los procesos de admisión conserva la DB
 y la lectura autorizada; no cancela transmisiones inciertas ni libera reservas.
+
+### Preparar el arranque privado del servidor (#69)
+
+Preparación de código y pruebas, sin activación. El factory normal anterior no
+lee `OPENAI_API_KEY`, no habilita generación y sigue siendo el start por omisión.
+El factory alternativo, seleccionado explícitamente por el operador, es:
+
+```sh
+.venv/bin/python -m uvicorn aulalista_api.pilot_runtime:create_app --factory \
+  --host 0.0.0.0 --port "$PORT" --no-access-log --no-proxy-headers
+```
+
+Ese comando es una referencia para el servicio autorizado, no una instrucción
+de desplegar ahora. Build y migraciones permanecen separados; el DSN del servicio
+siempre es el del runtime, nunca el dueño. No se cambia el Blueprint de ejemplo.
+
+Para habilitar después de completar las puertas de #69, hacen falta:
+
+| Variable | Significado |
+| --- | --- |
+| `AULALISTA_PILOT_ENABLED` | Ausente/`false`: cerrado. Sólo `true` compone el piloto. No es prueba de autorización. |
+| `AULALISTA_PILOT_ACTOR_ID` | UUID del principal autenticado autorizado, no el email ni un actor fixture. |
+| `AULALISTA_PILOT_SCOPE_ID` | UUID de su ámbito personal real. |
+| `AULALISTA_PILOT_BUDGET_USD` | Decimal positivo de hasta USD 2, que cubra una reserva y considere el gasto del encargo fuera del ledger. |
+| `AULALISTA_PILOT_COUNT_RESERVE_USD` | Reserva positiva verificada del conteo; obligatoria, sin tarifa inventada ni default. |
+| `OPENAI_API_KEY` | Credencial privada **del servidor**, suministrada por su mecanismo de secretos existente; nunca en Git, cliente, `.env` compartido o argumentos CLI. |
+
+La configuración pública se valida antes de leer la key. Perfil/modelo/destino
+son fijos y no aceptan selectores por entorno. La key se suministra como
+`server_api_key`; `protected_placeholder` sigue reservado a Network secrets de
+Codex con sustitución real comprobada. Render no se considera ese proxy.
+La exclusión de repr no certifica cómo se aprovisionó la credencial.
+
+Secuencia posterior, con autorización propia de activación/despliegue:
+
+1. Confirmar revisión, CI, esquema `0009_planning_branches`, grants runtime y sesión
+   privada; revalidar que no haya otro proceso de admisión con un límite distinto.
+2. Confirmar cuenta/proyecto, destino `api.openai.com`, permisos de conteo y
+   generación, tarifas vigentes, reserva del conteo, costes adicionales y saldo
+   remanente dentro de USD 2 **totales** para el encargo. La cifra `0.0001` del
+   ejemplo offline es sintética, no una tarifa aprobada. No crear credenciales,
+   recargar ni ampliar servicios por seguir esta guía.
+3. Leer sólo agregados del ledger mediante la ruta administrativa autorizada:
+   `count(*)`, `sum(reserved_usd)`, sumas de `count_requests`/`generation_requests`
+   y cantidad de estados `counting`/`generating`/`uncertain`. No mostrar solicitudes,
+   cookies ni claves. Sin consumo observado, el dato sigue desconocido, no cero.
+4. Configurar el mismo techo conservador en todos los procesos. La admisión exige
+   `reservas globales + reserva nueva <= presupuesto`; cambiar actor, nombre,
+   key o proceso no reinicia esa suma. No borrar intentos ni liberar reservas.
+5. Tras activar y comprobar la disponibilidad de la sesión autorizada, ejecutar
+   sólo las dos entradas sintéticas acordadas, secuencialmente, conciliando ledger
+   antes/después. Ante pendiente o incierto, parar y consultar por GET sin reenvío.
+   Lectura, edición, reapertura e impresión nunca generan otra llamada.
+6. Para cerrar, retirar la composición o poner `AULALISTA_PILOT_ENABLED=false`
+   y reiniciar todos los procesos que admiten solicitudes. Confirmar capacidad
+   cerrada y lectura autorizada de lo guardado sin tocar intentos ni presupuesto.
+
+Pruebas deterministas: `tests/test_pilot_runtime.py`, la suite existente
+`tests/test_pilot_composition.py` y `tests/pilot_browser_integration.py`. Sólo usan
+credenciales sintéticas y transportes externos falsos. No ejecutar fixtures de
+integración contra Render ni conectar una credencial real a esas pruebas.
