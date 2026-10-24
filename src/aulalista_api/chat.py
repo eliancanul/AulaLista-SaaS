@@ -434,6 +434,15 @@ class Conversations:
             if revision is not None:
                 if revision.request_fingerprint != fingerprint:
                     raise MaterialError(409, "conflict")
+            elif (
+                session.scalar(
+                    select(ChatTurn.id).where(
+                        ChatTurn.scope_id == scope, ChatTurn.operation_id == operation
+                    )
+                )
+                is not None
+            ):
+                raise MaterialError(409, "conflict")
             elif active_id(session, scope) != conversation.id:
                 raise MaterialError(409, "chat_archived")
             elif (
@@ -524,6 +533,13 @@ class Conversations:
                         select(BudgetReservation.id).where(
                             BudgetReservation.scope_id == scope,
                             BudgetReservation.operation_id == operation,
+                        )
+                    )
+                    is not None
+                    or session.scalar(
+                        select(ContextRevision.revision).where(
+                            ContextRevision.scope_id == scope,
+                            ContextRevision.operation_id == operation,
                         )
                     )
                     is not None

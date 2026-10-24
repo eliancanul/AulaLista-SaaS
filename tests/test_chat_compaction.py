@@ -359,3 +359,55 @@ def test_summary_steps_cannot_be_truncated_even_by_schema_owner(
             len(db.scalars(select(CompactionStep)).all())
             == original["context"]["summary"]["steps"]
         )
+
+
+def test_context_and_turn_keys_cannot_collide_before_compaction_admission(
+    runtime_database, actors
+):
+    actor, scope = actors[0]
+    transport = SyntheticSummary()
+    chat = service(runtime_database, actor, scope, transport)
+    conversation = create(chat, actor, scope)
+    notes_key, turn_key = uuid4(), uuid4()
+    notes_request = context_body(notes=FACTS)
+    notes = chat.update_context(actor, scope, conversation, notes_key, notes_request)
+    first = chat.write(actor, scope, conversation, turn_key, body(FACTS, 0, 1))
+    # This turn needs a summary. Reusing the notes key must be rejected before
+    # reserving or sending, rather than failing the final summary INSERT.
+    assert (
+        fails(
+            "conflict",
+            lambda: chat.write(
+                actor, scope, conversation, notes_key, body("Continue", 1, 1)
+            ),
+        )
+        == 409
+    )
+    assert (
+        fails(
+            "conflict",
+            lambda: chat.update_context(
+                actor, scope, conversation, turn_key, context_body(1, 1, "Other notes")
+            ),
+        )
+        == 409
+    )
+    assert chat.read(actor, scope, conversation) == first
+    assert chat.write(actor, scope, conversation, turn_key, body(FACTS, 0, 1)) == first
+    assert (
+        chat.update_context(actor, scope, conversation, notes_key, notes_request)[
+            "context"
+        ]
+        == notes["context"]
+    )
+    assert len(transport.calls) == 1
+    with Session(runtime_database) as db:
+        assert len(db.scalars(select(BudgetReservation)).all()) == 1
+    other, other_scope = actors[1]
+    other_conversation = create(chat, other, other_scope)
+    assert (
+        chat.update_context(
+            other, other_scope, other_conversation, notes_key, notes_request
+        )["context"]["notes"]
+        == FACTS
+    )

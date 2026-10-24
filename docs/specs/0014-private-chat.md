@@ -89,7 +89,10 @@ que el docente no incluyó. El historial excluido permanece consultable.
 
 Admisión de turno y cambio de contexto comprueban ambas versiones esperadas.
 Un replay exacto se resuelve antes del CAS; otra entrada/destino con la misma
-clave produce 409. Los clientes anteriores sin revisión se interpretan como 0 y
+clave produce 409. Las nuevas operaciones de turno y contexto comparten clave
+por ámbito: una colisión entre ambas se rechaza antes de reservar o llamar al
+proveedor; los recibos históricos exactos conservan prioridad de replay.
+Los clientes anteriores sin revisión se interpretan como 0 y
 fallan por conflicto tras el primer cambio; se conservan fingerprints previos.
 Un turno activo o incierto impide cambiar contexto. Los resultados tardíos no
 pueden incorporarse a una revisión nueva ni liberar reservas. Las conversaciones
