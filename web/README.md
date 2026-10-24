@@ -263,6 +263,26 @@ candidato requiere CI exacta, sin trasladar ese éxito por inferencia.
   [conciliación](../docs/tickets/CONCILIACION-2026-10-24.md) distingue código,
   uso real y trabajo pendiente.
 
+## Chat y paneles de funciones (#78)
+
+La barra izquierda da acceso al chat activo, recursos, herramientas y soporte.
+Recursos, catálogo y contexto se presentan en paneles no modales, conservando la
+misma instancia del chat y sus borradores. Los accesos inferiores ofrecen contexto
+y Planeación sin duplicar el catálogo completo ni reservar un hueco artificial.
+Abrir, cerrar o cambiar panel no genera, crea otra conversación ni adjunta recursos.
+Lectores, formularios, editor e impresión conservan sus recorridos y guardias.
+
+El panel ocupa una columna propia cuando hay espacio y se apila en móvil, sin
+cubrir el compositor. Teclado, Escape, regreso de foco y atrás/adelante conservan
+trabajo y estados pendientes. Los mensajes tardíos no reabren paneles ni roban foco.
+Las herramientas pendientes y soporte indican su estado; no existe un canal de
+atención o envío habilitado por este cambio. La definición sigue en #79.
+
+Contrato y límites: [spec 0015](../docs/specs/0015-workspace-navigation.md). Este
+corte no cambia API, esquema o proveedor. Las capturas sintéticas y pruebas de
+reflow no sustituyen aprobación visual, teclado virtual físico ni aceptación
+docente del despliegue real.
+
 ## Diseño y assets
 
 [Procedencia y licencias](public/acenta/ASSETS.md). Se conservaron fuentes e iconos

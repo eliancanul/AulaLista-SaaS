@@ -28,7 +28,8 @@ async function login(page: Page, email: string) {
 test("manual analytic form survives session revalidation and saves before authenticated logout", async ({ page }) => {
   await page.goto("/");
   const account = await login(page, "analytic-form-a@example.test");
-  await page.getByRole("button", { name: "Crear planeación", exact: true }).click();
+  await page.getByRole("button", { name: "Planear", exact: true }).click();
+  await page.getByRole("button", { name: "Planeación de clase", exact: true }).click();
   await page.getByRole("button", { name: "Programa analítico", exact: true }).click();
   await page.getByLabel("Nombre del apartado").fill(" Apartado manual con sesión real ");
   await page.getByLabel("Grado").selectOption("3.º de primaria");
@@ -79,7 +80,8 @@ test("real OTP auth, Secure cookies, PostgreSQL write, reload and cross-account 
   const sessionCookie = cookies.find((cookie) => cookie.name === "__Host-acenta-session");
   expect({ secure: sessionCookie?.secure, httpOnly: sessionCookie?.httpOnly, sameSite: sessionCookie?.sameSite, path: sessionCookie?.path }).toEqual({ secure: true, httpOnly: true, sameSite: "Lax", path: "/" });
   expect(cookies.some((cookie) => cookie.name === "__Host-acenta-pre")).toBe(false);
-  await page.getByRole("button", { name: "Ajustar planeación", exact: true }).click();
+  await page.getByRole("button", { name: "Planear", exact: true }).click();
+  await page.getByRole("button", { name: "Ajustar planeación · ejemplo", exact: true }).click();
   await page.getByRole("button", { name: "Adjuntar referencia", exact: true }).click();
   const pendingSource = page.waitForResponse((r) => r.request().method() === "POST" && new URL(r.url()).pathname.endsWith("/sources"));
   await page.getByRole("button", { name: /Planeación de ciencias · ejemplo/ }).click();
@@ -124,7 +126,8 @@ test("a fresh authenticated account discovers exact original versions without an
   const firstLoginAt = Date.now();
   const firstCookie = (await context.cookies()).find((c) => c.name === "__Host-acenta-session")!;
   const origin = new URL(page.url()).origin;
-  await page.getByRole("button", { name: "Ajustar planeación", exact: true }).click();
+  await page.getByRole("button", { name: "Planear", exact: true }).click();
+  await page.getByRole("button", { name: "Ajustar planeación · ejemplo", exact: true }).click();
   await page.getByLabel("Petición para tu clase").fill("Petición sin generar una planeación");
   await page.getByRole("button", { name: "Adjuntar referencia", exact: true }).click();
   const savedResponse = page.waitForResponse((r) => r.request().method() === "POST" && new URL(r.url()).pathname.endsWith("/sources"));
@@ -247,7 +250,8 @@ test("voluntary logout preserves an explicit server draft before revocation and 
   await page.goto("/");
   const account = await login(page, "logout-draft-a@example.test");
   const loginAt = Date.now(), origin = new URL(page.url()).origin;
-  await page.getByRole("button", { name: "Ajustar planeación", exact: true }).click();
+  await page.getByRole("button", { name: "Planear", exact: true }).click();
+  await page.getByRole("button", { name: "Ajustar planeación · ejemplo", exact: true }).click();
   await page.getByRole("button", { name: "Adjuntar referencia", exact: true }).click();
   await page.getByRole("button", { name: /^Planeación de ciencias · ejemplo/ }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -366,7 +370,8 @@ test("same-tab reload restores only editor text and exact pending after a real P
   })).toBe(false);
   await page.evaluate(() => window.dispatchEvent(new Event("pageshow")));
   await expect(page.getByRole("button", { name: "Cerrar sesión", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Ajustar planeación", exact: true }).click();
+  await page.getByRole("button", { name: "Planear", exact: true }).click();
+  await page.getByRole("button", { name: "Ajustar planeación · ejemplo", exact: true }).click();
   await page.getByRole("button", { name: "Adjuntar referencia", exact: true }).click();
   await page.getByRole("button", { name: /^Planeación de ciencias · ejemplo/ }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -449,7 +454,8 @@ test("guided planning reopens only confirmed data after 401 and a genuinely new 
   await page.goto("/");
   const account = await login(page, "guided-browser-a@example.test");
   const loginAt = Date.now(), origin = new URL(page.url()).origin;
-  await page.getByRole("button", {name:"Crear planeación", exact:true}).click();
+  await page.getByRole("button", {name:"Planear", exact:true}).click();
+  await page.getByRole("button", {name:"Planeación de clase", exact:true}).click();
   await page.getByRole("button", {name:"Usar datos del ejemplo"}).click();
   const creating = page.waitForResponse(r => r.request().method() === "POST" && new URL(r.url()).pathname.endsWith("/guided-plannings"));
   await page.getByRole("button", {name:"Crear ejemplo de software", exact:true}).click();

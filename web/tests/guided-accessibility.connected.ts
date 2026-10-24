@@ -92,7 +92,9 @@ for (const width of [320, 390, 700, 701, 1440]) {
         submissions++;
     });
     const scope = await login(page, width);
-    const openPlanning = page.getByRole("button", { name: "Crear planeación", exact: true });
+    const planningShortcut = page.getByRole("button", { name: "Planear", exact: true });
+    await tabTo(page, planningShortcut); await page.keyboard.press("Enter");
+    const openPlanning = page.getByRole("button", { name: "Planeación de clase", exact: true });
     await tabTo(page, openPlanning);
     await page.keyboard.press("Enter");
     const form = page.locator(".guided-page");

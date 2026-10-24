@@ -250,12 +250,12 @@ test("Planear keeps Planeación and Proyecto without a separate Secuencia action
   const menu = page.getByRole("dialog", { name: "Herramientas" });
   await expect(menu.getByRole("button", { name: "Cerrar", exact: true })).toBeFocused();
   await expect(menu.getByRole("tab", { name: "Planear", exact: true })).toHaveAttribute("aria-selected", "true");
-  await expect(menu.locator(".catalog-items > p")).toHaveText([
-    "Proyecto de aula, todavía no disponible",
-  ]);
+  const unavailableProject = menu.locator(".catalog-items > p");
+  await expect(unavailableProject).toContainText("Proyecto de aula");
+  await expect(unavailableProject.locator(".tool-unavailable")).toHaveText("Todavía no disponible");
   await expect(menu.getByText("Secuencia didáctica", { exact: true })).toHaveCount(0);
   await expect(menu.locator(".catalog-items a, .catalog-items input, .catalog-items img")).toHaveCount(0);
-  await expect(menu.getByText("Planeación guiada disponible como ejemplo; las demás herramientas están pendientes", { exact: true })).toBeVisible();
+  await expect(menu.getByText("Planeación de clase usa el formulario existente; las demás herramientas están pendientes.", { exact: true })).toBeVisible();
   await expect(menu.getByRole("button")).toHaveText([
     "Cerrar", "Planeación de clase", "Ajustar planeación ↗", "Revisar recurso ↗",
   ]);
@@ -895,7 +895,8 @@ for (const state of ["prompt", "attachment", "sending"] as const) {
     await page.goForward();
     await expect(dialog).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "Mis recursos", exact: true })).toBeVisible();
-    await expect(page.locator("main")).toBeFocused();
+    await expect(page.getByRole("region", { name: "Mis recursos", exact: true })
+      .getByRole("heading", { name: "Mis recursos", exact: true })).toBeFocused();
     release();
     if (state === "sending") {
       await expect(page.getByRole("button", { name: "Reabrir copia guardada" })).toBeVisible();

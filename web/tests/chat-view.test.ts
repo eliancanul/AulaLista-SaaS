@@ -12,7 +12,7 @@ vi.mock("react", async original => {
   const react = await original<typeof import("react")>();
   return {...react, useSyncExternalStore: <T,>(_subscribe: unknown, snapshot: () => T) => snapshot()};
 });
-const render = (controller: AcentaController) => renderToStaticMarkup(createElement(Chat, {controller, onExample() {}, onTools() {}}));
+const render = (controller: AcentaController) => renderToStaticMarkup(createElement(Chat, {controller, onPlan() {}, onContext() {}}));
 it("renders escaped text, multiline answers and observed usage separately from reserve", async () => {
   const server = new ChatServer(), c = new AcentaController(new AcentaApi(session, server.transport));
   const doc = appendTurn(chatDocument(), crypto.randomUUID(), "<script>private()</script>\nPregunta");
@@ -34,8 +34,8 @@ it("unknown usage never renders as zero or a known billed cost", () => {
 it("shows an accessible text-only composer and preserves planning entry points", () => {
   const c = new AcentaController(new AcentaApi(session, new ChatServer().transport)), html = render(c);
   expect(html).toContain('for="chat-message"'); expect(html).toContain('aria-describedby="chat-input-hint"');
-  expect(html).toContain("Enviar mensaje"); expect(html).toContain("Crear planeación"); expect(html).toContain("Ajustar planeación");
-  expect(html).toContain("Mis recursos"); expect(html).not.toContain("Adjuntar");
+  expect(html).toContain("Enviar mensaje"); expect(html).toContain("Planear"); expect(html).toContain("Revisar contexto");
+  expect(html).not.toContain("Adjuntar");
 });
 it("archive errors differ from empty state and do not expose drafts", async () => {
   const server = new ChatServer(), c = new AcentaController(new AcentaApi(session, server.transport));

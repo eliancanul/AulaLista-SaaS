@@ -42,7 +42,9 @@ export type SaveState =
   | "error"
   | "unknown"
   | "conflict";
-export type View = "home" | "chat" | "conversations" | "example" | "result" | "resources" | "planning" | "analytic";
+export type PanelView = "resources" | "tools" | "support" | "chat-context";
+export type View = "home" | "chat" | "conversations" | "example" | "result" | "planning" | "analytic" | PanelView;
+export const isPanelView = (view: View): view is PanelView => ["resources", "tools", "support", "chat-context"].includes(view);
 export type CreateIntent = {
   kind: "create";
   key: string;
@@ -596,7 +598,7 @@ export class AcentaController {
   }
   navigate(view: View) {
     if (this.state.closed || this.suspended) return;
-    if (view === "home") void this.chat.openActive();
+    if (view === "home" || isPanelView(view)) void this.chat.openActive();
     this.analyticExplorer.close();
     const listState = this.leaveReads();
     this.closeOriginal();
@@ -617,7 +619,7 @@ export class AcentaController {
     const listState = this.leaveReads();
     this.closeOriginal();
     // Navigation never replaces the editor buffer or the next request's source.
-    if (location.view === "home") void this.chat.openActive();
+    if (location.view === "home" || isPanelView(location.view)) void this.chat.openActive();
     if (location.view === "chat" && location.chatId) void this.chat.open(location.chatId);
     this.emit({ view: location.view, listState, error: "", chatId: location.chatId ?? null,
       ...(location.view === "result" ? { result: location.result } : {}) });

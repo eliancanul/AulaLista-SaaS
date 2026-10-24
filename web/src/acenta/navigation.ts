@@ -10,6 +10,8 @@ export interface NavigationPosition {
   x: number;
   y: number;
   focus: string | null;
+  panelY?: number;
+  panelReturn?: { x: number; y: number; focus: string | null };
 }
 interface NavigationHost {
   snapshot(): NavigationLocation & { closed: boolean; editor?: EditorState | null };

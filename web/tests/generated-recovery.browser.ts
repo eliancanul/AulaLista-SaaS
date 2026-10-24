@@ -86,3 +86,24 @@ test("discarding the editor backup leaves generation recovery intact across navi
   expect(h.server.calls.filter(call => call.path === `planning-operations/${h.generationKey}`)).toHaveLength(3);
   expect(h.server.calls.every(call => call.method === "GET")).toBe(true);
 });
+
+test("panels preserve the exact pending generation and only consult it after an explicit click", async ({page}) => {
+  const h = await mount(page, false, true);
+  await page.getByRole("button", {name: "Volver al inicio", exact: true}).click();
+  await expect(page.getByRole("region", {name: "Planeación pendiente", exact: true})).toBeVisible();
+  await expect(page.getByRole("button", {name: "Consultar estado de generación", exact: true})).toBeVisible();
+  const retained = await page.evaluate(key => sessionStorage.getItem(key), GENERATION_RECOVERY_KEY);
+  const before = h.server.calls.filter(call => call.path === `planning-operations/${h.generationKey}`).length;
+  await page.getByRole("button", {name: "Planear", exact: true}).click();
+  const panel = page.getByRole("region", {name: "Herramientas", exact: true});
+  await expect(panel.getByRole("heading", {name: "Planeación pendiente", exact: true})).toBeVisible();
+  await page.getByRole("button", {name: "Soporte", exact: true}).click();
+  await page.goBack(); await expect(panel).toBeVisible();
+  expect(h.server.calls.filter(call => call.path === `planning-operations/${h.generationKey}`)).toHaveLength(before);
+  h.state = "not_found";
+  await panel.getByRole("button", {name: "Consultar estado de generación", exact: true}).click();
+  await expect(panel.getByRole("button", {name: "Consultar estado de generación", exact: true})).toBeEnabled();
+  expect(h.server.calls.filter(call => call.path === `planning-operations/${h.generationKey}`)).toHaveLength(before + 1);
+  expect(await page.evaluate(key => sessionStorage.getItem(key), GENERATION_RECOVERY_KEY)).toBe(retained);
+  expect(h.server.calls.every(call => call.method === "GET")).toBe(true);
+});

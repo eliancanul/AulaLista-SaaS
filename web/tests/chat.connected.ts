@@ -83,6 +83,16 @@ test("private multi-turn chat survives reload and account changes without new ge
   expect(privateCalls.filter(call => call.method === "POST")).toHaveLength(postsBeforeRead);
 
   await input.fill("Borrador privado nunca enviado");
+  await input.evaluate(node => node.setAttribute("data-composer-retained", "yes"));
+  for (const name of ["Mis recursos", "Herramientas", "Soporte"]) {
+    await page.getByRole("button", {name, exact: true}).click();
+    await expect(page.getByRole("region", {name, exact: true})).toBeVisible();
+    await expect(input).toHaveValue("Borrador privado nunca enviado");
+    await expect(input).toHaveAttribute("data-composer-retained", "yes");
+  }
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", {name: "Soporte", exact: true})).toBeFocused();
+  expect(privateCalls.filter(call => call.method === "POST")).toHaveLength(postsBeforeRead);
   await page.getByRole("button", {name: "Cerrar sesión", exact: true}).click();
   const exit = page.getByRole("dialog", {name: "¿Salir con mensajes pendientes?", exact: true});
   await expect(exit).toBeVisible();
@@ -125,6 +135,8 @@ test("uncertain: explicit logout revokes the session without replaying the turn"
   expect(document.turns[0]).toMatchObject({state: "uncertain", user_text: text, assistant_text: null});
   await expect(consult).toBeEnabled();
   expect(privateCalls.filter(call => call.method === "POST" && call.path.endsWith("/turns"))).toHaveLength(1);
+  await page.getByRole("button", {name: "Soporte", exact: true}).click();
+  await expect(page.getByRole("region", {name: "Soporte", exact: true})).toBeVisible();
   const callsBeforeLogout = privateCalls.length;
 
   await page.getByRole("button", {name: "Cerrar sesión", exact: true}).click();
@@ -167,7 +179,7 @@ test("versioned context: manual notes and reset retain one chat and its history"
   await input.fill("¿Qué palabra corresponde al contexto actualizado?");
   const trigger = page.getByRole("button", {name: "Revisar contexto", exact: true});
   await trigger.focus(); await page.keyboard.press("Enter");
-  const dialog = page.getByRole("dialog", {name: "Contexto del chat", exact: true});
+  const dialog = page.getByRole("region", {name: "Contexto del chat", exact: true});
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText("Los mensajes anteriores seguirán visibles, pero dejarán de enviarse al modelo.");
   await dialog.getByLabel("Notas para el próximo contexto", {exact: true}).fill("Contexto nuevo: usamos la palabra brújula, no farol.");
@@ -180,7 +192,7 @@ test("versioned context: manual notes and reset retain one chat and its history"
   await page.screenshot({path: info.outputPath("chat-context-synthetic-desktop.png")});
   await page.setViewportSize({width: 360, height: 540});
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await dialog.getByRole("button", {name: "Cerrar", exact: true}).click(); await expect(trigger).toBeFocused();
+  await dialog.getByRole("button", {name: "Cerrar panel", exact: true}).click(); await expect(trigger).toBeFocused();
   await expect(input).toHaveValue("¿Qué palabra corresponde al contexto actualizado?");
   const third = await send("¿Qué palabra corresponde al contexto actualizado?");
   expect(third.turns).toHaveLength(1); expect(third.turns[0]).toMatchObject({number: 3, context_revision: 1, assistant_text: "Contexto actualizado: brújula"});
