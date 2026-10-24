@@ -1,9 +1,10 @@
 # Backend: PostgreSQL desechable y fuentes sintéticas
 
 Python 3.12.14 y uv 0.12.23. Dependencias fijadas en `pyproject.toml`/`uv.lock`;
-instalación no editable, sin servicios pagados. No hay login, material docente real
-ni migración de datos anteriores. Las operaciones privadas del servidor normal
-responden 401; los actores sólo existen en fixtures y overrides de test.
+instalación no editable, sin servicios pagados, material docente real ni migración
+de datos anteriores. Sin configuración auth, las operaciones privadas responden
+401. Las pruebas B1 ejercitan sesiones HTTP y sustituyen sólo transportes externos;
+los atajos de actor de otras suites viven exclusivamente en fixtures de test.
 
 ## Instalar y migrar
 
@@ -111,6 +112,46 @@ logging y con parámetros omitidos. PostgreSQL por omisión puede registrar byte
 DETAIL de un CHECK fallido; `hide_parameters` del cliente no lo impide. El runtime
 no recibe privilegios para configurar logging. Un futuro servidor externo debe
 cumplir controles equivalentes antes de usar cualquier dato privado.
+
+## Aislamiento runtime con conexión reciclada (#98)
+
+`uv run --locked --no-editable pytest tests/test_runtime_isolation.py` es un paso
+obligatorio separado de backend CI. Reutiliza la DB desechable y el rol runtime
+de las fixtures anteriores; requiere las mismas variables y no hace skip. No
+se ejecutan simultáneamente suites que recrean su esquema.
+
+La suite usa login/sesión/CSRF y rutas HTTP reales, sin override de actor. Sólo
+sustituye transporte de correo/proveedor con datos sintéticos. Un `QueuePool`
+exclusivo de test (`pool_size=1`, `max_overflow=0`) fuerza A→B; instrumentación
+dentro de las consultas comprueba el mismo objeto psycopg y `backend_pid` para
+los requests. También verifica usuario efectivo/de sesión, ausencia de privilegios
+superuser/bypass y propiedad ajena de todas las relaciones públicas. El runtime
+normal conserva `NullPool`; no se propone cambiar su manejo de conexiones.
+
+Comprueba fuentes V1/V2 y headers de bytes/hash, recibos/replay, planeaciones e
+historia, creación guiada con referencia exacta, ediciones, borradores, copias,
+apartados y sus derivados exactos, resultado
+de generación simulado y chat con turnos, conversación activa y contexto
+versionado/reset. B no recupera IDs/claves de A usando el ámbito de A o el propio;
+IDs inexistentes y cursores ajenos conservan las respuestas seguras de cada ruta.
+Los listados propios vacíos no contienen elementos de A. B puede guardar bytes
+idénticos con la misma clave de operación y abrir su propio chat: el aislamiento
+no depende de denegar todas las operaciones. Tras los negativos, snapshots de las
+filas privadas y lecturas de A permanecen iguales, sin nuevos envíos simulados.
+Cada recorrido se repite con cookie revocada restaurada tras logout y con token
+inválido, denegando lecturas, replays y escrituras nuevas con 401 genérico/no-store.
+
+La defensa comprobada combina autorización transaccional del caso de uso con
+los grants limitados, FKs compuestas y triggers de historia existentes; sus pruebas
+de restricciones/carreras continúan en las suites previas. **El rol runtime tiene
+SELECT amplio sobre materiales de distintos ámbitos: no hay aislamiento SQL por
+fila ni RLS acreditado.** Esta suite comprueba la frontera HTTP, no protege frente
+a SQL arbitrario ejecutado con ese rol ni acredita configuración de producción.
+No añade objetos, URLs de descarga externas, temporales, parsing, caché de contenido,
+borrado/revocación de fuentes ni restore. Esas superficies no implementadas siguen
+pendientes; los artefactos aquí son bytes y JSON persistidos en PostgreSQL. No cierra
+H3 ni habilita documentos reales, proveedores reales, gasto o piloto. El PR/CI del
+candidato exacto registra resultados y revisión; este documento describe cobertura.
 
 ## Salud y operaciones
 
