@@ -1,156 +1,552 @@
+/* ==========================================================================
+   Acenta Editorial Studios — Anexos & Impresora Epson
+   Consumes centralized --ac-* tokens exclusively.
+   ========================================================================== */
+
 .annexes-page,
 .printer-page {
-  width: min(1120px, 100%);
+  width: min(1200px, 100%);
   margin: 0 auto;
-  padding: 28px 24px 56px;
+  padding: var(--ac-space-7) var(--ac-space-6) var(--ac-space-12);
   display: grid;
-  gap: 24px;
+  gap: var(--ac-space-5);
+  min-width: 0;
 }
 
-.annexes-header,
-.printer-header {
+/* --------------------------------------------------------------------------
+   Studio Page Header
+   -------------------------------------------------------------------------- */
+.studio-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: var(--ac-space-4);
+  padding-bottom: var(--ac-space-4);
+  border-bottom: 1px solid var(--ac-border-subtle);
+}
+
+.studio-header-title {
+  display: grid;
+  gap: var(--ac-space-1);
+  min-width: 0;
+}
+
+.studio-header-title .logo {
+  width: 118px;
+  margin-bottom: var(--ac-space-1);
+}
+
+.studio-header-title h1 {
+  font-size: var(--ac-text-2xl);
+  line-height: var(--ac-leading-tight);
+  color: var(--ac-ink);
+}
+
+.studio-header-title p {
+  color: var(--ac-ink-secondary);
+  font-size: var(--ac-text-base);
+  line-height: var(--ac-leading-normal);
+  max-width: 62ch;
+}
+
+.studio-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ac-space-2);
+  align-items: center;
+}
+
+.studio-header-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ac-space-2);
+  padding: 10px 16px;
+  font-size: var(--ac-text-sm);
+  font-weight: 600;
+}
+
+/* --------------------------------------------------------------------------
+   3-Step Editorial Workflow Bar (Anexos)
+   -------------------------------------------------------------------------- */
+.workflow-steps {
+  list-style: none;
+  margin: 0;
+  padding: 12px 18px;
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-border-subtle);
+  border-radius: var(--ac-radius-lg);
+  box-shadow: var(--ac-shadow-xs);
+  display: flex;
+  align-items: center;
+  gap: var(--ac-space-3);
+  overflow-x: auto;
+}
+
+.workflow-step {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ac-space-2);
+  font-size: var(--ac-text-sm);
+  color: var(--ac-ink-secondary);
+  white-space: nowrap;
+  flex: none;
+}
+
+.workflow-step-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1.5px solid var(--ac-border);
+  background: var(--ac-surface-warm);
+  color: var(--ac-ink-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.workflow-step.is-active {
+  color: var(--ac-ink);
+  font-weight: 600;
+}
+
+.workflow-step.is-active .workflow-step-num {
+  border-color: var(--ac-action);
+  background: var(--ac-action);
+  color: var(--ac-ink-inverse);
+}
+
+.workflow-step.is-done {
+  color: var(--ac-sage-ink);
+  font-weight: 600;
+}
+
+.workflow-step.is-done .workflow-step-num {
+  border-color: var(--ac-sage-solid);
+  background: var(--ac-sage-bg);
+  color: var(--ac-sage-solid);
+}
+
+.workflow-step-connector {
+  flex: 1;
+  min-width: 20px;
+  height: 1px;
+  background: var(--ac-border-subtle);
+}
+
+/* --------------------------------------------------------------------------
+   Two-Column Editorial Studio Grids
+   -------------------------------------------------------------------------- */
+.annexes-grid {
+  display: grid;
+  grid-template-columns: minmax(310px, 355px) minmax(0, 1fr);
+  gap: var(--ac-space-6);
+  align-items: start;
+}
+
+.annexes-rail,
+.annexes-canvas {
+  display: grid;
+  gap: var(--ac-space-5);
+  min-width: 0;
+}
+
+.printer-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+  gap: var(--ac-space-6);
+  align-items: start;
+}
+
+/* --------------------------------------------------------------------------
+   Cards & Form Controls
+   -------------------------------------------------------------------------- */
+.annex-card {
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-border-subtle);
+  border-radius: var(--ac-radius-lg);
+  box-shadow: var(--ac-shadow-card);
+  padding: var(--ac-space-5);
+  display: grid;
+  gap: var(--ac-space-4);
+  min-width: 0;
+}
+
+.annex-card-header {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  gap: var(--ac-space-2);
 }
 
-.annexes-header h1,
-.printer-header h1 {
-  font-size: 38px;
+.annex-card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ac-space-2);
+  font-size: var(--ac-text-md);
+  font-weight: 600;
+  color: var(--ac-ink);
+  line-height: var(--ac-leading-snug);
 }
 
-.annexes-header-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.annexes-grid {
-  display: grid;
-  grid-template-columns: minmax(290px, 340px) minmax(0, 1fr);
-  gap: 24px;
-  align-items: start;
-}
-
-@media (max-width: 860px) {
-  .annexes-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.annex-card {
-  background: white;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 20px;
-  display: grid;
-  gap: 14px;
+.annex-card-title .ui-icon {
+  color: var(--ac-action);
 }
 
 .annex-field {
   display: grid;
   gap: 6px;
+  min-width: 0;
 }
 
 .annex-field label {
   font-weight: 600;
+  font-size: var(--ac-text-sm);
+  color: var(--ac-ink);
+}
+
+.annex-field input,
+.annex-field select,
+.annex-field textarea {
+  width: 100%;
+  padding: 10px 12px;
   font-size: 15px;
+  border-radius: var(--ac-radius-sm);
 }
 
 .annex-pair {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: var(--ac-space-3);
 }
 
-@media (max-width: 560px) {
-  .annex-pair {
-    grid-template-columns: 1fr;
-  }
+/* --------------------------------------------------------------------------
+   Quick-Start Topic Chips
+   -------------------------------------------------------------------------- */
+.quick-chips-block {
+  display: grid;
+  gap: 6px;
 }
 
+.quick-chips-label {
+  font-size: var(--ac-text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ac-ink-secondary);
+}
+
+.quick-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.annex-chip {
+  padding: 5px 11px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--ac-radius-pill);
+  border: 1px solid var(--ac-border-subtle);
+  background: var(--ac-surface-warm);
+  color: var(--ac-ink-body);
+  box-shadow: none;
+}
+
+.annex-chip:hover:not(:disabled) {
+  background: var(--ac-selection);
+  border-color: var(--ac-action-border);
+  color: var(--ac-action-ink);
+}
+
+.annex-chip.is-active {
+  background: var(--ac-selection);
+  border-color: var(--ac-action);
+  color: var(--ac-action-ink);
+}
+
+/* --------------------------------------------------------------------------
+   Search & Filter Pills (Library & Print Queue)
+   -------------------------------------------------------------------------- */
+.annex-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.annex-search-icon {
+  position: absolute;
+  left: 11px;
+  color: var(--ac-ink-muted);
+  pointer-events: none;
+}
+
+.annex-search input {
+  width: 100%;
+  padding: 8px 12px 8px 34px;
+  font-size: var(--ac-text-sm);
+  border-radius: var(--ac-radius-sm);
+  background: var(--ac-surface-warm);
+}
+
+.annex-search input:focus {
+  background: var(--ac-surface);
+}
+
+.filter-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--ac-radius-pill);
+  border: 1px solid var(--ac-border-subtle);
+  background: var(--ac-surface-warm);
+  color: var(--ac-ink-secondary);
+  box-shadow: none;
+}
+
+.filter-pill:hover:not(:disabled) {
+  background: var(--ac-surface-hover);
+  color: var(--ac-ink);
+}
+
+.filter-pill.is-active {
+  background: var(--ac-selection);
+  border-color: var(--ac-action-border);
+  color: var(--ac-ink);
+}
+
+.filter-pill-count {
+  font-size: 12px;
+  padding: 1px 6px;
+  border-radius: var(--ac-radius-pill);
+  background: var(--ac-surface);
+  color: var(--ac-ink-secondary);
+}
+
+.filter-pill.is-active .filter-pill-count {
+  background: var(--ac-action);
+  color: var(--ac-ink-inverse);
+}
+
+/* --------------------------------------------------------------------------
+   Annexes Library List
+   -------------------------------------------------------------------------- */
 .annex-list {
   display: grid;
-  gap: 10px;
+  gap: 8px;
+  max-height: 440px;
+  overflow-y: auto;
+  padding-right: 2px;
 }
 
 .annex-list-item {
+  position: relative;
   width: 100%;
   text-align: left;
   padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: white;
+  border-radius: var(--ac-radius-md);
+  border: 1px solid var(--ac-border-subtle);
+  background: var(--ac-surface-warm);
+  box-shadow: none;
+  display: grid;
+  gap: 5px;
+  overflow: hidden;
+}
+
+.annex-list-item:hover:not(:disabled) {
+  background: var(--ac-surface-hover);
+  border-color: var(--ac-border);
+}
+
+.annex-list-item.selected {
+  border-color: var(--ac-action-border);
+  background: var(--ac-selection);
+  padding-left: 17px;
+}
+
+.annex-list-item.selected::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3.5px;
+  background: var(--ac-action);
+}
+
+.annex-list-item strong {
+  font-size: 15px;
+  color: var(--ac-ink);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.annex-list-meta {
+  font-size: 13px;
+  color: var(--ac-ink-secondary);
+}
+
+/* --------------------------------------------------------------------------
+   Studio Toolbar, Mode Tabs & Actions
+   -------------------------------------------------------------------------- */
+.studio-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--ac-space-3);
+  padding-bottom: var(--ac-space-4);
+  border-bottom: 1px solid var(--ac-border-subtle);
+}
+
+.studio-status-group {
   display: grid;
   gap: 4px;
 }
 
-.annex-list-item.selected {
-  border-color: var(--action);
-  background: var(--selection);
+.studio-status-meta {
+  font-size: 13px;
+  color: var(--ac-ink-secondary);
 }
 
-.annex-list-item strong {
-  font-size: 16px;
+.studio-mode-tabs {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-canvas-subtle);
+  border: 1px solid var(--ac-border-subtle);
+  gap: 2px;
 }
 
-.annex-badge {
+.studio-mode-tab {
   display: inline-flex;
   align-items: center;
-  width: fit-content;
-  padding: 2px 10px;
-  border-radius: 999px;
-  font-size: 13px;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: var(--ac-text-sm);
   font-weight: 600;
-  border: 1px solid var(--border);
-  background: #f4f5f6;
+  border: 0;
+  border-radius: var(--ac-radius-sm);
+  background: transparent;
+  color: var(--ac-ink-secondary);
+  box-shadow: none;
 }
 
-.annex-badge.approved,
-.annex-badge.sent {
-  background: #e6f4ea;
-  border-color: #7ab88a;
-  color: #165c2d;
+.studio-mode-tab:hover:not(:disabled) {
+  color: var(--ac-ink);
+  background: rgba(255, 255, 255, 0.6);
 }
 
-.annex-badge.pending,
-.annex-badge.sending {
-  background: #fef5e7;
-  border-color: #e2b15c;
-  color: #7a4c00;
+.studio-mode-tab.is-active {
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+  box-shadow: var(--ac-shadow-xs);
 }
 
-.annex-badge.failed {
-  background: #fdecea;
-  border-color: #df8277;
-  color: #8f1d14;
+.studio-mode-tab.is-active .ui-icon {
+  color: var(--ac-action);
 }
 
-.annex-section-box {
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 14px;
-  background: #fafaf7;
+.annex-actions-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.annex-actions-bar button,
+.annex-link-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.annex-link-btn {
+  text-decoration: none;
+  border: 1px solid var(--ac-border);
+  border-radius: var(--ac-radius-md);
+  padding: 10px 14px;
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+  font-size: var(--ac-text-sm);
+  font-weight: 600;
+  box-shadow: var(--ac-shadow-xs);
+  transition:
+    background-color var(--ac-dur-fast) var(--ac-ease-out),
+    border-color var(--ac-dur-fast) var(--ac-ease-out);
+}
+
+.annex-link-btn.btn-sm {
+  padding: 7px 12px;
+  border-radius: var(--ac-radius-sm);
+}
+
+.annex-link-btn:hover {
+  background: var(--ac-surface-hover);
+  border-color: var(--ac-border-strong);
+}
+
+.inline-confirm-bar {
   display: grid;
-  gap: 12px;
+  gap: var(--ac-space-3);
+  padding: 14px 16px;
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-danger-bg);
+  border: 1px solid var(--ac-danger-border);
+  border-left: 3.5px solid var(--ac-danger-solid);
+  color: var(--ac-danger-ink);
+  font-size: var(--ac-text-sm);
+}
+
+/* --------------------------------------------------------------------------
+   Editor Sections & Items
+   -------------------------------------------------------------------------- */
+.annex-section-box {
+  border: 1px solid var(--ac-border-subtle);
+  border-radius: var(--ac-radius-md);
+  padding: var(--ac-space-4);
+  background: var(--ac-surface-warm);
+  display: grid;
+  gap: var(--ac-space-3);
 }
 
 .annex-section-top {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
-  gap: 10px;
+  gap: var(--ac-space-2);
+}
+
+.annex-section-label {
+  font-size: var(--ac-text-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ac-ink-secondary);
 }
 
 .annex-item-row {
-  border: 1px solid #d7dce0;
-  border-radius: 10px;
+  border: 1px solid var(--ac-border-subtle);
+  border-radius: var(--ac-radius-sm);
   padding: 12px;
-  background: white;
+  background: var(--ac-surface);
   display: grid;
-  gap: 8px;
+  gap: 10px;
 }
 
 .annex-item-controls {
@@ -160,92 +556,661 @@
   align-items: center;
 }
 
-.annex-item-controls select,
-.annex-item-controls input[type="number"] {
+.annex-item-controls select {
   padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: white;
+  font-size: var(--ac-text-sm);
+  border-radius: var(--ac-radius-sm);
 }
 
-.annex-actions-bar {
+.lines-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--ac-text-sm);
+  color: var(--ac-ink-secondary);
+}
+
+.lines-stepper-controls {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--ac-border);
+  border-radius: var(--ac-radius-sm);
+  background: var(--ac-surface-warm);
+  overflow: hidden;
+}
+
+.lines-stepper-controls button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lines-stepper-controls span {
+  min-width: 26px;
+  text-align: center;
+  font-weight: 600;
+  color: var(--ac-ink);
+  font-size: var(--ac-text-sm);
+}
+
+.drawing-hint-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--ac-radius-pill);
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--ac-selection);
+  color: var(--ac-action-ink);
+  border: 1px solid var(--ac-action-border);
+}
+
+/* --------------------------------------------------------------------------
+   Live B&W US Letter Preview (8.5 x 11 in fidelity)
+   -------------------------------------------------------------------------- */
+.letter-stage {
+  background: var(--ac-canvas-subtle);
+  border: 1px solid var(--ac-border-subtle);
+  border-radius: var(--ac-radius-md);
+  padding: clamp(14px, 3vw, 28px);
+  display: grid;
+  gap: var(--ac-space-3);
+}
+
+.letter-sheet {
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+  min-height: 760px;
+  padding: clamp(20px, 5%, 44px);
+  background: #ffffff;
+  color: #111111;
+  border: 1px solid var(--ac-border-subtle);
+  border-radius: 3px;
+  box-shadow: var(--ac-shadow-sheet);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-size: 14px;
+  line-height: 1.48;
+}
+
+.letter-kicker {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #444444;
+}
+
+.letter-title {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #000000;
+}
+
+.letter-subtitle {
+  font-size: 13px;
+  color: #333333;
+}
+
+.letter-student-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 20px;
+  margin-top: 4px;
+}
+
+.letter-student-field {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  font-size: 13px;
+  color: #111111;
+}
+
+.letter-student-field.is-wide {
+  grid-column: 1 / -1;
+}
+
+.letter-field-line {
+  flex: 1;
+  border-bottom: 1px solid #444444;
+  min-height: 14px;
+}
+
+.letter-double-rule {
+  height: 4px;
+  border-top: 1.5px solid #111111;
+  border-bottom: 0.5px solid #777777;
+  margin: 2px 0;
+}
+
+.letter-instructions {
+  padding: 9px 12px;
+  background: #f4f4f4;
+  border: 1px solid #333333;
+  font-size: 13px;
+  color: #111111;
+}
+
+.letter-section {
+  display: grid;
+  gap: 9px;
+}
+
+.letter-section-banner {
+  padding: 5px 10px;
+  background: #f2f2f2;
+  border-left: 3px solid #111111;
+  font-size: 14px;
+  font-weight: 700;
+  color: #000000;
+}
+
+.letter-section-prompt {
+  font-size: 13px;
+  font-style: italic;
+  color: #333333;
+}
+
+.letter-reading-box {
+  padding: 10px 12px;
+  background: #fafafa;
+  border: 1px solid #bbbbbb;
+  border-left: 2.5px solid #222222;
+  font-size: 13.5px;
+  color: #111111;
+  white-space: pre-wrap;
+}
+
+.letter-checklist-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 13.5px;
+}
+
+.letter-checkbox {
+  width: 13px;
+  height: 13px;
+  margin-top: 3px;
+  border: 1.25px solid #222222;
+  flex: none;
+  background: #ffffff;
+}
+
+.letter-question {
+  display: grid;
+  gap: 6px;
+}
+
+.letter-drawing-box {
+  border: 1px solid #333333;
+  border-radius: 2px;
+  height: 112px;
+  padding: 6px 10px;
+  background: #ffffff;
+  display: flex;
+  align-items: flex-start;
+}
+
+.letter-drawing-label {
+  font-size: 11px;
+  font-style: italic;
+  color: #666666;
+}
+
+.letter-writing-lines {
+  display: grid;
+  gap: 0;
+}
+
+.letter-writing-line {
+  height: 24px;
+  border-bottom: 1px solid #666666;
+}
+
+.letter-footer {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid #bbbbbb;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 11.5px;
+  color: #444444;
+}
+
+.letter-stage-caption {
+  text-align: center;
+  font-size: 13px;
+  color: var(--ac-ink-secondary);
+}
+
+/* --------------------------------------------------------------------------
+   Step 3 · Progressive Epson Print Studio Card
+   -------------------------------------------------------------------------- */
+.annex-print-studio {
+  border-radius: var(--ac-radius-lg);
+  padding: var(--ac-space-5);
+  display: grid;
+  gap: var(--ac-space-4);
+  box-shadow: var(--ac-shadow-card);
+}
+
+.annex-print-studio.is-locked {
+  background: var(--ac-surface-warm);
+  border: 1px dashed var(--ac-border-strong);
+}
+
+.annex-print-studio.is-ready {
+  background: var(--ac-surface);
+  border: 1.5px solid var(--ac-sage-border);
+  border-top: 4px solid var(--ac-sage-solid);
+}
+
+.print-studio-head {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  justify-content: space-between;
   align-items: center;
+  gap: var(--ac-space-2);
 }
 
-.annex-print-box {
-  border: 2px solid #2d6a4f;
-  border-radius: 14px;
-  padding: 18px;
-  background: #f3faf6;
-  display: grid;
-  gap: 14px;
+.print-studio-head h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ac-space-2);
+  font-size: var(--ac-text-md);
+  color: var(--ac-ink);
+}
+
+.annex-print-studio.is-ready .print-studio-head .ui-icon {
+  color: var(--ac-sage-solid);
+}
+
+.print-destination-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--ac-radius-pill);
+  background: var(--ac-sage-bg);
+  border: 1px solid var(--ac-sage-border);
+  color: var(--ac-sage-ink);
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* Copy Stepper + Classroom Presets */
+.copy-control-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ac-space-3);
+}
+
+.copy-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.copy-stepper input[type="number"] {
+  width: 72px;
+  text-align: center;
+  padding: 7px 8px;
+  font-weight: 600;
+  font-size: var(--ac-text-base);
+}
+
+.copy-presets {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.copy-preset-btn {
+  padding: 6px 11px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--ac-radius-pill);
+  border: 1px solid var(--ac-border-subtle);
+  background: var(--ac-surface-warm);
+  color: var(--ac-ink-body);
+  box-shadow: none;
+}
+
+.copy-preset-btn.is-active {
+  background: var(--ac-selection);
+  border-color: var(--ac-action);
+  color: var(--ac-action-ink);
+}
+
+/* Segmented Now / Schedule Control */
+.segmented-control {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 3px;
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-canvas-subtle);
+  border: 1px solid var(--ac-border-subtle);
+  gap: 3px;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.segmented-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: var(--ac-text-sm);
+  font-weight: 600;
+  border: 0;
+  border-radius: var(--ac-radius-sm);
+  background: transparent;
+  color: var(--ac-ink-secondary);
+  box-shadow: none;
+}
+
+.segmented-option.is-active {
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+  box-shadow: var(--ac-shadow-xs);
+}
+
+.segmented-option.is-active .ui-icon {
+  color: var(--ac-action);
 }
 
 .annex-quick-times {
   display: flex;
   flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+/* --------------------------------------------------------------------------
+   Printer Readiness Hero & Collapsible Setup Guide
+   -------------------------------------------------------------------------- */
+.printer-hero {
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-border-subtle);
+  border-radius: var(--ac-radius-lg);
+  box-shadow: var(--ac-shadow-card);
+  padding: var(--ac-space-5);
+  display: grid;
+  gap: var(--ac-space-4);
+}
+
+.printer-hero.is-ready {
+  border-left: 4px solid var(--ac-sage-solid);
+}
+
+.printer-hero.is-warning {
+  border-left: 4px solid var(--ac-ochre-dot);
+}
+
+.printer-hero-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ac-space-2);
+}
+
+.printer-hero-copy {
+  font-size: var(--ac-text-sm);
+  color: var(--ac-ink-secondary);
+}
+
+.printer-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--ac-space-3);
+}
+
+.printer-metric {
+  padding: 12px 14px;
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface-warm);
+  border: 1px solid var(--ac-border-subtle);
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.printer-metric-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ac-ink-secondary);
+}
+
+.printer-metric-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ac-ink);
+  overflow-wrap: anywhere;
+}
+
+.printer-guide {
+  border: 1px solid var(--ac-border-subtle);
+  border-radius: var(--ac-radius-md);
+  background: var(--ac-surface-warm);
+  padding: 10px 14px;
+}
+
+.printer-guide summary {
+  cursor: pointer;
+  font-size: var(--ac-text-sm);
+  font-weight: 600;
+  color: var(--ac-ink);
+  display: flex;
+  align-items: center;
   gap: 8px;
+  list-style: none;
 }
 
-.annex-quick-times button {
-  padding: 8px 12px;
-  font-size: 14px;
+.printer-guide summary::-webkit-details-marker {
+  display: none;
 }
 
-.annex-alert {
-  padding: 12px 14px;
-  border-radius: 10px;
-  background: #fdecea;
-  border: 1px solid #df8277;
-  color: #7c1911;
+.printer-guide[open] summary .ui-icon {
+  transform: rotate(180deg);
 }
 
-.annex-status {
-  padding: 12px 14px;
-  border-radius: 10px;
-  background: #e6f4ea;
-  border: 1px solid #7ab88a;
-  color: #165c2d;
+.printer-guide summary .ui-icon {
+  transition: transform var(--ac-dur-fast) var(--ac-ease-out);
+  color: var(--ac-action);
 }
 
+.printer-guide-steps {
+  margin: 10px 0 2px;
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+  font-size: var(--ac-text-sm);
+  color: var(--ac-ink-body);
+  line-height: var(--ac-leading-normal);
+}
+
+/* --------------------------------------------------------------------------
+   Print Queue List & Job Cards
+   -------------------------------------------------------------------------- */
 .print-jobs-list {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .print-job-row {
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  border: 1px solid var(--ac-border-subtle);
+  border-radius: var(--ac-radius-md);
   padding: 14px 16px;
-  background: #fafaf7;
+  background: var(--ac-surface-warm);
+  display: grid;
+  gap: 10px;
+}
+
+.print-job-top {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.print-job-title-row {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+  min-width: 0;
+}
+
+.print-job-title-row strong {
+  font-size: 16px;
+  color: var(--ac-ink);
+  overflow-wrap: anywhere;
+}
+
+.print-job-copies {
+  padding: 2px 8px;
+  border-radius: var(--ac-radius-pill);
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-border-subtle);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ac-ink-secondary);
+  white-space: nowrap;
 }
 
 .print-job-meta {
   display: grid;
-  gap: 4px;
+  gap: 2px;
+  font-size: 13.5px;
+  color: var(--ac-ink-secondary);
+  overflow-wrap: anywhere;
 }
 
-.annex-link-btn {
+.print-job-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: var(--ac-radius-sm);
+  background: var(--ac-danger-bg);
+  border: 1px solid var(--ac-danger-border);
+  color: var(--ac-danger-ink);
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+
+.print-job-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.print-job-actions button {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  text-decoration: none;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 12px 16px;
-  background: white;
-  color: var(--ink);
-  font-weight: 600;
+  gap: 5px;
 }
 
-.annex-link-btn:hover {
-  background: var(--selection);
+.empty-state-card {
+  text-align: center;
+  padding: var(--ac-space-10) var(--ac-space-6);
+  justify-items: center;
+  color: var(--ac-ink-secondary);
+}
+
+.empty-state-card .ui-icon {
+  color: var(--ac-action);
+  opacity: 0.78;
+}
+
+.empty-state-card h2,
+.empty-state-card h3 {
+  color: var(--ac-ink);
+  font-size: var(--ac-text-lg);
+}
+
+.empty-state-card p {
+  max-width: 44ch;
+  line-height: var(--ac-leading-normal);
+}
+
+.annex-list-empty {
+  padding: var(--ac-space-5) var(--ac-space-4);
+  border-radius: var(--ac-radius-md);
+  border: 1px dashed var(--ac-border);
+  background: var(--ac-surface-warm);
+  text-align: center;
+  display: grid;
+  justify-items: center;
+  gap: var(--ac-space-2);
+  color: var(--ac-ink-secondary);
+  font-size: var(--ac-text-sm);
+}
+
+/* --------------------------------------------------------------------------
+   Responsive Breakpoints (920px, 600px, 320px)
+   -------------------------------------------------------------------------- */
+@media (max-width: 920px) {
+  .annexes-grid,
+  .printer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .printer-metrics {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .annexes-page,
+  .printer-page {
+    padding: var(--ac-space-4) var(--ac-space-3) var(--ac-space-10);
+    gap: var(--ac-space-4);
+  }
+
+  .studio-header-title h1 {
+    font-size: 30px;
+  }
+
+  .annex-card,
+  .annex-print-studio,
+  .printer-hero {
+    padding: var(--ac-space-4);
+  }
+
+  .annex-pair,
+  .letter-student-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .segmented-control {
+    width: 100%;
+  }
+
+  .letter-sheet {
+    min-height: 540px;
+  }
 }
