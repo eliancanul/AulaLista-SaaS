@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from io import BytesIO
 from typing import Any
@@ -12,6 +13,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
+from reportlab.pdfgen import canvas as rl_canvas
 from reportlab.platypus import (
     HRFlowable,
     KeepTogether,
@@ -26,6 +28,13 @@ MIN_COPIES = 1
 MAX_COPIES = 50
 MAX_EPSON_PDF_BYTES = 20 * 1024 * 1024  # 20 MB limit for Epson Email Print
 
+_DRAWING_HINT_RE = re.compile(
+    r"\b(dibuj\w*|ilustr\w*|esquema\w*|recuadro|traza\w*|colorea\w*|mapa|diagrama|gr[aá]fic\w*)",
+    re.IGNORECASE,
+)
+_TRAILING_FIELD_NOISE_RE = re.compile(r"[:_\s]+$")
+_LEADING_NUMBER_RE = re.compile(r"^\s*\d+[.)]\s+")
+
 
 class PdfGenerationError(Exception):
     def __init__(self, code: str, status: int = 422):
@@ -35,7 +44,7 @@ class PdfGenerationError(Exception):
 
 
 def _latin1_safe(text: str) -> str:
-    """Keep full Spanish Latin-1 (áéíóúñ¿¡ü—·) and replace exotic glyphs safely for Helvetica."""
+    """Keep full Spanish Latin-1 (áéíóúñ¿¡üºª·) and replace exotic glyphs safely for Helvetica."""
     replacements = {
         "\u2014": "-",
         "\u2013": "-",
@@ -56,35 +65,65 @@ def _p_text(text: str) -> str:
     return escape(_latin1_safe(text)).replace("\n", "<br/>")
 
 
-class _NumberedCanvasMixin:
-    """Draws subtle page footer on every page of a single copy."""
+def clean_header_field_label(raw: str) -> str:
+    """Strip trailing colons/underscores that LLMs sometimes include in header labels."""
+    cleaned = _TRAILING_FIELD_NOISE_RE.sub("", _latin1_safe(raw)).strip()
+    return cleaned or _latin1_safe(raw).strip() or "Campo"
 
-    @staticmethod
-    def draw_footer(footer_note: str):
-        note = _latin1_safe(footer_note)
 
-        def on_page(canvas, doc) -> None:
-            canvas.saveState()
-            canvas.setStrokeColor(colors.HexColor("#CCCCCC"))
-            canvas.setLineWidth(0.5)
-            canvas.line(
-                doc.leftMargin,
+def strip_leading_number(text: str) -> str:
+    """Remove duplicate leading numbering (e.g. '1. ' or '2) ') before auto-numbering."""
+    return _LEADING_NUMBER_RE.sub("", text)
+
+
+def needs_drawing_box(text: str) -> bool:
+    """Return True when a prompt invites students to draw, sketch, map, or diagram."""
+    return bool(_DRAWING_HINT_RE.search(text))
+
+
+def _make_numbered_canvas(footer_note: str, margin: float):
+    """Build a lightweight Canvas subclass that stamps 'Página X de Y' on every page."""
+    safe_note = _latin1_safe(footer_note)[:90]
+
+    class _EditorialNumberedCanvas(rl_canvas.Canvas):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            super().__init__(*args, **kwargs)
+            self._saved_page_states: list[dict[str, Any]] = []
+
+        def showPage(self) -> None:
+            self._saved_page_states.append(dict(self.__dict__))
+            self._startPage()
+
+        def save(self) -> None:
+            total_pages = len(self._saved_page_states)
+            for state in self._saved_page_states:
+                self.__dict__.update(state)
+                self._draw_footer(total_pages)
+                super().showPage()
+            super().save()
+
+        def _draw_footer(self, total_pages: int) -> None:
+            self.saveState()
+            self.setStrokeColor(colors.HexColor("#BBBBBB"))
+            self.setLineWidth(0.5)
+            self.line(
+                margin,
                 0.48 * inch,
-                letter[0] - doc.rightMargin,
+                letter[0] - margin,
                 0.48 * inch,
             )
-            canvas.setFont("Helvetica", 8.5)
-            canvas.setFillColor(colors.HexColor("#444444"))
-            if note:
-                canvas.drawString(doc.leftMargin, 0.33 * inch, note[:90])
-            canvas.drawRightString(
-                letter[0] - doc.rightMargin,
+            self.setFont("Helvetica", 8.5)
+            self.setFillColor(colors.HexColor("#444444"))
+            if safe_note:
+                self.drawString(margin, 0.33 * inch, safe_note)
+            self.drawRightString(
+                letter[0] - margin,
                 0.33 * inch,
-                f"Página {canvas.getPageNumber()}",
+                f"Página {self._pageNumber} de {total_pages}",
             )
-            canvas.restoreState()
+            self.restoreState()
 
-        return on_page
+    return _EditorialNumberedCanvas
 
 
 def _build_styles() -> dict[str, ParagraphStyle]:
@@ -94,8 +133,8 @@ def _build_styles() -> dict[str, ParagraphStyle]:
             "AnnexMeta",
             parent=base["Normal"],
             fontName="Helvetica-Bold",
-            fontSize=9,
-            leading=12,
+            fontSize=8.5,
+            leading=11.5,
             textColor=colors.HexColor("#333333"),
             spaceAfter=2,
         ),
@@ -103,12 +142,12 @@ def _build_styles() -> dict[str, ParagraphStyle]:
             "AnnexTitle",
             parent=base["Title"],
             fontName="Helvetica-Bold",
-            fontSize=16,
-            leading=20,
+            fontSize=16.5,
+            leading=20.5,
             textColor=colors.black,
             alignment=0,
             spaceBefore=0,
-            spaceAfter=4,
+            spaceAfter=3,
         ),
         "subtitle": ParagraphStyle(
             "AnnexSubtitle",
@@ -117,13 +156,21 @@ def _build_styles() -> dict[str, ParagraphStyle]:
             fontSize=10,
             leading=13,
             textColor=colors.HexColor("#333333"),
-            spaceAfter=8,
+            spaceAfter=6,
+        ),
+        "field_label": ParagraphStyle(
+            "AnnexFieldLabel",
+            parent=base["Normal"],
+            fontName="Helvetica-Bold",
+            fontSize=9.5,
+            leading=12,
+            textColor=colors.black,
         ),
         "instructions": ParagraphStyle(
             "AnnexInstructions",
             parent=base["Normal"],
             fontName="Helvetica",
-            fontSize=10.5,
+            fontSize=10,
             leading=14,
             textColor=colors.black,
         ),
@@ -131,11 +178,11 @@ def _build_styles() -> dict[str, ParagraphStyle]:
             "AnnexSection",
             parent=base["Heading2"],
             fontName="Helvetica-Bold",
-            fontSize=12,
-            leading=15,
+            fontSize=11.5,
+            leading=14.5,
             textColor=colors.black,
-            spaceBefore=10,
-            spaceAfter=4,
+            spaceBefore=0,
+            spaceAfter=0,
         ),
         "section_prompt": ParagraphStyle(
             "AnnexSectionPrompt",
@@ -144,7 +191,8 @@ def _build_styles() -> dict[str, ParagraphStyle]:
             fontSize=9.5,
             leading=13,
             textColor=colors.HexColor("#222222"),
-            spaceAfter=5,
+            spaceBefore=4,
+            spaceAfter=4,
         ),
         "item": ParagraphStyle(
             "AnnexItem",
@@ -156,6 +204,16 @@ def _build_styles() -> dict[str, ParagraphStyle]:
             spaceBefore=4,
             spaceAfter=4,
         ),
+        "checklist_item": ParagraphStyle(
+            "AnnexChecklistItem",
+            parent=base["Normal"],
+            fontName="Helvetica",
+            fontSize=10.5,
+            leading=14,
+            textColor=colors.black,
+            spaceBefore=0,
+            spaceAfter=0,
+        ),
         "reading": ParagraphStyle(
             "AnnexReading",
             parent=base["Normal"],
@@ -164,42 +222,152 @@ def _build_styles() -> dict[str, ParagraphStyle]:
             leading=15,
             textColor=colors.black,
         ),
+        "drawing_caption": ParagraphStyle(
+            "AnnexDrawingCaption",
+            parent=base["Normal"],
+            fontName="Helvetica-Oblique",
+            fontSize=8,
+            leading=10,
+            textColor=colors.HexColor("#666666"),
+        ),
     }
 
 
-def _student_header_table(fields: list[str], usable_width: float) -> Table:
-    labels = [_latin1_safe(f) for f in fields[:4]] or ["Nombre", "Fecha", "Grupo"]
-    cells = [f"{label}: ______________________" for label in labels]
-    # Fit up to 2 rows cleanly so fields never collide horizontally.
-    rows: list[list[str]] = []
-    if len(cells) <= 2:
-        rows.append(cells)
-    elif len(cells) == 3:
-        rows.append([f"{labels[0]}: ____________________________________", ""])
-        rows.append(
+def _student_header_table(
+    fields: list[str],
+    styles: dict[str, ParagraphStyle],
+    usable_width: float,
+) -> Table:
+    """Precision underlined student header grid aligned flush to page margins."""
+    labels = [
+        clean_header_field_label(f)
+        for f in fields[:4]
+        if isinstance(f, str) and f.strip()
+    ]
+    if not labels:
+        labels = ["Nombre", "Fecha", "Grupo"]
+
+    label_style = styles["field_label"]
+    col_gap = 16.0
+    half_width = (usable_width - col_gap) / 2.0
+
+    def _label_width(label: str) -> float:
+        return min(max(len(label) * 6.0 + 12.0, 44.0), 115.0)
+
+    def _row_table(pair: list[str]) -> Table:
+        if len(pair) == 1:
+            lw = _label_width(pair[0])
+            row_data = [[Paragraph(f"{_p_text(pair[0])}:", label_style), ""]]
+            tbl = Table(row_data, colWidths=[lw, usable_width - lw])
+            tbl.setStyle(
+                TableStyle(
+                    [
+                        ("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                        ("TOPPADDING", (0, 0), (-1, -1), 4),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                        ("LINEBELOW", (1, 0), (1, 0), 0.65, colors.HexColor("#444444")),
+                    ]
+                )
+            )
+            return tbl
+
+        lw0 = _label_width(pair[0])
+        lw1 = _label_width(pair[1])
+        row_data = [
             [
-                f"{labels[1]}: ________________________",
-                f"{labels[2]}: ________________________",
+                Paragraph(f"{_p_text(pair[0])}:", label_style),
+                "",
+                "",
+                Paragraph(f"{_p_text(pair[1])}:", label_style),
+                "",
+            ]
+        ]
+        tbl = Table(
+            row_data,
+            colWidths=[lw0, half_width - lw0, col_gap, lw1, half_width - lw1],
+        )
+        tbl.setStyle(
+            TableStyle(
+                [
+                    ("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                    ("LINEBELOW", (1, 0), (1, 0), 0.65, colors.HexColor("#444444")),
+                    ("LINEBELOW", (4, 0), (4, 0), 0.65, colors.HexColor("#444444")),
+                ]
+            )
+        )
+        return tbl
+
+    row_tables: list[list[Table]] = []
+    if len(labels) == 1:
+        row_tables.append([_row_table(labels)])
+    elif len(labels) == 2:
+        row_tables.append([_row_table(labels)])
+    elif len(labels) == 3:
+        # Give generous full-width handwriting space to the first field (usually Nombre).
+        row_tables.append([_row_table([labels[0]])])
+        row_tables.append([_row_table(labels[1:3])])
+    else:
+        row_tables.append([_row_table(labels[:2])])
+        row_tables.append([_row_table(labels[2:4])])
+
+    wrapper = Table(row_tables, colWidths=[usable_width])
+    wrapper.setStyle(
+        TableStyle(
+            [
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 1),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
             ]
         )
-    else:
-        rows.append(cells[:2])
-        rows.append(cells[2:4])
-    cols = max(len(r) for r in rows)
-    col_widths = [usable_width / cols] * cols
-    table = Table(rows, colWidths=col_widths)
-    style_cmds: list[Any] = [
-        ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
-        ("FONTSIZE", (0, 0), (-1, -1), 10),
-        ("TEXTCOLOR", (0, 0), (-1, -1), colors.black),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-        ("LEFTPADDING", (0, 0), (-1, -1), 0),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+    )
+    return wrapper
+
+
+def _editorial_double_rule(usable_width: float) -> list[Any]:
+    return [
+        HRFlowable(
+            width=usable_width,
+            thickness=1.4,
+            color=colors.black,
+            spaceBefore=3,
+            spaceAfter=2,
+        ),
+        HRFlowable(
+            width=usable_width,
+            thickness=0.45,
+            color=colors.HexColor("#666666"),
+            spaceBefore=0,
+            spaceAfter=8,
+        ),
     ]
-    if len(cells) == 3:
-        style_cmds.append(("SPAN", (0, 0), (1, 0)))
-    table.setStyle(TableStyle(style_cmds))
+
+
+def _section_banner(
+    heading: str,
+    style: ParagraphStyle,
+    usable_width: float,
+) -> Table:
+    """Crisp black-and-white editorial section strip with solid left accent rule."""
+    table = Table([[Paragraph(_p_text(heading), style)]], colWidths=[usable_width])
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F3F3F3")),
+                ("LINEBEFORE", (0, 0), (0, -1), 2.5, colors.HexColor("#111111")),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ]
+        )
+    )
     return table
 
 
@@ -208,8 +376,8 @@ def _boxed_paragraph(
     style: ParagraphStyle,
     usable_width: float,
     *,
-    fill_hex: str = "#F5F5F5",
-    border_hex: str = "#444444",
+    fill_hex: str = "#F4F4F4",
+    border_hex: str = "#333333",
 ) -> Table:
     table = Table([[Paragraph(text, style)]], colWidths=[usable_width])
     table.setStyle(
@@ -227,14 +395,105 @@ def _boxed_paragraph(
     return table
 
 
+def _reading_box(
+    text: str,
+    style: ParagraphStyle,
+    usable_width: float,
+) -> Table:
+    """Left-ruled editorial frame for reading passages."""
+    table = Table([[Paragraph(_p_text(text), style)]], colWidths=[usable_width])
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#FAFAFA")),
+                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#BBBBBB")),
+                ("LINEBEFORE", (0, 0), (0, -1), 2.2, colors.HexColor("#222222")),
+                ("TOPPADDING", (0, 0), (-1, -1), 8),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+            ]
+        )
+    )
+    return table
+
+
+def _checklist_row(
+    text: str,
+    style: ParagraphStyle,
+    usable_width: float,
+) -> Table:
+    """Vector 9x9pt hollow square checkbox aligned with checklist text."""
+    checkbox = Table([[""]], colWidths=[9], rowHeights=[9])
+    checkbox.setStyle(
+        TableStyle(
+            [
+                ("BOX", (0, 0), (0, 0), 0.8, colors.HexColor("#222222")),
+                ("BACKGROUND", (0, 0), (0, 0), colors.white),
+                ("TOPPADDING", (0, 0), (0, 0), 0),
+                ("BOTTOMPADDING", (0, 0), (0, 0), 0),
+                ("LEFTPADDING", (0, 0), (0, 0), 0),
+                ("RIGHTPADDING", (0, 0), (0, 0), 0),
+            ]
+        )
+    )
+    row = Table(
+        [[checkbox, Paragraph(_p_text(text), style)]],
+        colWidths=[18, usable_width - 18],
+    )
+    row.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (0, 0), "TOP"),
+                ("VALIGN", (1, 0), (1, 0), "TOP"),
+                ("TOPPADDING", (0, 0), (0, 0), 4),
+                ("TOPPADDING", (1, 0), (1, 0), 2),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ]
+        )
+    )
+    return row
+
+
+def _drawing_box(
+    styles: dict[str, ParagraphStyle],
+    usable_width: float,
+    answer_lines: int,
+) -> Table:
+    """Hollow black-and-white frame for student drawings, diagrams, or maps."""
+    height = 1.8 * inch if answer_lines >= 4 else 1.45 * inch
+    box = Table(
+        [[Paragraph("Espacio para dibujar / esquematizar", styles["drawing_caption"])]],
+        colWidths=[usable_width],
+        rowHeights=[height],
+    )
+    box.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), colors.white),
+                ("BOX", (0, 0), (-1, -1), 0.85, colors.HexColor("#333333")),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("LEFTPADDING", (0, 0), (-1, -1), 7),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 7),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ]
+        )
+    )
+    return box
+
+
 def _answer_lines(count: int, usable_width: float) -> list[Any]:
+    """Primary-friendly 0.28 in ruled writing lines."""
     flowables: list[Any] = []
     for _ in range(max(0, min(10, count))):
-        flowables.append(Spacer(1, 0.24 * inch))
+        flowables.append(Spacer(1, 0.28 * inch))
         flowables.append(
             HRFlowable(
                 width=usable_width,
-                thickness=0.6,
+                thickness=0.55,
                 color=colors.HexColor("#555555"),
                 spaceBefore=0,
                 spaceAfter=2,
@@ -298,7 +557,7 @@ def render_annex_pdf(annex_doc: dict[str, Any], *, copies: int = 1) -> bytes:
         leftMargin=margin,
         rightMargin=margin,
         topMargin=0.6 * inch,
-        bottomMargin=0.65 * inch,
+        bottomMargin=0.68 * inch,
         title=_latin1_safe(str(annex_doc.get("title", "Anexo escolar"))),
         author="AulaLista",
     )
@@ -319,16 +578,8 @@ def render_annex_pdf(annex_doc: dict[str, Any], *, copies: int = 1) -> bytes:
         story.append(Paragraph(_p_text(subtitle), styles["subtitle"]))
 
     header_fields = content.get("student_header_fields") or ["Nombre", "Fecha", "Grupo"]
-    story.append(_student_header_table(header_fields, usable_width))
-    story.append(
-        HRFlowable(
-            width=usable_width,
-            thickness=1.2,
-            color=colors.black,
-            spaceBefore=2,
-            spaceAfter=8,
-        )
-    )
+    story.append(_student_header_table(header_fields, styles, usable_width))
+    story.extend(_editorial_double_rule(usable_width))
 
     instructions = str(annex_doc.get("instructions", "")).strip()
     if instructions:
@@ -344,13 +595,17 @@ def render_annex_pdf(annex_doc: dict[str, Any], *, copies: int = 1) -> bytes:
         story.append(Spacer(1, 0.1 * inch))
 
     sections = content.get("sections") or []
-    for section in sections:
+    for s_idx, section in enumerate(sections):
         heading = str(section.get("heading", "")).strip()
         prompt = str(section.get("prompt", "")).strip()
         items = section.get("items") or []
         section_header: list[Any] = []
+        if s_idx > 0:
+            section_header.append(Spacer(1, 0.08 * inch))
         if heading:
-            section_header.append(Paragraph(_p_text(heading), styles["section"]))
+            section_header.append(
+                _section_banner(heading, styles["section"], usable_width)
+            )
         if prompt:
             section_header.append(Paragraph(_p_text(prompt), styles["section_prompt"]))
 
@@ -365,37 +620,36 @@ def render_annex_pdf(annex_doc: dict[str, Any], *, copies: int = 1) -> bytes:
                 section_header = []
 
             if kind == "reading":
-                block.append(
-                    _boxed_paragraph(
-                        _p_text(text),
-                        styles["reading"],
-                        usable_width,
-                        fill_hex="#FFFFFF",
-                        border_hex="#555555",
-                    )
-                )
+                block.append(Spacer(1, 0.04 * inch))
+                block.append(_reading_box(text, styles["reading"], usable_width))
                 block.append(Spacer(1, 0.08 * inch))
             elif kind == "checklist":
                 block.append(
-                    Paragraph(f"[ &nbsp;&nbsp; ] &nbsp;{_p_text(text)}", styles["item"])
+                    _checklist_row(text, styles["checklist_item"], usable_width)
                 )
             else:
                 question_index += 1
+                clean_text = strip_leading_number(text)
                 block.append(
                     Paragraph(
-                        f"<b>{question_index}.</b> {_p_text(text)}",
+                        f"<b>{question_index}.</b> {_p_text(clean_text)}",
                         styles["item"],
                     )
                 )
-                if lines > 0:
+                if needs_drawing_box(clean_text):
+                    block.append(Spacer(1, 0.04 * inch))
+                    block.append(_drawing_box(styles, usable_width, lines))
+                    block.append(Spacer(1, 0.05 * inch))
+                    if lines > 0:
+                        block.extend(_answer_lines(min(lines, 3), usable_width))
+                elif lines > 0:
                     block.extend(_answer_lines(lines, usable_width))
             story.append(KeepTogether(block))
 
         if section_header:
             story.extend(section_header)
 
-    footer_cb = _NumberedCanvasMixin.draw_footer(footer_note)
-    doc.build(story, onFirstPage=footer_cb, onLaterPages=footer_cb)
+    doc.build(story, canvasmaker=_make_numbered_canvas(footer_note, margin))
     return duplicate_pdf_copies(buf.getvalue(), copies)
 
 
