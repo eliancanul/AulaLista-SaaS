@@ -1,12 +1,12 @@
-# Reference only. Do not connect/sync this file without deployment authorization.
-# No database, credentials, migration hook, paid plan, or automatic deploys.
-# autoDeployTrigger disables subsequent auto-deploys, not initial provisioning.
+# Reference blueprint for Render (2 real teachers cut).
+# Do not connect/sync without deployment authorization.
 services:
   - type: web
-    name: acenta-demo
+    name: aulalista-docentes
     runtime: python
     plan: free
     buildCommand: bash scripts/build-render.sh
+    preDeployCommand: .venv/bin/alembic upgrade head
     startCommand: .venv/bin/python -m uvicorn aulalista_api.app:create_app --factory --host 0.0.0.0 --port "$PORT" --no-access-log --no-proxy-headers
     healthCheckPath: /health/ready
     autoDeployTrigger: "off"
@@ -20,7 +20,7 @@ services:
       - key: AULALISTA_DOCS_ENABLED
         value: "false"
       - key: AULALISTA_DB_TIMEOUT_SECONDS
-        value: "3"
+        value: "5"
       - key: AULALISTA_DATABASE_URL
         sync: false
       - key: AULALISTA_AUTH_ORIGIN
@@ -28,4 +28,30 @@ services:
       - key: AULALISTA_AUTH_HMAC_KEY
         sync: false
       - key: AULALISTA_GOOGLE_CLIENT_ID
+        sync: false
+      # Optional: comma-separated Gmail accounts allowed to sign in (your 2 teachers)
+      - key: AULALISTA_ALLOWED_EMAILS
+        sync: false
+      # OpenAI (real annex generation)
+      - key: AULALISTA_OPENAI_ANNEXES_ENABLED
+        value: "true"
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: "gpt-6-luna"
+      # SMTP (Gmail App Password for Epson Email Print)
+      - key: SMTP_HOST
+        value: "smtp.gmail.com"
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: PRINT_FROM_EMAIL
+        sync: false
+      # Scheduled print jobs dispatcher
+      - key: AULALISTA_PRINT_POLLER_SECONDS
+        value: "60"
+      - key: AULALISTA_PRINT_CRON_SECRET
         sync: false

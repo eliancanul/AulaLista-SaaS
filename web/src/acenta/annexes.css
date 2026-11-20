@@ -1,0 +1,251 @@
+.annexes-page,
+.printer-page {
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  padding: 28px 24px 56px;
+  display: grid;
+  gap: 24px;
+}
+
+.annexes-header,
+.printer-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.annexes-header h1,
+.printer-header h1 {
+  font-size: 38px;
+}
+
+.annexes-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.annexes-grid {
+  display: grid;
+  grid-template-columns: minmax(290px, 340px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 860px) {
+  .annexes-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.annex-card {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  display: grid;
+  gap: 14px;
+}
+
+.annex-field {
+  display: grid;
+  gap: 6px;
+}
+
+.annex-field label {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.annex-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 560px) {
+  .annex-pair {
+    grid-template-columns: 1fr;
+  }
+}
+
+.annex-list {
+  display: grid;
+  gap: 10px;
+}
+
+.annex-list-item {
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: white;
+  display: grid;
+  gap: 4px;
+}
+
+.annex-list-item.selected {
+  border-color: var(--action);
+  background: var(--selection);
+}
+
+.annex-list-item strong {
+  font-size: 16px;
+}
+
+.annex-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: #f4f5f6;
+}
+
+.annex-badge.approved,
+.annex-badge.sent {
+  background: #e6f4ea;
+  border-color: #7ab88a;
+  color: #165c2d;
+}
+
+.annex-badge.pending,
+.annex-badge.sending {
+  background: #fef5e7;
+  border-color: #e2b15c;
+  color: #7a4c00;
+}
+
+.annex-badge.failed {
+  background: #fdecea;
+  border-color: #df8277;
+  color: #8f1d14;
+}
+
+.annex-section-box {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  background: #fafaf7;
+  display: grid;
+  gap: 12px;
+}
+
+.annex-section-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.annex-item-row {
+  border: 1px solid #d7dce0;
+  border-radius: 10px;
+  padding: 12px;
+  background: white;
+  display: grid;
+  gap: 8px;
+}
+
+.annex-item-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.annex-item-controls select,
+.annex-item-controls input[type="number"] {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: white;
+}
+
+.annex-actions-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.annex-print-box {
+  border: 2px solid #2d6a4f;
+  border-radius: 14px;
+  padding: 18px;
+  background: #f3faf6;
+  display: grid;
+  gap: 14px;
+}
+
+.annex-quick-times {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.annex-quick-times button {
+  padding: 8px 12px;
+  font-size: 14px;
+}
+
+.annex-alert {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #fdecea;
+  border: 1px solid #df8277;
+  color: #7c1911;
+}
+
+.annex-status {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #e6f4ea;
+  border: 1px solid #7ab88a;
+  color: #165c2d;
+}
+
+.print-jobs-list {
+  display: grid;
+  gap: 12px;
+}
+
+.print-job-row {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: #fafaf7;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.print-job-meta {
+  display: grid;
+  gap: 4px;
+}
+
+.annex-link-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 16px;
+  background: white;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.annex-link-btn:hover {
+  background: var(--selection);
+}

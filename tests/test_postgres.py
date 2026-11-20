@@ -76,6 +76,9 @@ def test_empty_database_migrates_and_upgrade_is_repeatable(empty_database):
         "chat_context_revision",
         "analytic_section",
         "analytic_section_revision",
+        "annex",
+        "teacher_print_settings",
+        "print_job",
     }
     command.check(Config("alembic.ini"))
 
