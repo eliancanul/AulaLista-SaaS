@@ -142,7 +142,7 @@ def runtime_database(migrated_database, actors, monkeypatch):
             GRANT UPDATE (current_revision) ON analytic_section TO aulalista_runtime;
             GRANT SELECT, INSERT, UPDATE, DELETE ON annex TO aulalista_runtime;
             GRANT SELECT, INSERT, UPDATE ON teacher_print_settings TO aulalista_runtime;
-            GRANT SELECT, INSERT, UPDATE ON print_job TO aulalista_runtime
+            GRANT SELECT, INSERT, UPDATE, DELETE ON print_job TO aulalista_runtime
         """)
         )
     settings = load_settings()

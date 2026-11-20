@@ -26,8 +26,12 @@ export function PrintSettingsView({ controller }: { controller: AcentaController
   const [timezone, setTimezone] = useState("America/Mexico_City");
   const [jobs, setJobs] = useState<PrintJob[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+
+  const failedCount = jobs.filter((j) => j.status === "failed").length;
+  const deletableCount = jobs.filter((j) => j.status !== "sending").length;
 
   const load = async () => {
     try {
@@ -115,6 +119,49 @@ export function PrintSettingsView({ controller }: { controller: AcentaController
         setNotice(`Trabajo reenviado a ${updated.printer_email}.`);
       } else {
         setError(`El reintento falló (${updated.last_error ?? "error_smtp"}).`);
+      }
+    } catch (err) {
+      setError(annexErrorMessage(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleDeleteJob = async (jobId: string) => {
+    setBusy(jobId);
+    setError("");
+    setNotice("");
+    try {
+      await client.deletePrintJob(jobId);
+      setJobs((prev) => prev.filter((j) => j.id !== jobId));
+      setNotice("Trabajo eliminado de la cola.");
+    } catch (err) {
+      setError(annexErrorMessage(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleClearQueue = async (status: "all" | "failed") => {
+    setBusy(`clear-${status}`);
+    setError("");
+    setNotice("");
+    try {
+      const result = await client.clearPrintJobs(status);
+      setConfirmClear(false);
+      await load();
+      if (result.deleted === 0 && result.skipped_sending === 0) {
+        setNotice("No había trabajos por eliminar.");
+      } else if (result.skipped_sending > 0) {
+        setNotice(
+          `Se eliminaron ${result.deleted} ${result.deleted === 1 ? "trabajo" : "trabajos"}. ${result.skipped_sending} en curso se conservaron.`,
+        );
+      } else {
+        setNotice(
+          status === "failed"
+            ? `Se limpiaron ${result.deleted} ${result.deleted === 1 ? "error" : "errores"} de la cola.`
+            : `Cola vaciada (${result.deleted} ${result.deleted === 1 ? "trabajo eliminado" : "trabajos eliminados"}).`,
+        );
       }
     } catch (err) {
       setError(annexErrorMessage(err));
@@ -235,10 +282,56 @@ export function PrintSettingsView({ controller }: { controller: AcentaController
       <section className="annex-card">
         <div className="annex-section-top">
           <h2>Cola de impresión ({jobs.length})</h2>
-          <button type="button" onClick={() => void load()}>
-            Actualizar cola
-          </button>
+          <div className="annex-actions-bar">
+            <button type="button" disabled={busy !== null} onClick={() => void load()}>
+              Actualizar cola
+            </button>
+            {failedCount > 0 && (
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => void handleClearQueue("failed")}
+              >
+                {busy === "clear-failed" ? "Limpiando…" : `Limpiar errores (${failedCount})`}
+              </button>
+            )}
+            {deletableCount > 0 && !confirmClear && (
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => setConfirmClear(true)}
+              >
+                Vaciar cola
+              </button>
+            )}
+          </div>
         </div>
+
+        {confirmClear && (
+          <div className="annex-alert" role="region" aria-label="Confirmar vaciado de cola">
+            <p style={{ marginBottom: 10 }}>
+              <strong>¿Eliminar los {deletableCount} trabajos de la cola?</strong>{" "}
+              Se borrarán el historial y los envíos pendientes (los envíos en curso no se interrumpen).
+            </p>
+            <div className="annex-actions-bar">
+              <button
+                type="button"
+                className="primary"
+                disabled={busy !== null}
+                onClick={() => void handleClearQueue("all")}
+              >
+                {busy === "clear-all" ? "Vaciando…" : "Sí, vaciar cola"}
+              </button>
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => setConfirmClear(false)}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
 
         {!jobs.length && (
           <p className="field-hint">
@@ -290,6 +383,15 @@ export function PrintSettingsView({ controller }: { controller: AcentaController
                     onClick={() => void handleRetry(job.id)}
                   >
                     Reintentar
+                  </button>
+                )}
+                {job.status !== "sending" && (
+                  <button
+                    type="button"
+                    disabled={busy === job.id}
+                    onClick={() => void handleDeleteJob(job.id)}
+                  >
+                    Eliminar
                   </button>
                 )}
               </div>

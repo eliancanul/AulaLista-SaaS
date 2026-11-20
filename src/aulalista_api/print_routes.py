@@ -7,7 +7,7 @@ import os
 from uuid import UUID
 
 from fastapi import FastAPI, Header, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
@@ -122,6 +122,22 @@ def install_print_routes(
     async def retry_print_job(scope_id: UUID, job_id: UUID, actor: Actor):
         job = await run_in_threadpool(jobs_service.retry_job, actor, scope_id, job_id)
         return JSONResponse(job, headers={"Cache-Control": "no-store"})
+
+    @app.delete("/scopes/{scope_id}/print-jobs")
+    async def clear_print_jobs(
+        scope_id: UUID,
+        actor: Actor,
+        status: str | None = Query(default=None),
+    ):
+        result = await run_in_threadpool(
+            jobs_service.clear_jobs, actor, scope_id, status_filter=status
+        )
+        return JSONResponse(result, headers={"Cache-Control": "no-store"})
+
+    @app.delete("/scopes/{scope_id}/print-jobs/{job_id}", status_code=204)
+    async def delete_print_job(scope_id: UUID, job_id: UUID, actor: Actor):
+        await run_in_threadpool(jobs_service.delete_job, actor, scope_id, job_id)
+        return Response(status_code=204, headers={"Cache-Control": "no-store"})
 
     @app.post("/internal/print-jobs/dispatch", include_in_schema=False)
     async def dispatch_due_print_jobs(

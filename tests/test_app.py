@@ -106,6 +106,8 @@ def test_health_and_fail_closed_material_routes_are_registered(client):
         ("/scopes/{scope_id}/print-jobs", {"GET"}),
         ("/scopes/{scope_id}/print-jobs/{job_id}/cancel", {"POST"}),
         ("/scopes/{scope_id}/print-jobs/{job_id}/retry", {"POST"}),
+        ("/scopes/{scope_id}/print-jobs", {"DELETE"}),
+        ("/scopes/{scope_id}/print-jobs/{job_id}", {"DELETE"}),
     ]
 
 
