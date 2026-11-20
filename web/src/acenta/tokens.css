@@ -1,0 +1,154 @@
+/* ==========================================================================
+   Acenta Editorial Design Tokens
+   Single source of truth for palette, surfaces, type, rhythm, elevation & motion.
+   ========================================================================== */
+
+:root {
+  /* ------------------------------------------------------------------------
+     1. Brand & Paper Surface Palette
+     ------------------------------------------------------------------------ */
+  --ac-canvas: #f7f7f3;            /* Warm ivory cotton paper (app canvas) */
+  --ac-canvas-subtle: #f1f0ea;     /* Subtle recessed tray / studio backdrop */
+  --ac-surface: #ffffff;           /* Crisp elevated editorial sheet */
+  --ac-surface-warm: #faf9f5;      /* Nested inset block (sections, queue items) */
+  --ac-surface-hover: #f5efe9;     /* Tactile paper hover wash */
+  --ac-selection: #f1e8e2;         /* Warm sand active/selected wash */
+  --ac-selection-strong: #e8d9cf;  /* Pressed/focused sand wash */
+
+  /* ------------------------------------------------------------------------
+     2. Hairline Borders & Dividers (warm stone-slate)
+     ------------------------------------------------------------------------ */
+  --ac-border-subtle: #e5e4de;     /* Card dividers, table rows, inset frames */
+  --ac-border: #cfd3d1;            /* Default control & card border */
+  --ac-border-strong: #9ca5a3;     /* Hover border / input affordance */
+  --ac-border-ink: #171e24;        /* Editorial crisp rule (sheet preview) */
+
+  /* ------------------------------------------------------------------------
+     3. Ink Hierarchy
+     ------------------------------------------------------------------------ */
+  --ac-ink: #171e24;               /* Deep slate editorial ink */
+  --ac-ink-body: #2d363d;          /* Long-form body reading ink */
+  --ac-ink-secondary: #59636a;     /* Metadata, captions, hints */
+  --ac-ink-muted: #768087;         /* Placeholders, disabled labels */
+  --ac-ink-inverse: #ffffff;       /* Text on terracotta/ink fills */
+
+  /* ------------------------------------------------------------------------
+     4. Signature Terracotta Vermilion (Primary Brand Action)
+     ------------------------------------------------------------------------ */
+  --ac-action: #b8422d;            /* Signature terracotta */
+  --ac-action-hover: #9e3724;      /* Deepened terracotta hover */
+  --ac-action-active: #842d1d;     /* Pressed terracotta */
+  --ac-action-soft: #fcf3ef;       /* Soft blush tint for callouts */
+  --ac-action-border: #e3b5a9;     /* Subtle terracotta hairline */
+  --ac-action-ink: #7e2b1d;        /* High-contrast terracotta ink on soft bg */
+
+  /* ------------------------------------------------------------------------
+     5. Editorial Semantics (Botanical Sage, Warm Ochre, Muted Crimson, Slate)
+     ------------------------------------------------------------------------ */
+  --ac-sage-bg: #edf5ef;
+  --ac-sage-border: #9bc4a7;
+  --ac-sage-ink: #1f5432;
+  --ac-sage-solid: #2d6a4f;
+  --ac-sage-solid-hover: #23533d;
+
+  --ac-ochre-bg: #fbf4e6;
+  --ac-ochre-border: #d9b878;
+  --ac-ochre-ink: #734c0b;
+  --ac-ochre-dot: #c48a1e;
+
+  --ac-danger-bg: #fdf0ee;
+  --ac-danger-border: #e09a90;
+  --ac-danger-ink: #8a2016;
+  --ac-danger-solid: #a8281c;
+  --ac-danger-hover: #8a1f15;
+
+  --ac-neutral-bg: #eff0ec;
+  --ac-neutral-border: #ccd0cd;
+  --ac-neutral-ink: #465056;
+
+  /* Backdrops */
+  --ac-backdrop: rgba(23, 30, 36, 0.48);
+  --ac-backdrop-soft: rgba(23, 30, 36, 0.32);
+
+  /* ------------------------------------------------------------------------
+     6. Typography Scale
+     ------------------------------------------------------------------------ */
+  --ac-font-serif: "Instrument Serif", Georgia, serif;
+  --ac-font-sans: "Source Sans 3", Arial, sans-serif;
+  --ac-font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  --ac-text-xs: 0.75rem;           /* 12px */
+  --ac-text-sm: 0.875rem;          /* 14px */
+  --ac-text-base: 1rem;            /* 16px */
+  --ac-text-md: 1.125rem;          /* 18px */
+  --ac-text-lg: 1.375rem;          /* 22px */
+  --ac-text-xl: 1.875rem;          /* 30px */
+  --ac-text-2xl: 2.375rem;         /* 38px */
+  --ac-text-display: 2.75rem;      /* 44px */
+
+  --ac-leading-tight: 1.18;
+  --ac-leading-snug: 1.32;
+  --ac-leading-normal: 1.48;
+  --ac-leading-relaxed: 1.62;
+
+  /* ------------------------------------------------------------------------
+     7. Spacing Scale (4px baseline)
+     ------------------------------------------------------------------------ */
+  --ac-space-1: 4px;
+  --ac-space-2: 8px;
+  --ac-space-3: 12px;
+  --ac-space-4: 16px;
+  --ac-space-5: 20px;
+  --ac-space-6: 24px;
+  --ac-space-7: 28px;
+  --ac-space-8: 32px;
+  --ac-space-10: 40px;
+  --ac-space-12: 48px;
+
+  /* ------------------------------------------------------------------------
+     8. Radius Scale
+     ------------------------------------------------------------------------ */
+  --ac-radius-xs: 6px;
+  --ac-radius-sm: 8px;
+  --ac-radius-md: 12px;
+  --ac-radius-lg: 16px;
+  --ac-radius-xl: 20px;
+  --ac-radius-pill: 999px;
+
+  /* ------------------------------------------------------------------------
+     9. Tactile Paper Elevation & Shadows
+     ------------------------------------------------------------------------ */
+  --ac-shadow-none: none;
+  --ac-shadow-xs: 0 1px 2px rgba(23, 30, 36, 0.04);
+  --ac-shadow-card: 0 1px 3px rgba(23, 30, 36, 0.05), 0 1px 2px rgba(23, 30, 36, 0.03);
+  --ac-shadow-elevated: 0 6px 20px rgba(23, 30, 36, 0.07), 0 2px 6px rgba(23, 30, 36, 0.04);
+  --ac-shadow-sheet: 0 12px 32px rgba(23, 30, 36, 0.1), 0 2px 6px rgba(23, 30, 36, 0.05);
+  --ac-shadow-dialog: 0 20px 48px rgba(23, 30, 36, 0.18), 0 4px 12px rgba(23, 30, 36, 0.08);
+
+  /* ------------------------------------------------------------------------
+     10. Focus Ring & Motion
+     ------------------------------------------------------------------------ */
+  --ac-focus-ring: 0 0 0 3px rgba(184, 66, 45, 0.22);
+  --ac-ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ac-ease-rail: cubic-bezier(0.4, 0, 0.2, 1);
+  --ac-dur-fast: 140ms;
+  --ac-dur-base: 220ms;
+  --ac-dur-rail: 280ms;
+
+  /* ------------------------------------------------------------------------
+     11. Backward-Compatible Aliases
+     ------------------------------------------------------------------------ */
+  --canvas: var(--ac-canvas);
+  --ink: var(--ac-ink);
+  --secondary: var(--ac-ink-secondary);
+  --border: var(--ac-border);
+  --action: var(--ac-action);
+  --selection: var(--ac-selection);
+  --rail: 78.102px;
+}
+
+.ac-num,
+time,
+input[type="number"] {
+  font-variant-numeric: tabular-nums;
+}
