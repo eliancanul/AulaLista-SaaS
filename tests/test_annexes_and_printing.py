@@ -28,9 +28,12 @@ from aulalista_api.openai_annex import (
 from aulalista_api.pdf_annex import (
     MAX_EPSON_PDF_BYTES,
     PdfGenerationError,
+    clean_header_field_label,
     duplicate_pdf_copies,
+    needs_drawing_box,
     render_annex_pdf,
     render_test_page_pdf,
+    strip_leading_number,
 )
 
 
@@ -186,6 +189,114 @@ def test_pdf_render_us_letter_copies_and_epson_limit():
         default_print_time="06:30",
     )
     assert len(PdfReader(BytesIO(test_pdf)).pages) == 1
+
+
+def test_editorial_pdf_normalization_drawing_box_spanish_and_pagination():
+    assert clean_header_field_label("Nombre: __________") == "Nombre"
+    assert clean_header_field_label("Fecha:____") == "Fecha"
+    assert strip_leading_number("1. ¿Qué es el agua?") == "¿Qué es el agua?"
+    assert strip_leading_number("2) Resuelve") == "Resuelve"
+    assert needs_drawing_box("Dibuja el ciclo del agua en el recuadro.") is True
+    assert needs_drawing_box("¿Cuánto es 1/2 + 1/2?") is False
+
+    doc = {
+        "title": "El ciclo del agua y la acción comunitaria (4.º)",
+        "subject": "Ciencias naturales",
+        "grade": "4.º de primaria",
+        "topic": "Ciclo del agua",
+        "instructions": "Lee con atención: ¡áéíóúñ¿¡üºª!",
+        "content": {
+            "subtitle": "Hoja de práctica escolar",
+            "student_header_fields": ["Nombre: _______", "Fecha: ____", "Grupo: ___"],
+            "sections": [
+                {
+                    "heading": "1. Lectura breve",
+                    "prompt": "Subraya las palabras clave.",
+                    "items": [
+                        {
+                            "kind": "reading",
+                            "text": "El agua recorre ríos, nubes y montañas en un ciclo continuo.",
+                            "answer_lines": 0,
+                        }
+                    ],
+                },
+                {
+                    "heading": "2. Comprensión y dibujo",
+                    "prompt": "Responde y realiza tu esquema.",
+                    "items": [
+                        {
+                            "kind": "question",
+                            "text": "1. ¿Por qué es importante cuidar el agua en la escuela?",
+                            "answer_lines": 3,
+                        },
+                        {
+                            "kind": "exercise",
+                            "text": "2. Dibuja el ciclo del agua con flechas y etiquetas.",
+                            "answer_lines": 4,
+                        },
+                        {
+                            "kind": "checklist",
+                            "text": "Escribí mi nombre completo y revisé la ortografía.",
+                            "answer_lines": 0,
+                        },
+                    ],
+                },
+                {
+                    "heading": "3. Práctica extendida",
+                    "prompt": "Desarrolla tus respuestas.",
+                    "items": [
+                        {
+                            "kind": "question",
+                            "text": f"{i}. Explica una acción concreta #{i} para ahorrar agua en casa.",
+                            "answer_lines": 5,
+                        }
+                        for i in range(1, 7)
+                    ],
+                },
+            ],
+            "footer_note": "AulaLista · Ciencias 4.º",
+        },
+    }
+
+    single = render_annex_pdf(doc, copies=1)
+    reader = PdfReader(BytesIO(single))
+    total_pages = len(reader.pages)
+    assert total_pages >= 2
+    full_text = "\n".join(page.extract_text() or "" for page in reader.pages)
+
+    # US Letter preserved on every page
+    for page in reader.pages:
+        assert round(float(page.mediabox.width)) == 612
+        assert round(float(page.mediabox.height)) == 792
+
+    # Cleaned header labels (no doubled colons/underscores) and no duplicate numbering
+    assert "Nombre:" in full_text
+    assert "Nombre: _______:" not in full_text
+    assert "1. 1." not in full_text
+    assert "2. 2." not in full_text
+
+    # Smart drawing box caption present + Spanish Latin-1 glyphs intact
+    assert "Espacio para dibujar / esquematizar" in full_text
+    assert "¡áéíóúñ¿¡üºª!" in full_text
+
+    # Accurate "Página X de Y" pagination on first and last page
+    assert f"Página 1 de {total_pages}" in (reader.pages[0].extract_text() or "")
+    assert f"Página {total_pages} de {total_pages}" in (
+        reader.pages[-1].extract_text() or ""
+    )
+
+    # 25 copies duplicate accurately and stay far below Epson's 20 MB limit
+    twenty_five = render_annex_pdf(doc, copies=25)
+    reader_25 = PdfReader(BytesIO(twenty_five))
+    assert len(reader_25.pages) == total_pages * 25
+    assert len(twenty_five) < MAX_EPSON_PDF_BYTES
+
+    # Non-drawing worksheet does NOT include the drawing caption
+    plain_pdf = render_annex_pdf(_sample_annex_doc(), copies=1)
+    plain_reader = PdfReader(BytesIO(plain_pdf))
+    plain_text = "\n".join(p.extract_text() or "" for p in plain_reader.pages)
+    assert "Espacio para dibujar / esquematizar" not in plain_text
+    assert f"Página 1 de {len(plain_reader.pages)}" in plain_text
 
 
 def test_epson_mime_message_has_empty_body_and_pdf_attachment():
