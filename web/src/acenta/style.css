@@ -480,8 +480,7 @@ textarea {
   z-index: 20;
   transition:
     width var(--ac-dur-rail) var(--ac-ease-spring),
-    min-width var(--ac-dur-rail) var(--ac-ease-spring),
-    padding var(--ac-dur-rail) var(--ac-ease-spring);
+    min-width var(--ac-dur-rail) var(--ac-ease-spring);
 }
 .expanded .sidebar {
   padding: 16px 12px 14px;
@@ -1513,7 +1512,8 @@ dialog::backdrop {
   }
 }
 @media (max-width: 800px) {
-  :root {
+  :root,
+  .workspace {
     --rail: 64px;
   }
   .workspace.expanded {
