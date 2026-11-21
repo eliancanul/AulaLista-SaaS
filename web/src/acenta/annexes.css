@@ -1214,3 +1214,412 @@
     min-height: 540px;
   }
 }
+
+/* ==========================================================================
+   Minimalismo Sustractivo — Anexos Canvas & Bottom Print Dock
+   ========================================================================== */
+.minimal-annexes-page {
+  width: min(1140px, 100%);
+  gap: var(--ac-space-5);
+}
+
+.minimal-studio-header {
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--ac-border-subtle);
+}
+
+.minimal-studio-kicker {
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--ac-ink-muted);
+  margin: 0;
+}
+
+.minimal-studio-header h1 {
+  font-size: clamp(24px, 2.5vw, 30px);
+  letter-spacing: -0.02em;
+}
+
+.minimal-ghost-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 11px;
+  border: 1px solid transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--ac-ink-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: var(--ac-radius-sm);
+  transition:
+    background-color var(--ac-dur-fast) var(--ac-ease-out),
+    color var(--ac-dur-fast) var(--ac-ease-out);
+}
+
+.minimal-ghost-btn:hover:not(:disabled) {
+  background: var(--ac-surface-hover);
+  color: var(--ac-ink);
+}
+
+.minimal-annexes-grid {
+  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+  gap: var(--ac-space-6);
+}
+
+.minimal-gen-card {
+  padding: 16px;
+  gap: 12px;
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-border-subtle);
+  box-shadow: var(--ac-shadow-xs);
+}
+
+.minimal-gen-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.minimal-gen-row select {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  font-size: 13.5px;
+  border-radius: var(--ac-radius-sm);
+}
+
+.minimal-adjust-toggle {
+  flex: none;
+  padding: 6px 8px;
+  font-size: 12.5px;
+}
+
+.minimal-advanced-fields {
+  display: grid;
+  gap: 10px;
+  padding-top: 6px;
+  border-top: 1px solid var(--ac-border-subtle);
+}
+
+.minimal-gen-submit {
+  width: 100%;
+  justify-content: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 14px;
+  font-size: 14px;
+  border-radius: var(--ac-radius-md);
+}
+
+.minimal-library-section {
+  display: grid;
+  gap: 10px;
+}
+
+.minimal-library-head {
+  display: grid;
+  gap: 8px;
+}
+
+.minimal-library-head h2 {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ac-ink-muted);
+  padding: 0 4px;
+}
+
+.minimal-search input {
+  padding: 7px 10px 7px 30px;
+  font-size: 13.5px;
+}
+
+.minimal-empty-hint {
+  font-size: 13px;
+  color: var(--ac-ink-muted);
+  padding: 4px;
+  line-height: 1.45;
+}
+
+.minimal-annex-list {
+  gap: 3px;
+  max-height: 460px;
+}
+
+.minimal-annex-row {
+  width: 100%;
+  text-align: left;
+  padding: 9px 11px;
+  border: 0;
+  border-radius: var(--ac-radius-sm);
+  background: transparent;
+  box-shadow: none;
+  display: grid;
+  gap: 2px;
+  transition: background-color var(--ac-dur-fast) var(--ac-ease-out);
+}
+
+.minimal-annex-row:hover:not(:disabled) {
+  background: var(--ac-surface-hover);
+}
+
+.minimal-annex-row.selected {
+  background: var(--ac-surface);
+  box-shadow: var(--ac-shadow-xs);
+}
+
+.minimal-annex-row-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ac-ink);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.minimal-annex-row.selected .minimal-annex-row-title {
+  font-weight: 600;
+  color: var(--ac-action-ink);
+}
+
+.minimal-annex-row-meta {
+  font-size: 12px;
+  color: var(--ac-ink-muted);
+}
+
+.minimal-canvas-shell {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.minimal-canvas-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 2px;
+}
+
+.minimal-canvas-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.minimal-canvas-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ac-ink);
+  overflow-wrap: anywhere;
+}
+
+.minimal-save-whisper {
+  font-size: 12px;
+  color: var(--ac-ink-muted);
+  white-space: nowrap;
+}
+
+.minimal-canvas-icons {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+.minimal-icon-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--ac-radius-sm);
+  background: transparent;
+  box-shadow: none;
+  color: var(--ac-ink-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  transition:
+    background-color var(--ac-dur-fast) var(--ac-ease-out),
+    color var(--ac-dur-fast) var(--ac-ease-out);
+}
+
+.minimal-icon-btn:hover:not(:disabled) {
+  background: var(--ac-surface-hover);
+  color: var(--ac-ink);
+}
+
+.minimal-icon-btn.is-active {
+  background: var(--ac-selection);
+  color: var(--ac-action-ink);
+  border-color: var(--ac-action-border);
+}
+
+.minimal-icon-btn.is-danger:hover:not(:disabled) {
+  background: var(--ac-danger-bg);
+  color: var(--ac-danger-ink);
+}
+
+.minimal-letter-stage {
+  background: transparent;
+  border: 0;
+  padding: 4px 0 8px;
+}
+
+.minimal-editor-panel {
+  gap: 14px;
+}
+
+.minimal-print-dock {
+  position: sticky;
+  bottom: 14px;
+  z-index: 10;
+  margin: 4px auto 0;
+  width: fit-content;
+  max-width: 100%;
+  padding: 8px 10px;
+  border-radius: 16px;
+  background: var(--ac-surface-glass);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--ac-border);
+  box-shadow: var(--ac-shadow-elevated);
+  display: grid;
+  gap: 6px;
+}
+
+.minimal-print-dock-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.minimal-copies-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px;
+  border-radius: var(--ac-radius-pill);
+  background: var(--ac-surface-warm);
+  border: 1px solid var(--ac-border-subtle);
+}
+
+.minimal-copies-pill button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: none;
+  color: var(--ac-ink-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.minimal-copies-pill button:hover:not(:disabled) {
+  background: var(--ac-surface);
+  color: var(--ac-ink);
+}
+
+.minimal-copies-pill input[type="number"] {
+  width: 44px;
+  border: 0;
+  background: transparent;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ac-ink);
+  padding: 2px 0;
+  box-shadow: none;
+  -moz-appearance: textfield;
+}
+
+.minimal-copies-pill input[type="number"]::-webkit-outer-spin-button,
+.minimal-copies-pill input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.minimal-schedule-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 12px;
+  border-radius: var(--ac-radius-pill);
+  border: 1px solid var(--ac-border-subtle);
+  background: var(--ac-surface);
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ac-ink-secondary);
+  white-space: nowrap;
+}
+
+.minimal-schedule-toggle:hover:not(:disabled) {
+  background: var(--ac-surface-hover);
+  color: var(--ac-ink);
+}
+
+.minimal-schedule-toggle.is-scheduled {
+  background: var(--ac-selection);
+  border-color: var(--ac-action-border);
+  color: var(--ac-action-ink);
+}
+
+.minimal-schedule-input {
+  padding: 6px 10px;
+  font-size: 13px;
+  border-radius: var(--ac-radius-pill);
+  border: 1px solid var(--ac-border);
+  background: var(--ac-surface);
+  max-width: 100%;
+}
+
+.minimal-print-submit {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 16px;
+  border-radius: var(--ac-radius-pill);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.minimal-print-unconfigured {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 2px 6px;
+  font-size: 13px;
+  color: var(--ac-ink-secondary);
+}
+
+.minimal-print-whisper {
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--ac-ink-muted);
+  margin: 0;
+}
+
+@media (max-width: 920px) {
+  .minimal-annexes-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .minimal-print-dock {
+    width: 100%;
+  }
+}
+
