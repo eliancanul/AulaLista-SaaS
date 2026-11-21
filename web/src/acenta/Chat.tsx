@@ -1,7 +1,7 @@
-import { useEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { AcentaController, PanelView } from "./controller";
 import type { ChatUsage } from "./chat-contracts";
-import { Icon, Logo } from "./ui";
+import { Icon, UiIcon } from "./ui";
 import "./chat.css";
 
 export function ChatExitGuard({controller, onReview, onExit}: {
@@ -64,10 +64,16 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
   controller: AcentaController; onPlan: () => void; onContext: () => void; panel?: ReactNode; panelView?: PanelView | null;
 }) {
   const state = useSyncExternalStore(controller.chat.subscribe, controller.chat.snapshot);
+  useSyncExternalStore(controller.schools.subscribe, controller.schools.snapshot);
+  const activeSchool = controller.schools.getActiveSchool();
+  const activeSubject = controller.schools.getActiveSubject();
   const thread = controller.chat.current();
   const archive = controller.chat.isArchive();
   const input = useRef<HTMLTextAreaElement>(null);
   const previous = useRef(thread.status);
+  const overflowRef = useRef<HTMLDivElement>(null);
+  const [overflowOpen, setOverflowOpen] = useState(false);
+
   useEffect(() => { void controller.chat.loadAvailability(); if (!state.activeId) void controller.chat.openActive(); }, [controller]);
   useEffect(() => {
     // Completion may happen after the teacher moves to a panel or a modal.
@@ -76,36 +82,130 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
       input.current?.closest("form")?.contains(document.activeElement) && !document.querySelector("dialog[open]")) input.current.focus();
     previous.current = thread.status;
   }, [thread.status, panelView]);
+  useEffect(() => {
+    if (!overflowOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (overflowRef.current && !overflowRef.current.contains(event.target as Node)) {
+        setOverflowOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOverflowOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [overflowOpen]);
+
   const busy = thread.status === "sending" || thread.status === "loading";
+  const canClearContext = !archive && !!thread.document && !busy && !thread.pending && !thread.needsRefresh;
+  const throughTurn = !archive && thread.document ? thread.document.context.through_turn : 0;
+  const turns = thread.document?.turns ?? [];
+  const lastArchivedIdx = throughTurn > 0
+    ? turns.reduce((acc, turn, idx) => (turn.number <= throughTurn ? idx : acc), -1)
+    : -1;
+
   return <section className={`chat-panel conversation-panel ${panel ? "with-panel" : ""}`} aria-labelledby="chat-title">
     <div className="chat-history-area">
-    <header className="chat-heading">
-      <Logo />
-      <h1 id="chat-title">{archive ? thread.document?.conversation.title || "Historial anterior" : "Tu chat con Luna"}</h1>
-      <p>{archive ? "Archivo de sólo lectura. Sus mensajes no se incorporan al chat activo." : "Un espacio continuo y privado. El historial confirmado se conserva en tu cuenta."}</p>
+    <header className="chat-topbar">
+      <div className="chat-heading">
+        {!archive && (
+          <p className="chat-context-kicker">
+            {activeSchool.shortName} · {activeSchool.grade}
+          </p>
+        )}
+        <h1 id="chat-title">
+          {archive ? thread.document?.conversation.title || "Historial anterior" : activeSubject.name}
+        </h1>
+        {archive && (
+          <p className="chat-archive-subtitle">
+            Archivo de sólo lectura. Sus mensajes no se incorporan al chat activo.
+          </p>
+        )}
+      </div>
+      <div className="chat-toolbar">
+        {archive ? (
+          <button className="chat-ghost-btn" onClick={() => controller.navigate("home")}>
+            Volver al chat activo
+          </button>
+        ) : (
+          <>
+            <button className="chat-ghost-btn" onClick={() => controller.navigate("conversations")}>
+              Consultar archivo anterior
+            </button>
+            <div className="chat-overflow" ref={overflowRef}>
+              <button
+                type="button"
+                className="chat-overflow-trigger"
+                aria-label="Opciones del chat"
+                aria-haspopup="menu"
+                aria-expanded={overflowOpen}
+                onClick={() => setOverflowOpen((prev) => !prev)}
+              >
+                <UiIcon name="more-horizontal" size={18} />
+              </button>
+              {overflowOpen && (
+                <div className="chat-overflow-menu" role="menu" aria-label="Opciones del chat">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={!canClearContext}
+                    onClick={() => {
+                      setOverflowOpen(false);
+                      void controller.chat.updateContext(true);
+                    }}
+                  >
+                    Limpiar chat
+                  </button>
+                  {state.activeId && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={busy}
+                      onClick={() => {
+                        setOverflowOpen(false);
+                        void controller.chat.refresh();
+                      }}
+                    >
+                      Actualizar historial
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </header>
-    <div className="chat-toolbar">
-      {state.activeId && <button disabled={busy} onClick={() => void controller.chat.refresh()}>Actualizar historial</button>}
-      {archive ? <button onClick={() => controller.navigate("home")}>Volver al chat activo</button> : <>
-        <button onClick={() => controller.navigate("conversations")}>Consultar archivo anterior</button>
-      </>}
-    </div>
-    {!archive && thread.document && <p className="chat-note">Contexto activo · revisión {thread.document.context.revision}. Usa {thread.document.context.notes ? "notas manuales y " : ""}los turnos confirmados posteriores al {thread.document.context.through_turn}. El historial anterior permanece guardado.</p>}
+    {!archive && thread.document && <p className="chat-note chat-context-meta">Contexto activo · revisión {thread.document.context.revision}. Usa {thread.document.context.notes ? "notas manuales y " : ""}los turnos confirmados posteriores al {thread.document.context.through_turn}. El historial anterior permanece guardado.</p>}
     {thread.status === "loading" && <p role="status">Recuperando historial…</p>}
-    {thread.document?.next_cursor && <button disabled={busy} onClick={() => void controller.chat.refresh(state.activeId, true)}>Ver mensajes anteriores</button>}
+    {thread.document?.next_cursor && <button className="chat-ghost-btn" disabled={busy} onClick={() => void controller.chat.refresh(state.activeId, true)}>Ver mensajes anteriores</button>}
     <ol className="chat-turns" aria-label="Historial de la conversación">
-      {thread.document?.turns.map(turn => <li key={turn.operation_id} className="chat-turn">
-        <article className="chat-message chat-user" aria-label={`Tu mensaje ${turn.number}`}>
-          <h2>Tú</h2><p>{turn.user_text}</p>
-        </article>
-        <article className="chat-message chat-assistant" aria-label={`Respuesta ${turn.number}`}>
-          <h2>Luna</h2>
-          {turn.state === "succeeded" ? <p>{turn.assistant_text}</p> :
-            <p>{turn.state === "failed" ? "Este intento falló. No hay respuesta confirmada." : turn.state === "generating" ? "Respuesta en proceso; consulta su estado." : "Resultado incierto; consulta su estado antes de enviar otro mensaje."}</p>}
-          <p className="chat-note">Contexto usado · revisión {turn.context_revision}</p>
-          <ChatUsageDetails usage={turn.usage} />
-        </article>
-      </li>)}
+      {turns.map((turn, idx) => {
+        const isArchivedTurn = throughTurn > 0 && turn.number <= throughTurn;
+        return <Fragment key={turn.operation_id}>
+          <li className={`chat-turn${isArchivedTurn ? " is-archived" : ""}`}>
+            <article className="chat-message chat-user" aria-label={`Tu mensaje ${turn.number}`}>
+              <h2>Tú</h2><p>{turn.user_text}</p>
+            </article>
+            <article className="chat-message chat-assistant" aria-label={`Respuesta ${turn.number}`}>
+              <h2>Luna</h2>
+              {turn.state === "succeeded" ? <p>{turn.assistant_text}</p> :
+                <p>{turn.state === "failed" ? "Este intento falló. No hay respuesta confirmada." : turn.state === "generating" ? "Respuesta en proceso; consulta su estado." : "Resultado incierto; consulta su estado antes de enviar otro mensaje."}</p>}
+              <p className="chat-note">Contexto usado · revisión {turn.context_revision}</p>
+              <ChatUsageDetails usage={turn.usage} />
+            </article>
+          </li>
+          {idx === lastArchivedIdx && (
+            <li className="chat-archive-divider" role="separator" aria-label="Conversación anterior archivada">
+              <span>Conversación anterior · archivada</span>
+            </li>
+          )}
+        </Fragment>;
+      })}
     </ol>
     <div role="status" aria-live="polite" className="chat-status">
       {thread.status === "sending" ? "Consultando el servidor…" : thread.contextNotice ||
@@ -119,9 +219,9 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
     {panel}
     {!archive && <div className="chat-compose-area">
       <form className="chat-composer" onSubmit={event => { event.preventDefault(); void controller.chat.submit(); }}>
-        <label htmlFor="chat-message">Mensaje para Luna</label>
+        <label className="sr-only" htmlFor="chat-message">Mensaje para Luna</label>
         <textarea id="chat-message" ref={input} value={thread.draft} disabled={!!thread.pending}
-          placeholder="Cuéntame qué necesitas para tu clase…" aria-describedby="chat-input-hint"
+          placeholder={`Pide una ficha o planeación de ${activeSubject.name} para ${activeSchool.grade}…`} aria-describedby="chat-input-hint"
           onChange={event => controller.chat.setDraft(event.target.value)}
           onKeyDown={event => {
             if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && !event.nativeEvent.isComposing) {
@@ -130,7 +230,7 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
           }} />
         <div className="chat-composer-actions">
           <p id="chat-input-hint">Hasta 4096 caracteres y 8192 bytes · Ctrl/⌘ + Enter</p>
-          <button type="submit" className="primary" disabled={busy || !!thread.pending || thread.needsRefresh || !state.activeLoaded || !thread.draft.trim() || state.availability !== "available"}>
+          <button type="submit" className="primary chat-send-btn" disabled={busy || !!thread.pending || thread.needsRefresh || !state.activeLoaded || !thread.draft.trim() || state.availability !== "available"}>
             <Icon name="send" small /> Enviar mensaje
           </button>
         </div>
@@ -140,11 +240,13 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
         <button onClick={() => void controller.chat.loadAvailability()}>Comprobar disponibilidad</button>
       </div>}
       {state.availability === "loading" && <p role="status">Comprobando disponibilidad del chat…</p>}
-      <p className="chat-note">Consultar el historial o guardar contexto no inicia una generación. Los textos sin guardar sólo permanecen en esta pestaña mientras tu sesión siga válida.</p>
-      <nav className="chat-shortcuts" aria-label="Accesos del chat">
-        <button data-navigation-focus="shortcut-context" aria-controls="workspace-panel" aria-expanded={panelView === "chat-context"} onClick={onContext}>Revisar contexto</button>
-        <button data-navigation-focus="shortcut-planning" aria-controls="workspace-panel" aria-expanded={panelView === "tools"} onClick={onPlan}><Icon name="document" small />Planear</button>
-      </nav>
+      <div className="chat-footer-bar">
+        <nav className="chat-shortcuts" aria-label="Accesos del chat">
+          <button className="chat-ghost-btn" data-navigation-focus="shortcut-context" aria-controls="workspace-panel" aria-expanded={panelView === "chat-context"} onClick={onContext}>Revisar contexto</button>
+          <button className="chat-ghost-btn" data-navigation-focus="shortcut-planning" aria-controls="workspace-panel" aria-expanded={panelView === "tools"} onClick={onPlan}><Icon name="document" small />Planear</button>
+        </nav>
+        <p className="chat-note chat-privacy-whisper">Consultar el historial o guardar contexto no inicia una generación. Los textos sin guardar sólo permanecen en esta pestaña mientras tu sesión siga válida.</p>
+      </div>
     </div>}
   </section>;
 }
