@@ -764,6 +764,46 @@ export class AcentaApi {
       next_cursor: v.next_cursor,
     };
   }
+  async scopedJson(
+    path: string,
+    method: "GET" | "POST" | "PUT" | "DELETE" = "GET",
+    body?: unknown,
+    timeoutMs = 50000,
+  ): Promise<unknown> {
+    const headers: Record<string, string> = {};
+    if (body !== undefined) headers["Content-Type"] = "application/json";
+    let response: Response;
+    try {
+      response = await this.transport(
+        `/scopes/${this.session.scopeId}/${path}`,
+        {
+          method,
+          headers,
+          body: body === undefined ? undefined : JSON.stringify(body),
+          credentials: "same-origin",
+          cache: "no-store",
+          signal: AbortSignal.timeout(timeoutMs),
+        },
+      );
+    } catch {
+      throw new ApiError(0, "unconfirmed");
+    }
+    if (response.status === 204) return null;
+    let value: unknown;
+    try {
+      value = await response.json();
+    } catch {
+      throw new ApiError(response.ok ? 0 : response.status, "invalid_response");
+    }
+    if (!response.ok)
+      throw new ApiError(
+        response.status,
+        object(value) && typeof value.detail === "string"
+          ? value.detail
+          : "unavailable",
+      );
+    return value;
+  }
 }
 export function errorMessage(error: unknown): string {
   if (!(error instanceof ApiError))

@@ -139,7 +139,10 @@ def runtime_database(migrated_database, actors, monkeypatch):
                 cached_tokens, cache_write_tokens, reasoning_tokens, error_code, planning_revision_id)
                 ON planning_generation_attempt TO aulalista_runtime;
             GRANT SELECT, INSERT ON analytic_section, analytic_section_revision TO aulalista_runtime;
-            GRANT UPDATE (current_revision) ON analytic_section TO aulalista_runtime
+            GRANT UPDATE (current_revision) ON analytic_section TO aulalista_runtime;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON annex TO aulalista_runtime;
+            GRANT SELECT, INSERT, UPDATE ON teacher_print_settings TO aulalista_runtime;
+            GRANT SELECT, INSERT, UPDATE ON print_job TO aulalista_runtime
         """)
         )
     settings = load_settings()

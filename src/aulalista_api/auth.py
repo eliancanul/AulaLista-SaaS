@@ -273,6 +273,11 @@ class Auth:
             claims = self.google.verify(credential, self.mac("google-nonce", pre_token))
         except ValueError:
             raise AuthError(401, "unauthorized") from None
+        if (
+            self.settings.allowed_emails is not None
+            and claims["email"].strip().lower() not in self.settings.allowed_emails
+        ):
+            raise AuthError(403, "forbidden")
         with Session(self.engine) as db, db.begin():
             pre = self.pre(db, pre_token)
             principal_id = self.provision(

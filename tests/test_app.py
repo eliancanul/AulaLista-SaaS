@@ -90,6 +90,22 @@ def test_health_and_fail_closed_material_routes_are_registered(client):
             "/scopes/{scope_id}/analytic-sections/{section_id}/revisions/{number}/plannings",
             {"POST"},
         ),
+        ("/scopes/{scope_id}/annex-capability", {"GET"}),
+        ("/scopes/{scope_id}/annexes", {"GET"}),
+        ("/scopes/{scope_id}/annexes/generate", {"POST"}),
+        ("/scopes/{scope_id}/annexes", {"POST"}),
+        ("/scopes/{scope_id}/annexes/{annex_id}", {"GET"}),
+        ("/scopes/{scope_id}/annexes/{annex_id}", {"PUT"}),
+        ("/scopes/{scope_id}/annexes/{annex_id}/approve", {"POST"}),
+        ("/scopes/{scope_id}/annexes/{annex_id}", {"DELETE"}),
+        ("/scopes/{scope_id}/annexes/{annex_id}/pdf", {"GET"}),
+        ("/scopes/{scope_id}/print-settings", {"GET"}),
+        ("/scopes/{scope_id}/print-settings", {"PUT"}),
+        ("/scopes/{scope_id}/print-settings/test-page", {"POST"}),
+        ("/scopes/{scope_id}/annexes/{annex_id}/print", {"POST"}),
+        ("/scopes/{scope_id}/print-jobs", {"GET"}),
+        ("/scopes/{scope_id}/print-jobs/{job_id}/cancel", {"POST"}),
+        ("/scopes/{scope_id}/print-jobs/{job_id}/retry", {"POST"}),
     ]
 
 
