@@ -43,6 +43,11 @@ export function AuthenticatedApp({ auth }: { auth: AuthController }) {
     window.addEventListener("beforeunload", preserve);
     return () => window.removeEventListener("beforeunload", preserve);
   }, [state.phase, state.controller]);
+  useEffect(() => {
+    if (state.phase === "ready" && state.controller) {
+      void state.controller.schools.load();
+    }
+  }, [state.phase, state.controller]);
   return state.controller && state.phase === "ready" ? (
     <AcentaApp
       key={state.workspaceVersion}

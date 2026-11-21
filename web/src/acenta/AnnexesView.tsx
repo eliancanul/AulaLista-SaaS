@@ -40,7 +40,31 @@ function quickScheduleDate(dayOffset: number, hour: number, minute: number): str
   return toLocalInputValue(d);
 }
 
-export function LetterSheetPreview({ draft }: { draft: AnnexDocument }) {
+interface LetterSheetEditHandlers {
+  onUpdateDraft: (updater: (current: AnnexDocument) => AnnexDocument) => void;
+  onUpdateSection: (
+    sIdx: number,
+    updater: (sec: AnnexSection) => AnnexSection,
+  ) => void;
+  onUpdateItem: (
+    sIdx: number,
+    iIdx: number,
+    patch: Partial<AnnexItem>,
+  ) => void;
+  onAddItem: (sIdx: number) => void;
+  onRemoveItem: (sIdx: number, iIdx: number) => void;
+  onAddSection: () => void;
+}
+
+export function LetterSheetPreview({
+  draft,
+  editing = false,
+  handlers,
+}: {
+  draft: AnnexDocument;
+  editing?: boolean;
+  handlers?: LetterSheetEditHandlers;
+}) {
   const headerFields =
     draft.content.student_header_fields.length > 0
       ? draft.content.student_header_fields
@@ -48,15 +72,80 @@ export function LetterSheetPreview({ draft }: { draft: AnnexDocument }) {
 
   return (
     <div className="letter-stage minimal-letter-stage">
-      <article className="letter-sheet" aria-label="Vista previa tamaño Carta">
+      <article
+        className={`letter-sheet${editing ? " is-editing" : ""}`}
+        aria-label={
+          editing
+            ? "Edición directa en hoja tamaño Carta"
+            : "Vista previa tamaño Carta"
+        }
+      >
         <header>
-          <p className="letter-kicker">
-            {draft.subject} · {draft.grade}
-          </p>
-          <h2 className="letter-title">{draft.title}</h2>
-          {draft.content.subtitle.trim() && (
-            <p className="letter-subtitle">{draft.content.subtitle}</p>
+          {editing && handlers ? (
+            <div className="letter-inline-kicker">
+              <input
+                aria-label="Asignatura de la ficha"
+                value={draft.subject}
+                onChange={(e) =>
+                  handlers.onUpdateDraft((cur) => ({
+                    ...cur,
+                    subject: e.target.value,
+                  }))
+                }
+              />
+              <span aria-hidden="true">·</span>
+              <input
+                aria-label="Grado de la ficha"
+                value={draft.grade}
+                onChange={(e) =>
+                  handlers.onUpdateDraft((cur) => ({
+                    ...cur,
+                    grade: e.target.value,
+                  }))
+                }
+              />
+            </div>
+          ) : (
+            <p className="letter-kicker">
+              {draft.subject} · {draft.grade}
+            </p>
           )}
+
+          {editing && handlers ? (
+            <>
+              <input
+                className="letter-inline-title"
+                aria-label="Título de la ficha"
+                value={draft.title}
+                onChange={(e) =>
+                  handlers.onUpdateDraft((cur) => ({
+                    ...cur,
+                    title: e.target.value,
+                  }))
+                }
+              />
+              <input
+                className="letter-inline-subtitle"
+                aria-label="Subtítulo de la ficha"
+                placeholder="Subtítulo opcional…"
+                value={draft.content.subtitle}
+                onChange={(e) =>
+                  handlers.onUpdateDraft((cur) => ({
+                    ...cur,
+                    content: { ...cur.content, subtitle: e.target.value },
+                  }))
+                }
+              />
+            </>
+          ) : (
+            <>
+              <h2 className="letter-title">{draft.title}</h2>
+              {draft.content.subtitle.trim() && (
+                <p className="letter-subtitle">{draft.content.subtitle}</p>
+              )}
+            </>
+          )}
+
           <div className="letter-student-grid">
             {headerFields.map((rawField, idx) => {
               const isWide = headerFields.length % 2 === 1 && idx === 0;
@@ -75,23 +164,211 @@ export function LetterSheetPreview({ draft }: { draft: AnnexDocument }) {
 
         <div className="letter-double-rule" aria-hidden="true" />
 
-        {draft.instructions.trim() && (
-          <p className="letter-instructions">
-            <strong>Instrucciones:</strong> {draft.instructions}
-          </p>
+        {editing && handlers ? (
+          <div className="letter-instructions letter-inline-instructions">
+            <strong>Instrucciones:</strong>
+            <textarea
+              aria-label="Instrucciones de la ficha"
+              rows={2}
+              placeholder="Escribe las instrucciones para el alumnado…"
+              value={draft.instructions}
+              onChange={(e) =>
+                handlers.onUpdateDraft((cur) => ({
+                  ...cur,
+                  instructions: e.target.value,
+                }))
+              }
+            />
+          </div>
+        ) : (
+          draft.instructions.trim() && (
+            <p className="letter-instructions">
+              <strong>Instrucciones:</strong> {draft.instructions}
+            </p>
+          )
         )}
 
         {draft.content.sections.map((section, sIdx) => {
           let questionIdx = 0;
           return (
             <section key={sIdx} className="letter-section">
-              {section.heading.trim() && (
-                <h3 className="letter-section-banner">{section.heading}</h3>
+              {editing && handlers ? (
+                <div className="letter-inline-section-head">
+                  <input
+                    className="letter-inline-banner-input"
+                    aria-label={`Título sección ${sIdx + 1}`}
+                    value={section.heading}
+                    onChange={(e) =>
+                      handlers.onUpdateSection(sIdx, (sec) => ({
+                        ...sec,
+                        heading: e.target.value,
+                      }))
+                    }
+                  />
+                  {draft.content.sections.length > 1 && (
+                    <button
+                      type="button"
+                      className="letter-inline-chip"
+                      onClick={() =>
+                        handlers.onUpdateDraft((cur) => ({
+                          ...cur,
+                          content: {
+                            ...cur.content,
+                            sections: cur.content.sections.filter(
+                              (_, i) => i !== sIdx,
+                            ),
+                          },
+                        }))
+                      }
+                    >
+                      Quitar sección
+                    </button>
+                  )}
+                </div>
+              ) : (
+                section.heading.trim() && (
+                  <h3 className="letter-section-banner">{section.heading}</h3>
+                )
               )}
-              {section.prompt.trim() && (
-                <p className="letter-section-prompt">{section.prompt}</p>
+
+              {editing && handlers ? (
+                <input
+                  className="letter-inline-prompt"
+                  aria-label={`Indicación sección ${sIdx + 1}`}
+                  placeholder="Indicación breve (opcional)…"
+                  value={section.prompt}
+                  onChange={(e) =>
+                    handlers.onUpdateSection(sIdx, (sec) => ({
+                      ...sec,
+                      prompt: e.target.value,
+                    }))
+                  }
+                />
+              ) : (
+                section.prompt.trim() && (
+                  <p className="letter-section-prompt">{section.prompt}</p>
+                )
               )}
+
               {section.items.map((item, iIdx) => {
+                if (editing && handlers) {
+                  if (item.kind !== "reading" && item.kind !== "checklist") {
+                    questionIdx += 1;
+                  }
+                  const hasDrawing =
+                    (item.kind === "question" || item.kind === "exercise") &&
+                    needsDrawingBox(item.text);
+                  const lineCount = hasDrawing
+                    ? Math.min(item.answer_lines, 3)
+                    : item.answer_lines;
+                  return (
+                    <div key={iIdx} className="letter-inline-item">
+                      <div className="letter-inline-item-bar">
+                        {item.kind !== "reading" &&
+                          item.kind !== "checklist" && (
+                            <strong className="letter-inline-num">
+                              {questionIdx}.
+                            </strong>
+                          )}
+                        <select
+                          aria-label="Tipo de elemento"
+                          value={item.kind}
+                          onChange={(e) =>
+                            handlers.onUpdateItem(sIdx, iIdx, {
+                              kind: e.target.value as AnnexItemKind,
+                            })
+                          }
+                        >
+                          <option value="question">Pregunta</option>
+                          <option value="exercise">Ejercicio</option>
+                          <option value="reading">Lectura</option>
+                          <option value="checklist">Lista de cotejo</option>
+                        </select>
+                        {(item.kind === "question" ||
+                          item.kind === "exercise") && (
+                          <div
+                            className="letter-inline-lines"
+                            role="group"
+                            aria-label="Líneas para responder"
+                          >
+                            <span>Líneas</span>
+                            <button
+                              type="button"
+                              aria-label="Menos líneas"
+                              disabled={item.answer_lines <= 0}
+                              onClick={() =>
+                                handlers.onUpdateItem(sIdx, iIdx, {
+                                  answer_lines: Math.max(
+                                    0,
+                                    item.answer_lines - 1,
+                                  ),
+                                })
+                              }
+                            >
+                              <UiIcon name="minus" size={12} />
+                            </button>
+                            <span className="ac-num">{item.answer_lines}</span>
+                            <button
+                              type="button"
+                              aria-label="Más líneas"
+                              disabled={item.answer_lines >= 10}
+                              onClick={() =>
+                                handlers.onUpdateItem(sIdx, iIdx, {
+                                  answer_lines: Math.min(
+                                    10,
+                                    item.answer_lines + 1,
+                                  ),
+                                })
+                              }
+                            >
+                              <UiIcon name="plus" size={12} />
+                            </button>
+                          </div>
+                        )}
+                        {section.items.length > 1 && (
+                          <button
+                            type="button"
+                            className="letter-inline-chip"
+                            onClick={() => handlers.onRemoveItem(sIdx, iIdx)}
+                          >
+                            Quitar
+                          </button>
+                        )}
+                      </div>
+                      <textarea
+                        className={`letter-inline-item-text${item.kind === "reading" ? " is-reading" : ""}`}
+                        aria-label={`Texto elemento ${iIdx + 1} sección ${sIdx + 1}`}
+                        rows={item.kind === "reading" ? 3 : 2}
+                        value={item.text}
+                        onChange={(e) =>
+                          handlers.onUpdateItem(sIdx, iIdx, {
+                            text: e.target.value,
+                          })
+                        }
+                      />
+                      {hasDrawing && (
+                        <div className="letter-drawing-box">
+                          <span className="letter-drawing-label">
+                            Espacio para dibujar / esquematizar
+                          </span>
+                        </div>
+                      )}
+                      {(item.kind === "question" ||
+                        item.kind === "exercise") &&
+                        lineCount > 0 && (
+                          <div
+                            className="letter-writing-lines"
+                            aria-hidden="true"
+                          >
+                            {Array.from({ length: lineCount }, (_, lIdx) => (
+                              <div key={lIdx} className="letter-writing-line" />
+                            ))}
+                          </div>
+                        )}
+                    </div>
+                  );
+                }
+
                 if (item.kind === "reading") {
                   return (
                     <div key={iIdx} className="letter-reading-box">
@@ -135,12 +412,49 @@ export function LetterSheetPreview({ draft }: { draft: AnnexDocument }) {
                   </div>
                 );
               })}
+
+              {editing && handlers && (
+                <button
+                  type="button"
+                  className="letter-inline-add"
+                  onClick={() => handlers.onAddItem(sIdx)}
+                >
+                  + Agregar actividad
+                </button>
+              )}
             </section>
           );
         })}
 
+        {editing && handlers && (
+          <button
+            type="button"
+            className="letter-inline-add is-section"
+            onClick={handlers.onAddSection}
+          >
+            + Agregar sección
+          </button>
+        )}
+
         <footer className="letter-footer">
-          <span>{draft.content.footer_note.trim() || "AulaLista · Acenta"}</span>
+          {editing && handlers ? (
+            <input
+              className="letter-inline-footer"
+              aria-label="Pie de página de la ficha"
+              placeholder="Pie de página (opcional)"
+              value={draft.content.footer_note}
+              onChange={(e) =>
+                handlers.onUpdateDraft((cur) => ({
+                  ...cur,
+                  content: { ...cur.content, footer_note: e.target.value },
+                }))
+              }
+            />
+          ) : (
+            <span>
+              {draft.content.footer_note.trim() || "AulaLista · Acenta"}
+            </span>
+          )}
           <span className="ac-num">Página 1</span>
         </footer>
       </article>
@@ -152,10 +466,12 @@ export function AnnexesView({
   controller,
   initialAnnexes,
   initialSettings,
+  initialEditing = false,
 }: {
   controller: AcentaController;
   initialAnnexes?: AnnexDocument[];
   initialSettings?: PrintSettings | null;
+  initialEditing?: boolean;
 }) {
   const client = useMemo(
     () => new AnnexPrintClient(controller.api),
@@ -181,7 +497,9 @@ export function AnnexesView({
   const draftVersionRef = useRef(0);
 
   // Minimalist studio defaults to live US Letter preview
-  const [studioMode, setStudioMode] = useState<StudioMode>("preview");
+  const [studioMode, setStudioMode] = useState<StudioMode>(
+    initialEditing ? "edit" : "preview",
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -778,229 +1096,18 @@ export function AnnexesView({
                 </div>
               )}
 
-              {studioMode === "preview" ? (
-                <LetterSheetPreview draft={draft} />
-              ) : (
-                <section
-                  className="annex-card minimal-editor-panel"
-                  aria-label="Editor de ficha"
-                >
-                  <div className="annex-field">
-                    <label htmlFor="edit-title">Título</label>
-                    <input
-                      id="edit-title"
-                      value={draft.title}
-                      onChange={(e) =>
-                        updateDraft((cur) => ({ ...cur, title: e.target.value }))
-                      }
-                    />
-                  </div>
-
-                  <div className="annex-pair">
-                    <div className="annex-field">
-                      <label htmlFor="edit-subject">Asignatura</label>
-                      <input
-                        id="edit-subject"
-                        value={draft.subject}
-                        onChange={(e) =>
-                          updateDraft((cur) => ({
-                            ...cur,
-                            subject: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                    <div className="annex-field">
-                      <label htmlFor="edit-grade">Grado</label>
-                      <input
-                        id="edit-grade"
-                        value={draft.grade}
-                        onChange={(e) =>
-                          updateDraft((cur) => ({ ...cur, grade: e.target.value }))
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div className="annex-field">
-                    <label htmlFor="edit-instructions">Instrucciones</label>
-                    <textarea
-                      id="edit-instructions"
-                      rows={2}
-                      value={draft.instructions}
-                      onChange={(e) =>
-                        updateDraft((cur) => ({
-                          ...cur,
-                          instructions: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-
-                  {draft.content.sections.map((section, sIdx) => (
-                    <div key={sIdx} className="annex-section-box">
-                      <div className="annex-section-top">
-                        <span className="annex-section-label">
-                          Sección {sIdx + 1}
-                        </span>
-                        {draft.content.sections.length > 1 && (
-                          <button
-                            type="button"
-                            className="btn-sm btn-ghost"
-                            onClick={() =>
-                              updateDraft((cur) => ({
-                                ...cur,
-                                content: {
-                                  ...cur.content,
-                                  sections: cur.content.sections.filter(
-                                    (_, i) => i !== sIdx,
-                                  ),
-                                },
-                              }))
-                            }
-                          >
-                            Quitar sección
-                          </button>
-                        )}
-                      </div>
-                      <input
-                        aria-label={`Título sección ${sIdx + 1}`}
-                        value={section.heading}
-                        onChange={(e) =>
-                          updateSection(sIdx, (sec) => ({
-                            ...sec,
-                            heading: e.target.value,
-                          }))
-                        }
-                      />
-                      <input
-                        aria-label={`Indicación sección ${sIdx + 1}`}
-                        placeholder="Indicación breve (opcional)"
-                        value={section.prompt}
-                        onChange={(e) =>
-                          updateSection(sIdx, (sec) => ({
-                            ...sec,
-                            prompt: e.target.value,
-                          }))
-                        }
-                      />
-
-                      {section.items.map((item, iIdx) => {
-                        const showDrawingHint =
-                          (item.kind === "question" ||
-                            item.kind === "exercise") &&
-                          needsDrawingBox(item.text);
-
-                        return (
-                          <div key={iIdx} className="annex-item-row">
-                            <div className="annex-item-controls">
-                              <select
-                                aria-label="Tipo de elemento"
-                                value={item.kind}
-                                onChange={(e) =>
-                                  updateItem(sIdx, iIdx, {
-                                    kind: e.target.value as AnnexItemKind,
-                                  })
-                                }
-                              >
-                                <option value="question">Pregunta</option>
-                                <option value="exercise">Ejercicio</option>
-                                <option value="reading">Lectura</option>
-                                <option value="checklist">Lista de cotejo</option>
-                              </select>
-
-                              <div
-                                className="lines-stepper"
-                                role="group"
-                                aria-label="Líneas para responder"
-                              >
-                                <span>Líneas</span>
-                                <div className="lines-stepper-controls">
-                                  <button
-                                    type="button"
-                                    aria-label="Menos líneas"
-                                    disabled={item.answer_lines <= 0}
-                                    onClick={() =>
-                                      updateItem(sIdx, iIdx, {
-                                        answer_lines: Math.max(
-                                          0,
-                                          item.answer_lines - 1,
-                                        ),
-                                      })
-                                    }
-                                  >
-                                    <UiIcon name="minus" size={14} />
-                                  </button>
-                                  <span className="ac-num">
-                                    {item.answer_lines}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    aria-label="Más líneas"
-                                    disabled={item.answer_lines >= 10}
-                                    onClick={() =>
-                                      updateItem(sIdx, iIdx, {
-                                        answer_lines: Math.min(
-                                          10,
-                                          item.answer_lines + 1,
-                                        ),
-                                      })
-                                    }
-                                  >
-                                    <UiIcon name="plus" size={14} />
-                                  </button>
-                                </div>
-                              </div>
-
-                              {showDrawingHint && (
-                                <span className="drawing-hint-pill">
-                                  Incluye recuadro de dibujo
-                                </span>
-                              )}
-
-                              {section.items.length > 1 && (
-                                <button
-                                  type="button"
-                                  className="btn-sm btn-ghost"
-                                  onClick={() => removeItem(sIdx, iIdx)}
-                                >
-                                  Quitar
-                                </button>
-                              )}
-                            </div>
-                            <textarea
-                              aria-label={`Texto elemento ${iIdx + 1} sección ${sIdx + 1}`}
-                              rows={2}
-                              value={item.text}
-                              onChange={(e) =>
-                                updateItem(sIdx, iIdx, { text: e.target.value })
-                              }
-                            />
-                          </div>
-                        );
-                      })}
-
-                      <button
-                        type="button"
-                        className="btn-sm"
-                        onClick={() => addItem(sIdx)}
-                      >
-                        + Agregar actividad
-                      </button>
-                    </div>
-                  ))}
-
-                  <div className="annex-actions-bar">
-                    <button
-                      type="button"
-                      className="btn-sm"
-                      onClick={addSection}
-                    >
-                      + Agregar sección
-                    </button>
-                  </div>
-                </section>
-              )}
+              <LetterSheetPreview
+                draft={draft}
+                editing={studioMode === "edit"}
+                handlers={{
+                  onUpdateDraft: updateDraft,
+                  onUpdateSection: updateSection,
+                  onUpdateItem: updateItem,
+                  onAddItem: addItem,
+                  onRemoveItem: removeItem,
+                  onAddSection: addSection,
+                }}
+              />
 
               <footer
                 className="minimal-print-dock"

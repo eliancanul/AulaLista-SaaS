@@ -420,7 +420,12 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
     analyticExitGeneration.current++;
     setAnalyticExit(false);
   };
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      Boolean(onLogout) &&
+      window.innerWidth > 800,
+  );
   const activeSchool = controller.schools.getActiveSchool();
   useEffect(() => {
     if (!schoolMenuOpen) return;

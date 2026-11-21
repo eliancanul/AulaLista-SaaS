@@ -212,7 +212,7 @@ export class AcentaController {
     this.chat = new ChatController(api, id => {
       if (this.state.view === "home" || this.state.view === "chat") this.emit({view: "chat", chatId: id});
     });
-    this.schools = new SchoolContextStore();
+    this.schools = new SchoolContextStore(api);
     this.analytic = new AnalyticSectionController(api);
     this.analyticExplorer = new AnalyticExplorerController(api);
     this.analyticDerivation = new AnalyticDerivationController(api);

@@ -81,7 +81,7 @@ button.primary {
   background: var(--ac-action);
   border-color: var(--ac-action);
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(184, 66, 45, 0.22);
+  box-shadow: 0 1px 2px rgba(169, 98, 69, 0.22);
 }
 button.primary:hover:not(:disabled) {
   background: var(--ac-action-hover);
@@ -327,6 +327,7 @@ textarea {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
+  background: var(--ac-canvas);
 }
 .access-brand {
   position: absolute;
@@ -422,6 +423,7 @@ textarea {
 .access-legal button {
   border: 0;
   background: none;
+  box-shadow: none;
   color: var(--action);
   font-size: 14px;
   padding: 0;
@@ -979,9 +981,10 @@ textarea {
 }
 .conversation-card,
 .result-card {
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  background: white;
+  border: 1px solid var(--ac-border-subtle);
+  border-radius: var(--ac-radius-lg);
+  background: var(--ac-surface);
+  box-shadow: var(--ac-shadow-xs);
   padding: 24px;
   display: flex;
   flex-direction: column;
@@ -1053,13 +1056,21 @@ textarea {
   width: 840px;
   max-width: 100%;
   padding: 24px;
-  background: white;
-  border: 1px solid var(--border);
-  border-radius: 16px;
+  background: var(--ac-surface);
+  border: 1px solid var(--ac-border-subtle);
+  border-radius: var(--ac-radius-lg);
+  box-shadow: var(--ac-shadow-xs);
   display: flex;
   flex-direction: column;
   gap: 12px;
   align-items: flex-start;
+  transition:
+    border-color var(--ac-dur-fast) var(--ac-ease-out),
+    box-shadow var(--ac-dur-fast) var(--ac-ease-out);
+}
+.library-card:hover {
+  border-color: var(--ac-border);
+  box-shadow: var(--ac-shadow-card);
 }
 .library button {
   max-width: 100%;
@@ -1081,12 +1092,14 @@ dialog {
   overflow: auto;
 }
 dialog::backdrop {
-  background: rgba(23, 31, 36, 0.4);
+  background: var(--ac-backdrop);
 }
 .menu-dialog {
-  border-radius: 8px;
+  border-radius: var(--ac-radius-lg);
+  border: 1px solid var(--ac-border-subtle);
+  background: var(--ac-surface);
   padding: 16px;
-  box-shadow: 0 6px 24px #0002;
+  box-shadow: var(--ac-shadow-elevated);
   width: 368px;
   max-width: calc(100vw - 32px);
   display: flex;
@@ -1591,7 +1604,7 @@ dialog::backdrop {
 .guided-mode span { padding: 0 0 12px; }
 .guided-mode button { border: 0; border-radius: 0; box-shadow: none; padding: 0 0 12px; font-size: inherit; color: var(--ac-ink-secondary); }
 .guided-mode [aria-current] { color: var(--ac-action); border-bottom: 2px solid var(--ac-action); }
-.guided-form { background: var(--ac-surface); border: 1px solid var(--ac-border-subtle); border-radius: var(--ac-radius-lg); padding: 24px; box-shadow: var(--ac-shadow-card); }
+.guided-form { background: var(--ac-surface); border: 1px solid var(--ac-border-subtle); border-radius: var(--ac-radius-lg); padding: 24px; box-shadow: var(--ac-shadow-xs); }
 .guided-form fieldset { padding: 0; margin: 0; border: 0; min-width: 0; display: flex; flex-direction: column; gap: 28px; }
 .guided-form .field-hint { font-size: 13px; line-height: 19px; }
 /* Native keyboard scrolling must leave room for the focus outline at viewport edges. */
@@ -1599,7 +1612,7 @@ dialog::backdrop {
 .guided-field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .guided-field label { font-weight: 600; font-size: 15px; }
 .guided-field label > span { color: var(--ac-action); }
-.guided-field input, .guided-field select, .guided-field textarea { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--ac-border-strong); background: var(--ac-surface); }
+.guided-field input, .guided-field select, .guided-field textarea { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--ac-border); background: var(--ac-surface); }
 .guided-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .guided-duration { max-width: 180px; }
 .guided-example-note { background: var(--ac-canvas); padding: 12px; border-radius: var(--ac-radius-sm); margin-bottom: 20px; font-size: 13px; color: var(--ac-ink-secondary); line-height: 19px; }
