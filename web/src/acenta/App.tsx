@@ -401,9 +401,17 @@ export function AcentaApp({
 }
 function Workspace({ controller, onLogout }: { controller: AcentaController; onLogout?: () => void }) {
   const s = useSyncExternalStore(controller.subscribe, controller.snapshot);
+  const schoolState = useSyncExternalStore(controller.schools.subscribe, controller.schools.snapshot);
   const analytic = useSyncExternalStore(controller.analytic.subscribe, controller.analytic.snapshot);
   const derived = useSyncExternalStore(controller.analyticDerivation.subscribe, controller.analyticDerivation.snapshot);
   useSyncExternalStore(controller.chat.subscribe, controller.chat.snapshot);
+  const [schoolMenuOpen, setSchoolMenuOpen] = useState(false);
+  const [schoolModal, setSchoolModal] = useState<"school" | "subject" | null>(null);
+  const [newSchoolName, setNewSchoolName] = useState("");
+  const [newSchoolGrade, setNewSchoolGrade] = useState("4.º A");
+  const [newSchoolShift, setNewSchoolShift] = useState("Matutino");
+  const [newSubjectName, setNewSubjectName] = useState("");
+  const schoolMenuRef = useRef<HTMLDivElement>(null);
   const [chatExit, setChatExit] = useState(false);
   const [derivedExit, setDerivedExit] = useState(false);
   const [analyticExit, setAnalyticExit] = useState(false);
@@ -413,6 +421,17 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
     setAnalyticExit(false);
   };
   const [expanded, setExpanded] = useState(false);
+  const activeSchool = controller.schools.getActiveSchool();
+  useEffect(() => {
+    if (!schoolMenuOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (!schoolMenuRef.current?.contains(event.target as Node)) {
+        setSchoolMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [schoolMenuOpen]);
   const [overlay, setOverlay] = useState<
     "context" | "attachment" | "tools" | null
   >(null);
@@ -566,11 +585,134 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
           aria-label={expanded ? "Contraer menú" : "Expandir menú"}
           aria-expanded={expanded}
           title={expanded ? undefined : "Expandir menú"}
-          onClick={() => setExpanded((v) => !v)}
+          onClick={() => {
+            setSchoolMenuOpen(false);
+            setExpanded((v) => !v);
+          }}
         >
           <Icon name="expand" />
           {expanded && <span>Contraer menú</span>}
         </button>
+        {expanded && (
+          <>
+            <div className="school-switcher-wrap" ref={schoolMenuRef}>
+              <button
+                type="button"
+                className={`school-switcher-btn${schoolMenuOpen ? " open" : ""}`}
+                aria-haspopup="listbox"
+                aria-expanded={schoolMenuOpen}
+                aria-label={`Cambiar escuela activa: ${activeSchool.shortName} · ${activeSchool.grade}`}
+                onClick={() => setSchoolMenuOpen((v) => !v)}
+              >
+                <span
+                  className="school-dot"
+                  style={{ background: activeSchool.color }}
+                  aria-hidden="true"
+                />
+                <span className="school-switcher-label">
+                  {activeSchool.shortName} · {activeSchool.grade}
+                </span>
+                <UiIcon name="chevron-down" size={14} className="school-switcher-caret" />
+              </button>
+              {schoolMenuOpen && (
+                <div className="school-menu" role="listbox" aria-label="Escuelas">
+                  {schoolState.schools.map((sc) => {
+                    const isCurrent = sc.id === activeSchool.id;
+                    return (
+                      <button
+                        key={sc.id}
+                        type="button"
+                        role="option"
+                        aria-selected={isCurrent}
+                        className={`school-menu-item${isCurrent ? " active" : ""}`}
+                        onClick={() => {
+                          controller.schools.switchSchool(sc.id);
+                          setSchoolMenuOpen(false);
+                          if (s.view !== "home" && s.view !== "chat") {
+                            controller.navigate("home");
+                          }
+                        }}
+                      >
+                        <span
+                          className="school-dot"
+                          style={{ background: sc.color }}
+                          aria-hidden="true"
+                        />
+                        <span className="school-menu-meta">
+                          <span className="school-menu-name">{sc.shortName}</span>
+                          <span className="school-menu-sub">
+                            {sc.grade} · {sc.shift}
+                          </span>
+                        </span>
+                        {isCurrent && (
+                          <UiIcon name="check" size={14} className="school-menu-check" />
+                        )}
+                      </button>
+                    );
+                  })}
+                  <div className="school-menu-divider" role="separator" />
+                  <button
+                    type="button"
+                    className="school-menu-action"
+                    onClick={() => {
+                      setSchoolMenuOpen(false);
+                      setNewSchoolName("");
+                      setNewSchoolGrade("4.º A");
+                      setNewSchoolShift("Matutino");
+                      setSchoolModal("school");
+                    }}
+                  >
+                    <UiIcon name="plus" size={14} />
+                    <span>Agregar escuela</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <nav className="subjects-section" aria-label={`Materias de ${activeSchool.shortName}`}>
+              {activeSchool.subjects.map((sub) => {
+                const isActive =
+                  (s.view === "home" || s.view === "chat") &&
+                  sub.id === schoolState.activeSubjectId;
+                return (
+                  <button
+                    key={sub.id}
+                    type="button"
+                    className={`subject-row${isActive ? " active" : ""}`}
+                    aria-current={isActive ? "page" : undefined}
+                    onClick={() => {
+                      controller.schools.selectSubject(activeSchool.id, sub.id);
+                      if (s.view !== "home" && s.view !== "chat") {
+                        controller.navigate("home");
+                      }
+                    }}
+                  >
+                    <span className="subject-label">{sub.name}</span>
+                    {isActive && (
+                      <span
+                        className="subject-live-dot"
+                        style={{ background: activeSchool.color }}
+                        aria-hidden="true"
+                      />
+                    )}
+                  </button>
+                );
+              })}
+              <div className="subject-add-sep" role="separator" />
+              <button
+                type="button"
+                className="subject-add-row"
+                onClick={() => {
+                  setNewSubjectName("");
+                  setSchoolModal("subject");
+                }}
+              >
+                <UiIcon name="plus" size={13} />
+                <span>Agregar materia</span>
+              </button>
+            </nav>
+          </>
+        )}
         <div className="rail-divider" role="separator" />
         <button
           className={s.view === "home" || s.view === "chat" ? "selected" : ""}
@@ -598,6 +740,13 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
         >
           <UiIcon name="printer" size={22} />
           {expanded && <span>Impresora</span>}
+          {schoolState.hasScheduledPrint && (
+            <span
+              className="nav-printer-dot"
+              title="Impresión programada"
+              aria-hidden="true"
+            />
+          )}
         </button>
         <div className="rail-divider" role="separator" />
         <button
@@ -1042,6 +1191,140 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
           controller={controller}
           onDismiss={() => setShowEditor(false)}
         />
+      )}
+      {schoolModal === "school" && (
+        <Dialog
+          title="Agregar escuela"
+          className="school-modal-dialog"
+          onClose={() => setSchoolModal(null)}
+        >
+          <form
+            className="school-modal-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (
+                controller.schools.addSchool({
+                  shortName: newSchoolName,
+                  grade: newSchoolGrade,
+                  shift: newSchoolShift,
+                })
+              ) {
+                setSchoolModal(null);
+                if (s.view !== "home" && s.view !== "chat") {
+                  controller.navigate("home");
+                }
+              }
+            }}
+          >
+            <h2>Nueva escuela</h2>
+            <div className="school-modal-field">
+              <label htmlFor="new-school-name">Nombre de la escuela</label>
+              <input
+                id="new-school-name"
+                autoFocus
+                required
+                maxLength={60}
+                placeholder="Ej. Vicente Guerrero"
+                value={newSchoolName}
+                onChange={(e) => setNewSchoolName(e.target.value)}
+              />
+            </div>
+            <div className="school-modal-row">
+              <div className="school-modal-field">
+                <label htmlFor="new-school-grade">Grado y grupo</label>
+                <input
+                  id="new-school-grade"
+                  required
+                  maxLength={24}
+                  placeholder="Ej. 5.º A"
+                  value={newSchoolGrade}
+                  onChange={(e) => setNewSchoolGrade(e.target.value)}
+                />
+              </div>
+              <div className="school-modal-field">
+                <label htmlFor="new-school-shift">Turno</label>
+                <select
+                  id="new-school-shift"
+                  value={newSchoolShift}
+                  onChange={(e) => setNewSchoolShift(e.target.value)}
+                >
+                  <option value="Matutino">Matutino</option>
+                  <option value="Vespertino">Vespertino</option>
+                  <option value="Tiempo completo">Tiempo completo</option>
+                </select>
+              </div>
+            </div>
+            <div className="school-modal-actions">
+              <button
+                type="button"
+                className="btn-sm btn-ghost"
+                onClick={() => setSchoolModal(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="primary btn-sm"
+                disabled={!newSchoolName.trim()}
+              >
+                Agregar escuela
+              </button>
+            </div>
+          </form>
+        </Dialog>
+      )}
+      {schoolModal === "subject" && (
+        <Dialog
+          title="Agregar materia"
+          className="school-modal-dialog"
+          onClose={() => setSchoolModal(null)}
+        >
+          <form
+            className="school-modal-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (controller.schools.addSubject(activeSchool.id, newSubjectName)) {
+                setSchoolModal(null);
+                if (s.view !== "home" && s.view !== "chat") {
+                  controller.navigate("home");
+                }
+              }
+            }}
+          >
+            <h2>Nueva materia</h2>
+            <p className="field-hint small-text">
+              {activeSchool.shortName} · {activeSchool.grade}
+            </p>
+            <div className="school-modal-field">
+              <label htmlFor="new-subject-name">Nombre de la materia</label>
+              <input
+                id="new-subject-name"
+                autoFocus
+                required
+                maxLength={60}
+                placeholder="Ej. Formación Cívica y Ética"
+                value={newSubjectName}
+                onChange={(e) => setNewSubjectName(e.target.value)}
+              />
+            </div>
+            <div className="school-modal-actions">
+              <button
+                type="button"
+                className="btn-sm btn-ghost"
+                onClick={() => setSchoolModal(null)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="primary btn-sm"
+                disabled={!newSubjectName.trim()}
+              >
+                Agregar materia
+              </button>
+            </div>
+          </form>
+        </Dialog>
       )}
     </div>
   );
