@@ -24,7 +24,7 @@ import {
 } from "./contracts";
 import { AcentaNavigation, type NavigationPosition } from "./navigation";
 import { EditorExitGuard } from "./editor-exit";
-import { Dialog, Icon, Logo } from "./ui";
+import { Dialog, Icon, Logo, UiIcon } from "./ui";
 import { GuidedForm, GuidedReader } from "./GuidedPlanning";
 import { AnalyticForm } from "./AnalyticForm";
 import { AnalyticDerivedForm, AnalyticExplorer } from "./AnalyticPlanning";
@@ -555,66 +555,98 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
         if (event.key !== "Escape" || event.defaultPrevented || !panelView || document.querySelector("dialog[open]")) return;
         event.preventDefault(); event.stopPropagation(); closePanel();
       }}>
-      <aside className="sidebar">
+      <aside className="sidebar" aria-label="Navegación principal">
         <div className="rail-spacer" />
+        {expanded && (
+          <div className="rail-brand" aria-hidden="true">
+            <Logo />
+          </div>
+        )}
         <button
           aria-label={expanded ? "Contraer menú" : "Expandir menú"}
           aria-expanded={expanded}
+          title={expanded ? undefined : "Expandir menú"}
           onClick={() => setExpanded((v) => !v)}
         >
           <Icon name="expand" />
           {expanded && <span>Contraer menú</span>}
         </button>
+        <div className="rail-divider" role="separator" />
         <button
           className={s.view === "home" || s.view === "chat" ? "selected" : ""}
           aria-label="Inicio"
+          title={expanded ? undefined : "Inicio"}
           onClick={() => controller.navigate("home")}
         >
           <Icon name="home" />
           {expanded && <span>Inicio</span>}
         </button>
         <button
+          aria-label="Anexos"
+          title={expanded ? undefined : "Anexos"}
+          className={s.view === "annexes" ? "selected" : ""}
+          onClick={() => controller.navigate("annexes")}
+        >
+          <UiIcon name="worksheet" size={22} />
+          {expanded && <span>Anexos</span>}
+        </button>
+        <button
+          aria-label="Impresora"
+          title={expanded ? undefined : "Impresora"}
+          className={s.view === "printer" ? "selected" : ""}
+          onClick={() => controller.navigate("printer")}
+        >
+          <UiIcon name="printer" size={22} />
+          {expanded && <span>Impresora</span>}
+        </button>
+        <div className="rail-divider" role="separator" />
+        <button
           className={s.view === "resources" ? "selected" : ""}
           aria-label="Mis recursos"
-          aria-controls="workspace-panel" aria-expanded={panelView === "resources"} data-navigation-focus="panel-resources"
+          title={expanded ? undefined : "Mis recursos"}
+          aria-controls="workspace-panel"
+          aria-expanded={panelView === "resources"}
+          data-navigation-focus="panel-resources"
           onClick={() => openPanel("resources")}
         >
           <Icon name="folder" />
           {expanded && <span>Mis recursos</span>}
         </button>
-        <button aria-label="Herramientas" className={panelView === "tools" ? "selected" : ""}
-          aria-controls="workspace-panel" aria-expanded={panelView === "tools"} data-navigation-focus="panel-tools" onClick={() => openPanel("tools")}>
-          <Icon name="document" />{expanded && <span>Herramientas</span>}
-        </button>
         <button
-          aria-label="Anexos"
-          className={s.view === "annexes" ? "selected" : ""}
-          onClick={() => controller.navigate("annexes")}
+          aria-label="Herramientas"
+          title={expanded ? undefined : "Herramientas"}
+          className={panelView === "tools" ? "selected" : ""}
+          aria-controls="workspace-panel"
+          aria-expanded={panelView === "tools"}
+          data-navigation-focus="panel-tools"
+          onClick={() => openPanel("tools")}
         >
           <Icon name="document" />
-          {expanded && <span>Anexos</span>}
+          {expanded && <span>Herramientas</span>}
         </button>
         <button
-          aria-label="Impresora"
-          className={s.view === "printer" ? "selected" : ""}
-          onClick={() => controller.navigate("printer")}
+          aria-label="Soporte"
+          title={expanded ? undefined : "Soporte"}
+          className={panelView === "support" ? "selected" : ""}
+          aria-controls="workspace-panel"
+          aria-expanded={panelView === "support"}
+          data-navigation-focus="panel-support"
+          onClick={() => openPanel("support")}
         >
-          <Icon name="settings" />
-          {expanded && <span>Impresora</span>}
-        </button>
-        <button aria-label="Soporte" className={panelView === "support" ? "selected" : ""}
-          aria-controls="workspace-panel" aria-expanded={panelView === "support"} data-navigation-focus="panel-support" onClick={() => openPanel("support")}>
-          <Icon name="chat" />{expanded && <span>Soporte</span>}
+          <Icon name="chat" />
+          {expanded && <span>Soporte</span>}
         </button>
         <div className="rail-flex" />
+        <div className="rail-divider" role="separator" />
         <button
           aria-label="Cerrar sesión"
+          title={expanded ? undefined : "Cerrar sesión"}
           onClick={() => {
             if (controller.chat.hasUnsavedChanges()) setChatExit(true);
             else requestLogout();
           }}
         >
-          <Icon name="chat" />
+          <UiIcon name="logout" size={22} />
           {expanded && <span>Cerrar sesión</span>}
         </button>
       </aside>
