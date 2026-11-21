@@ -226,6 +226,56 @@ export class AnnexPrintClient {
   }
 }
 
+export const PRINT_ERROR_MESSAGES: Record<string, string> = {
+  smtp_not_configured:
+    "El servidor todavía no tiene configurado el correo de envío (SMTP).",
+  smtp_auth_failed:
+    "El correo remitente rechazó el acceso. Revisa el usuario y la contraseña de aplicación SMTP.",
+  smtp_send_failed:
+    "No se pudo entregar el correo a Epson. Verifica tu conexión y que el correo Epson sea correcto.",
+  smtp_timeout:
+    "El servidor de correo tardó demasiado en responder. Intenta reenviar en un momento.",
+  pdf_exceeds_epson_limit:
+    "El PDF con tantas copias supera el límite de 20 MB de Epson. Reduce las copias e intenta de nuevo.",
+  printer_email_required:
+    "Falta guardar el correo @print.epsonconnect.com de tu impresora.",
+  annex_not_found: "El anexo asociado ya no existe.",
+  print_job_sending:
+    "Este trabajo se está enviando en este momento y no se puede modificar todavía.",
+};
+
+export function humanizePrintError(code: string | null | undefined): string {
+  if (!code) {
+    return "No se pudo completar el envío. Puedes intentar reenviarlo o verificar la configuración de la impresora.";
+  }
+  const normalized = code.trim();
+  if (PRINT_ERROR_MESSAGES[normalized]) {
+    return PRINT_ERROR_MESSAGES[normalized];
+  }
+  for (const [key, message] of Object.entries(PRINT_ERROR_MESSAGES)) {
+    if (normalized.startsWith(`${key}:`) || normalized.includes(key)) {
+      return message;
+    }
+  }
+  return "No se pudo completar el envío. Puedes intentar reenviarlo o verificar la configuración de la impresora.";
+}
+
+const DRAWING_HINT_RE =
+  /(dibuj|ilustr|esquema|recuadro|traza|colorea|mapa|diagrama|gr[aá]fic)/i;
+
+export function needsDrawingBox(text: string): boolean {
+  return DRAWING_HINT_RE.test(text);
+}
+
+export function cleanHeaderFieldLabel(raw: string): string {
+  const cleaned = raw.replace(/[:_\s]+$/g, "").trim();
+  return cleaned || raw.trim();
+}
+
+export function stripLeadingNumber(text: string): string {
+  return text.replace(/^\s*\d+[.)]\s+/, "");
+}
+
 export function annexErrorMessage(error: unknown): string {
   if (!(error instanceof ApiError)) {
     return "No se pudo completar la operación. Intenta de nuevo.";
@@ -241,22 +291,17 @@ export function annexErrorMessage(error: unknown): string {
       "OpenAI tardó demasiado en responder. Intenta de nuevo en unos segundos.",
     annex_not_approved:
       "Primero aprueba el anexo para poder enviarlo a la impresora.",
-    printer_email_required:
-      "Configura el correo de tu impresora Epson en la sección Impresora antes de imprimir.",
+    printer_email_required: PRINT_ERROR_MESSAGES.printer_email_required,
     scheduled_for_required:
       "Elige una fecha y hora para programar la impresión.",
-    pdf_exceeds_epson_limit:
-      "El PDF con esas copias supera el límite de 20 MB de Epson Email Print. Reduce el número de copias.",
-    smtp_not_configured:
-      "Falta configurar el servidor SMTP (SMTP_HOST, SMTP_USER, SMTP_PASSWORD) en el servidor.",
-    smtp_auth_failed:
-      "Error de autenticación SMTP. Revisa tu usuario y contraseña de aplicación.",
-    smtp_send_failed:
-      "No se pudo enviar el correo a la impresora Epson. Revisa la conexión SMTP.",
+    pdf_exceeds_epson_limit: PRINT_ERROR_MESSAGES.pdf_exceeds_epson_limit,
+    smtp_not_configured: PRINT_ERROR_MESSAGES.smtp_not_configured,
+    smtp_auth_failed: PRINT_ERROR_MESSAGES.smtp_auth_failed,
+    smtp_send_failed: PRINT_ERROR_MESSAGES.smtp_send_failed,
+    smtp_timeout: PRINT_ERROR_MESSAGES.smtp_timeout,
     annex_has_pending_print_jobs:
       "Este anexo tiene impresiones pendientes. Cancélalas primero en Impresora.",
-    print_job_sending:
-      "Este trabajo se está enviando en este momento y no se puede eliminar todavía.",
+    print_job_sending: PRINT_ERROR_MESSAGES.print_job_sending,
   };
   return map[error.code] ?? `Ocurrió un error (${error.code}). Intenta de nuevo.`;
 }

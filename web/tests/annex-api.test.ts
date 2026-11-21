@@ -1,6 +1,12 @@
 import { expect, it } from "vitest";
 import { AcentaApi } from "../src/acenta/api";
-import { AnnexPrintClient } from "../src/acenta/annex-api";
+import {
+  AnnexPrintClient,
+  cleanHeaderFieldLabel,
+  humanizePrintError,
+  needsDrawingBox,
+  stripLeadingNumber,
+} from "../src/acenta/annex-api";
 import { json, session } from "./acenta-fixtures";
 
 it("AnnexPrintClient calls annex generation, approval, PDF url, and print queue routes", async () => {
@@ -116,4 +122,32 @@ it("AnnexPrintClient calls annex generation, approval, PDF url, and print queue 
     `DELETE ${session.scopeId}/print-jobs?status=failed`,
     `DELETE ${session.scopeId}/print-jobs`,
   ]);
+});
+
+it("humanizePrintError maps all backend print error codes and unknown fallbacks to Spanish", () => {
+  expect(humanizePrintError("smtp_not_configured")).toContain("SMTP");
+  expect(humanizePrintError("smtp_auth_failed")).toContain("contraseña de aplicación");
+  expect(humanizePrintError("smtp_send_failed")).toContain("Epson");
+  expect(humanizePrintError("smtp_send_failed: connection reset")).toContain("Epson");
+  expect(humanizePrintError("smtp_timeout")).toContain("tardó demasiado");
+  expect(humanizePrintError("pdf_exceeds_epson_limit")).toContain("20 MB");
+  expect(humanizePrintError("printer_email_required")).toContain("@print.epsonconnect.com");
+  expect(humanizePrintError("annex_not_found")).toContain("no existe");
+  expect(humanizePrintError("print_job_sending")).toContain("enviando");
+  expect(humanizePrintError(null)).toContain("No se pudo completar el envío");
+  expect(humanizePrintError("unexpected_code")).toContain("No se pudo completar el envío");
+});
+
+it("worksheet preview helpers clean student header labels, strip duplicate numbers, and detect drawing boxes", () => {
+  expect(cleanHeaderFieldLabel("Nombre: __________")).toBe("Nombre");
+  expect(cleanHeaderFieldLabel("Fecha:____")).toBe("Fecha");
+  expect(cleanHeaderFieldLabel("Grupo")).toBe("Grupo");
+
+  expect(stripLeadingNumber("1. ¿Qué es el agua?")).toBe("¿Qué es el agua?");
+  expect(stripLeadingNumber("2) Resuelve la suma")).toBe("Resuelve la suma");
+  expect(stripLeadingNumber("Explica con tus palabras")).toBe("Explica con tus palabras");
+
+  expect(needsDrawingBox("Dibuja el ciclo del agua en el recuadro.")).toBe(true);
+  expect(needsDrawingBox("Traza una gráfica de barras.")).toBe(true);
+  expect(needsDrawingBox("¿Cuánto es 1/2 + 1/4?")).toBe(false);
 });
