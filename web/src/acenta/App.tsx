@@ -24,7 +24,7 @@ import {
 } from "./contracts";
 import { AcentaNavigation, type NavigationPosition } from "./navigation";
 import { EditorExitGuard } from "./editor-exit";
-import { Dialog, Icon, Logo, UiIcon } from "./ui";
+import { Dialog, Icon, Logo, LogoMark, UiIcon } from "./ui";
 import { GuidedForm, GuidedReader } from "./GuidedPlanning";
 import { AnalyticForm } from "./AnalyticForm";
 import { AnalyticDerivedForm, AnalyticExplorer } from "./AnalyticPlanning";
@@ -478,15 +478,22 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
   }, [controller]);
   useLayoutEffect(() => {
     if (!position) return;
+    const activeAtSchedule = document.activeElement;
     const frame = requestAnimationFrame(() => {
       const saved = position.value;
       const focus = saved?.focus ? Array.from(document.querySelectorAll<HTMLElement>("[data-navigation-focus]"))
         .find((node) => node.dataset.navigationFocus === saved.focus) : null;
       const panel = document.querySelector(".workspace-panel-body");
       if (panel && saved?.panelY !== undefined) panel.scrollTop = saved.panelY;
-      (focus ?? document.querySelector<HTMLElement>("main"))?.focus({ preventScroll: true });
+      const userMovedFocus =
+        document.activeElement !== null &&
+        document.activeElement !== document.body &&
+        document.activeElement !== activeAtSchedule;
+      if (!userMovedFocus) {
+        (focus ?? document.querySelector<HTMLElement>("main"))?.focus({ preventScroll: true });
+      }
       window.scrollTo(saved?.x ?? 0, saved?.y ?? 0);
-      if (position.reveal) focus?.scrollIntoView({block: "nearest"});
+      if (position.reveal && !userMovedFocus) focus?.scrollIntoView({block: "nearest"});
     });
     return () => cancelAnimationFrame(frame);
   }, [position]);
@@ -580,24 +587,30 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
         event.preventDefault(); event.stopPropagation(); closePanel();
       }}>
       <aside className="sidebar" aria-label="Navegación principal">
-        <div className="rail-spacer" />
-        {expanded && (
-          <div className="rail-brand" aria-hidden="true">
-            <Logo />
-          </div>
-        )}
-        <button
-          aria-label={expanded ? "Contraer menú" : "Expandir menú"}
-          aria-expanded={expanded}
-          title={expanded ? undefined : "Expandir menú"}
-          onClick={() => {
-            setSchoolMenuOpen(false);
-            setExpanded((v) => !v);
-          }}
-        >
-          <Icon name="expand" />
-          {expanded && <span>Contraer menú</span>}
-        </button>
+        <div className="sidebar-top">
+          <button
+            type="button"
+            className="sidebar-brand-btn"
+            aria-label="Acenta · Inicio"
+            title="Acenta · Inicio"
+            onClick={() => controller.navigate("home")}
+          >
+            {expanded ? <Logo /> : <LogoMark />}
+          </button>
+          <button
+            type="button"
+            className={expanded ? "sidebar-collapse-btn" : "sidebar-expand-btn"}
+            aria-label={expanded ? "Contraer menú" : "Expandir menú"}
+            aria-expanded={expanded}
+            title={expanded ? "Contraer menú" : "Expandir menú"}
+            onClick={() => {
+              setSchoolMenuOpen(false);
+              setExpanded((v) => !v);
+            }}
+          >
+            <UiIcon name={expanded ? "chevron-left" : "chevron-right"} size={16} />
+          </button>
+        </div>
         {expanded && (
           <>
             <div className="school-switcher-wrap" ref={schoolMenuRef}>
@@ -719,80 +732,92 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
           </>
         )}
         <div className="rail-divider" role="separator" />
-        <button
-          className={s.view === "home" || s.view === "chat" ? "selected" : ""}
-          aria-label="Inicio"
-          title={expanded ? undefined : "Inicio"}
-          onClick={() => controller.navigate("home")}
-        >
-          <Icon name="home" />
-          {expanded && <span>Inicio</span>}
-        </button>
-        <button
-          aria-label="Anexos"
-          title={expanded ? undefined : "Anexos"}
-          className={s.view === "annexes" ? "selected" : ""}
-          onClick={() => controller.navigate("annexes")}
-        >
-          <UiIcon name="worksheet" size={22} />
-          {expanded && <span>Anexos</span>}
-        </button>
-        <button
-          aria-label="Impresora"
-          title={expanded ? undefined : "Impresora"}
-          className={s.view === "printer" ? "selected" : ""}
-          onClick={() => controller.navigate("printer")}
-        >
-          <UiIcon name="printer" size={22} />
-          {expanded && <span>Impresora</span>}
-          {schoolState.hasScheduledPrint && (
-            <span
-              className="nav-printer-dot"
-              title="Impresión programada"
-              aria-hidden="true"
-            />
-          )}
-        </button>
+        <div className="sidebar-nav-group">
+          <button
+            type="button"
+            className={`sidebar-nav-item${s.view === "home" || s.view === "chat" ? " selected" : ""}`}
+            aria-label="Inicio"
+            title={expanded ? undefined : "Inicio"}
+            onClick={() => controller.navigate("home")}
+          >
+            <UiIcon name="home" size={17} />
+            {expanded && <span>Inicio</span>}
+          </button>
+          <button
+            type="button"
+            aria-label="Anexos"
+            title={expanded ? undefined : "Anexos"}
+            className={`sidebar-nav-item${s.view === "annexes" ? " selected" : ""}`}
+            onClick={() => controller.navigate("annexes")}
+          >
+            <UiIcon name="worksheet" size={17} />
+            {expanded && <span>Anexos</span>}
+          </button>
+          <button
+            type="button"
+            aria-label="Impresora"
+            title={expanded ? undefined : "Impresora"}
+            className={`sidebar-nav-item${s.view === "printer" ? " selected" : ""}`}
+            onClick={() => controller.navigate("printer")}
+          >
+            <UiIcon name="printer" size={17} />
+            {expanded && <span>Impresora</span>}
+            {schoolState.hasScheduledPrint && (
+              <span
+                className="nav-printer-dot"
+                title="Impresión programada"
+                aria-hidden="true"
+              />
+            )}
+          </button>
+        </div>
         <div className="rail-divider" role="separator" />
-        <button
-          className={s.view === "resources" ? "selected" : ""}
-          aria-label="Mis recursos"
-          title={expanded ? undefined : "Mis recursos"}
-          aria-controls="workspace-panel"
-          aria-expanded={panelView === "resources"}
-          data-navigation-focus="panel-resources"
-          onClick={() => openPanel("resources")}
-        >
-          <Icon name="folder" />
-          {expanded && <span>Mis recursos</span>}
-        </button>
-        <button
-          aria-label="Herramientas"
-          title={expanded ? undefined : "Herramientas"}
-          className={panelView === "tools" ? "selected" : ""}
-          aria-controls="workspace-panel"
-          aria-expanded={panelView === "tools"}
-          data-navigation-focus="panel-tools"
-          onClick={() => openPanel("tools")}
-        >
-          <Icon name="document" />
-          {expanded && <span>Herramientas</span>}
-        </button>
-        <button
-          aria-label="Soporte"
-          title={expanded ? undefined : "Soporte"}
-          className={panelView === "support" ? "selected" : ""}
-          aria-controls="workspace-panel"
-          aria-expanded={panelView === "support"}
-          data-navigation-focus="panel-support"
-          onClick={() => openPanel("support")}
-        >
-          <Icon name="chat" />
-          {expanded && <span>Soporte</span>}
-        </button>
+        <div className="sidebar-nav-group is-secondary">
+          <button
+            type="button"
+            className={`sidebar-nav-item${s.view === "resources" || panelView === "resources" ? " selected" : ""}`}
+            aria-label="Mis recursos"
+            title={expanded ? undefined : "Mis recursos"}
+            aria-controls="workspace-panel"
+            aria-expanded={panelView === "resources"}
+            data-navigation-focus="panel-resources"
+            onClick={() => openPanel("resources")}
+          >
+            <UiIcon name="folder" size={17} />
+            {expanded && <span>Mis recursos</span>}
+          </button>
+          <button
+            type="button"
+            aria-label="Herramientas"
+            title={expanded ? undefined : "Herramientas"}
+            className={`sidebar-nav-item${panelView === "tools" ? " selected" : ""}`}
+            aria-controls="workspace-panel"
+            aria-expanded={panelView === "tools"}
+            data-navigation-focus="panel-tools"
+            onClick={() => openPanel("tools")}
+          >
+            <UiIcon name="document" size={17} />
+            {expanded && <span>Herramientas</span>}
+          </button>
+          <button
+            type="button"
+            aria-label="Soporte"
+            title={expanded ? undefined : "Soporte"}
+            className={`sidebar-nav-item${panelView === "support" ? " selected" : ""}`}
+            aria-controls="workspace-panel"
+            aria-expanded={panelView === "support"}
+            data-navigation-focus="panel-support"
+            onClick={() => openPanel("support")}
+          >
+            <UiIcon name="chat" size={17} />
+            {expanded && <span>Soporte</span>}
+          </button>
+        </div>
         <div className="rail-flex" />
         <div className="rail-divider" role="separator" />
         <button
+          type="button"
+          className="sidebar-nav-item sidebar-logout-btn"
           aria-label="Cerrar sesión"
           title={expanded ? undefined : "Cerrar sesión"}
           onClick={() => {
@@ -800,11 +825,22 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
             else requestLogout();
           }}
         >
-          <UiIcon name="logout" size={22} />
+          <UiIcon name="logout" size={17} />
           {expanded && <span>Cerrar sesión</span>}
         </button>
       </aside>
-      <main tabIndex={-1} className={conversational ? "conversation-main" : s.view === "example" ? "home-main" : "content-main"}>
+      <main
+        tabIndex={-1}
+        className={
+          conversational
+            ? "conversation-main"
+            : s.view === "annexes" || s.view === "printer"
+              ? "studio-main"
+              : s.view === "example"
+                ? "home-main"
+                : "content-main"
+        }
+      >
         {!conversational && s.view !== "planning" && s.view !== "analytic" && s.view !== "annexes" && s.view !== "printer" && <AccountLinks />}
         {conversational ? <Chat controller={controller} panelView={panelView}
           onContext={() => openPanel("chat-context")} onPlan={() => { setCategory("Planear"); openPanel("tools"); }}

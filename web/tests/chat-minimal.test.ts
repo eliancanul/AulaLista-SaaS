@@ -27,7 +27,7 @@ it("shows borderless school/subject context and contextual composer placeholder"
   );
   let html = renderChat(c);
   expect(html).toContain("Benito Juárez · 4.º A");
-  expect(html).toContain(">Matemáticas</h1>");
+  expect(html).toContain(">Matemáticas, ¿qué preparamos hoy?</h1>");
   expect(html).toContain(
     "Pide una ficha o planeación de Matemáticas para 4.º A…",
   );
@@ -40,7 +40,7 @@ it("shows borderless school/subject context and contextual composer placeholder"
   c.schools.selectSubject("hidalgo", "hidalgo-con");
   html = renderChat(c);
   expect(html).toContain("Miguel Hidalgo · 3.º B");
-  expect(html).toContain(">Conocimiento del Medio</h1>");
+  expect(html).toContain(">Conocimiento del Medio, ¿qué preparamos hoy?</h1>");
   expect(html).toContain(
     "Pide una ficha o planeación de Conocimiento del Medio para 3.º B…",
   );

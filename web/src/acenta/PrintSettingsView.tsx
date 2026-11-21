@@ -311,66 +311,82 @@ export function PrintSettingsView({
   ];
 
   return (
-    <section className="printer-page minimal-printer-page">
-      <header className="studio-header minimal-studio-header">
-        <div className="studio-header-title">
-          <p className="minimal-studio-kicker minimal-printer-kicker">
-            <span>
-              {activeSchool.shortName} · {activeSchool.grade}
-            </span>
-            <span className="minimal-kicker-sep" aria-hidden="true">
-              ·
-            </span>
-            <span
-              className={`minimal-status-dot ${isReady ? "is-ready" : "is-pending"}`}
-              aria-hidden="true"
-            />
-            <span>{readinessLabel}</span>
-          </p>
-          <h1>Impresora</h1>
-        </div>
-        <div className="studio-header-actions">
-          <button
-            type="button"
-            className="minimal-ghost-btn"
-            onClick={() => controller.navigate("annexes")}
-          >
-            <UiIcon name="worksheet" size={16} />
-            <span>Anexos</span>
-          </button>
-          <button
-            type="button"
-            className="minimal-ghost-btn"
-            onClick={() => controller.navigate("home")}
-          >
-            Volver al chat
-          </button>
-        </div>
-      </header>
+    <section className="printer-view minimal-printer-page">
+      <div className="printer-inner">
+        <header className="page-header">
+          <div>
+            <p className="minimal-studio-kicker minimal-printer-kicker">
+              <span>
+                {activeSchool.shortName} · {activeSchool.grade}
+              </span>
+              <span className="minimal-kicker-sep" aria-hidden="true">
+                ·
+              </span>
+              <span
+                className={`minimal-status-dot ${isReady ? "is-ready" : "is-pending"}`}
+                aria-hidden="true"
+              />
+              <span>{readinessLabel}</span>
+            </p>
+            <h1>Impresora</h1>
+          </div>
+          <div className="topbar-right">
+            <button
+              type="button"
+              className="glass-btn-sm"
+              onClick={() => controller.navigate("annexes")}
+            >
+              <UiIcon name="worksheet" size={14} />
+              <span>Anexos</span>
+            </button>
+            <button
+              type="button"
+              className="minimal-ghost-btn"
+              onClick={() => controller.navigate("home")}
+            >
+              Volver al chat
+            </button>
+          </div>
+        </header>
 
-      {error && (
-        <div role="alert" className="ac-banner is-error">
-          <UiIcon name="alert" size={18} />
-          <span>{error}</span>
-        </div>
-      )}
-      {notice && (
-        <div role="status" className="ac-banner is-success">
-          <UiIcon name="check" size={18} />
-          <span>{notice}</span>
-        </div>
-      )}
+        {error && (
+          <div role="alert" className="ac-banner is-error">
+            <UiIcon name="alert" size={18} />
+            <span>{error}</span>
+          </div>
+        )}
+        {notice && (
+          <div role="status" className="ac-banner is-success">
+            <UiIcon name="check" size={18} />
+            <span>{notice}</span>
+          </div>
+        )}
 
-      <div className="printer-grid minimal-printer-grid">
         <form
-          className="annex-card minimal-printer-card"
+          className="glass-card minimal-printer-card"
           onSubmit={(e) => void handleSave(e)}
         >
-          <div className="minimal-section-head">
-            <h2>Epson Email Print</h2>
-            <span className="minimal-save-whisper">
-              {settings?.smtp_configured ? "SMTP listo" : "SMTP pendiente"}
-            </span>
+          <div className="printer-summary-row">
+            <div className="printer-id">
+              <div className="printer-icon-badge" aria-hidden="true">
+                <UiIcon name="printer" size={20} />
+              </div>
+              <div>
+                <h2>Epson Email Print</h2>
+                <p className="minimal-save-whisper">
+                  {settings?.smtp_configured ? "SMTP listo" : "SMTP pendiente"}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="glass-btn-sm"
+              disabled={busy !== null || !printerEmail.trim()}
+              onClick={() => void handleTestPage()}
+            >
+              <UiIcon name="printer" size={14} />
+              <span>{busy === "test" ? "Enviando…" : "Hoja de prueba"}</span>
+            </button>
           </div>
 
           <div className="annex-field">
@@ -431,23 +447,23 @@ export function PrintSettingsView({
                 onChange={(e) => setDefaultTime(e.target.value)}
               />
             </div>
-          </div>
 
-          <div className="annex-field">
-            <label htmlFor="printer-tz">Zona horaria</label>
-            <select
-              id="printer-tz"
-              value={timezone}
-              onChange={(e) => setTimezone(e.target.value)}
-            >
-              <option value="America/Mexico_City">
-                Ciudad de México / Centro
-              </option>
-              <option value="America/Cancun">Cancún / Sureste</option>
-              <option value="America/Monterrey">Monterrey</option>
-              <option value="America/Hermosillo">Sonora / Pacífico</option>
-              <option value="America/Tijuana">Tijuana / Noroeste</option>
-            </select>
+            <div className="annex-field">
+              <label htmlFor="printer-tz">Zona horaria</label>
+              <select
+                id="printer-tz"
+                value={timezone}
+                onChange={(e) => setTimezone(e.target.value)}
+              >
+                <option value="America/Mexico_City">
+                  Ciudad de México / Centro
+                </option>
+                <option value="America/Cancun">Cancún / Sureste</option>
+                <option value="America/Monterrey">Monterrey</option>
+                <option value="America/Hermosillo">Sonora / Pacífico</option>
+                <option value="America/Tijuana">Tijuana / Noroeste</option>
+              </select>
+            </div>
           </div>
 
           <details className="printer-guide minimal-printer-guide">
@@ -474,25 +490,16 @@ export function PrintSettingsView({
           <div className="minimal-printer-actions">
             <button
               type="submit"
-              className="primary minimal-print-submit"
+              className="btn-accent-pill"
               disabled={busy !== null}
             >
               {busy === "saving" ? "Guardando…" : "Guardar"}
-            </button>
-            <button
-              type="button"
-              className="minimal-ghost-btn"
-              disabled={busy !== null || !printerEmail.trim()}
-              onClick={() => void handleTestPage()}
-            >
-              <UiIcon name="printer" size={15} />
-              <span>{busy === "test" ? "Enviando…" : "Hoja de prueba"}</span>
             </button>
           </div>
         </form>
 
         <section
-          className="minimal-queue-panel"
+          className="glass-card minimal-queue-panel"
           aria-label="Cola de impresión"
         >
           <div className="minimal-queue-header">
@@ -576,7 +583,7 @@ export function PrintSettingsView({
           )}
 
           <div
-            className="minimal-queue-tabs"
+            className="segmented-glass minimal-queue-tabs"
             role="tablist"
             aria-label="Filtrar cola de impresión"
           >
@@ -586,7 +593,7 @@ export function PrintSettingsView({
                 type="button"
                 role="tab"
                 aria-selected={queueFilter === tab.id}
-                className={`minimal-queue-tab${queueFilter === tab.id ? " is-active" : ""}`}
+                className={queueFilter === tab.id ? "active" : ""}
                 onClick={() => setQueueFilter(tab.id)}
               >
                 {tab.label}

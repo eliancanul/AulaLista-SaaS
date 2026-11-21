@@ -830,22 +830,73 @@ export function AnnexesView({
           : `Rev. ${draft?.revision ?? 1}`;
 
   return (
-    <section className="annexes-page minimal-annexes-page">
-      <header className="studio-header minimal-studio-header">
-        <div className="studio-header-title">
+    <section className="anexos-studio">
+      <header className="studio-topbar">
+        <div className="studio-topbar-left">
+          <h1 className="studio-title">Anexos</h1>
           <p className="minimal-studio-kicker">
             {activeSchool.shortName} · {activeSchool.grade} · {activeSubject.name}
           </p>
-          <h1>Anexos</h1>
         </div>
-        <div className="studio-header-actions">
+
+        <div className="studio-topbar-center">
+          {draft && (
+            <div className="segmented-glass" role="group" aria-label="Modo de ficha">
+              <button
+                type="button"
+                className={studioMode === "edit" ? "active" : ""}
+                aria-label="Editar ficha"
+                aria-pressed={studioMode === "edit"}
+                onClick={() => setStudioMode("edit")}
+              >
+                Editar
+              </button>
+              <button
+                type="button"
+                className={studioMode === "preview" ? "active" : ""}
+                aria-label="Volver a vista Carta"
+                aria-pressed={studioMode === "preview"}
+                onClick={() => setStudioMode("preview")}
+              >
+                Vista previa
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="topbar-right">
+          {draft && (
+            <>
+              <a
+                className="glass-btn-sm"
+                href={client.pdfUrl(draft.id, 1)}
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Descargar PDF"
+                title="Abrir PDF"
+              >
+                <UiIcon name="download" size={14} />
+                <span>PDF</span>
+              </a>
+              <button
+                type="button"
+                className="minimal-icon-btn is-danger"
+                disabled={busy !== null}
+                aria-label="Eliminar ficha"
+                title="Eliminar ficha"
+                onClick={() => setConfirmDelete((prev) => !prev)}
+              >
+                <UiIcon name="trash" size={15} />
+              </button>
+            </>
+          )}
           <button
             type="button"
-            className="minimal-ghost-btn"
+            className="glass-btn-sm"
             onClick={() => controller.navigate("printer")}
           >
-            <UiIcon name="printer" size={16} />
-            Impresora
+            <UiIcon name="printer" size={14} />
+            <span>Impresora</span>
           </button>
           <button
             type="button"
@@ -857,27 +908,16 @@ export function AnnexesView({
         </div>
       </header>
 
-      {error && (
-        <div role="alert" className="ac-banner is-error">
-          <UiIcon name="alert" size={18} />
-          <span>{error}</span>
-        </div>
-      )}
-      {notice && (
-        <div role="status" className="ac-banner is-success">
-          <UiIcon name="check" size={18} />
-          <span>{notice}</span>
-        </div>
-      )}
-
-      <div className="annexes-grid minimal-annexes-grid">
-        <aside className="annexes-rail minimal-annexes-rail" aria-label="Generar y elegir fichas">
+      <div className="anexos-body">
+        <aside className="anexos-drawer" aria-label="Generar y elegir fichas">
           <form
-            className="annex-card minimal-gen-card"
+            className="anexos-mini-form"
             onSubmit={(e) => void handleGenerate(e)}
           >
-            <div className="annex-field">
-              <label htmlFor="annex-topic">Nueva ficha para {activeSubject.name}</label>
+            <label htmlFor="annex-topic" className="drawer-section-label">
+              Nueva ficha para {activeSubject.name}
+            </label>
+            <div className="mini-composer">
               <input
                 id="annex-topic"
                 value={topic}
@@ -885,6 +925,15 @@ export function AnnexesView({
                 placeholder={`Tema para ${activeSchool.grade}…`}
                 required
               />
+              <button
+                className="mini-send"
+                type="submit"
+                aria-label={busy === "generating" ? "Generando…" : "Generar ficha"}
+                title="Generar ficha"
+                disabled={busy !== null || capability?.available === false}
+              >
+                <UiIcon name="arrow-up" size={15} />
+              </button>
             </div>
 
             <div className="minimal-gen-row">
@@ -906,7 +955,7 @@ export function AnnexesView({
                 aria-expanded={showAdvanced}
                 onClick={() => setShowAdvanced((prev) => !prev)}
               >
-                {showAdvanced ? "Ocultar ajustes" : "Ajustar"}
+                {showAdvanced ? "Ocultar" : "Ajustar"}
               </button>
             </div>
 
@@ -950,23 +999,14 @@ export function AnnexesView({
                 IA inactiva: define <code>OPENAI_API_KEY</code> en el servidor.
               </p>
             )}
-
-            <button
-              className="primary minimal-gen-submit"
-              type="submit"
-              disabled={busy !== null || capability?.available === false}
-            >
-              <UiIcon name="sparkles" size={16} />
-              {busy === "generating" ? "Generando…" : "Generar ficha"}
-            </button>
           </form>
 
           <section className="minimal-library-section" aria-label="Fichas guardadas">
             <div className="minimal-library-head">
-              <h2>Fichas</h2>
+              <h2 className="drawer-section-label">Fichas</h2>
               {annexes.length > 0 && (
-                <div className="annex-search minimal-search">
-                  <UiIcon name="search" size={14} className="annex-search-icon" />
+                <div className="search-glass">
+                  <UiIcon name="search" size={14} />
                   <input
                     type="search"
                     aria-label="Buscar anexos"
@@ -985,12 +1025,12 @@ export function AnnexesView({
             ) : filteredAnnexes.length === 0 ? (
               <p className="minimal-empty-hint">Sin coincidencias.</p>
             ) : (
-              <div className="annex-list minimal-annex-list">
+              <div className="minimal-annex-list">
                 {filteredAnnexes.map((item) => (
                   <button
                     key={item.id}
                     type="button"
-                    className={`minimal-annex-row ${item.id === selectedId ? "selected" : ""}`}
+                    className={`minimal-annex-row${item.id === selectedId ? " selected" : ""}`}
                     onClick={() => selectAnnex(item)}
                   >
                     <span className="minimal-annex-row-title">{item.title}</span>
@@ -1004,224 +1044,199 @@ export function AnnexesView({
           </section>
         </aside>
 
-        <div className="annexes-canvas minimal-annexes-canvas">
-          {!draft ? (
-            <section className="annex-card empty-state-card minimal-empty-canvas">
-              <UiIcon name="worksheet" size={28} />
-              <h2>Elige o genera una ficha</h2>
-              <p className="field-hint">
-                Se mostrará lista en formato Carta para revisar, editar o imprimir directo en tu Epson.
-              </p>
-            </section>
-          ) : (
-            <div className="minimal-canvas-shell">
-              <div className="minimal-canvas-topbar">
+        <div className="studio-desk">
+          <div className="studio-desk-inner">
+            {error && (
+              <div role="alert" className="ac-banner is-error">
+                <UiIcon name="alert" size={18} />
+                <span>{error}</span>
+              </div>
+            )}
+            {notice && (
+              <div role="status" className="ac-banner is-success">
+                <UiIcon name="check" size={18} />
+                <span>{notice}</span>
+              </div>
+            )}
+
+            {!draft ? (
+              <section className="glass-card empty-state-card minimal-empty-canvas">
+                <UiIcon name="worksheet" size={28} />
+                <h2>Elige o genera una ficha</h2>
+                <p className="field-hint">
+                  Se mostrará lista en formato Carta para revisar, editar o imprimir directo en tu Epson.
+                </p>
+              </section>
+            ) : (
+              <div className="minimal-canvas-shell">
                 <div className="minimal-canvas-meta">
                   <span className="minimal-canvas-title">{draft.title}</span>
                   <span className="minimal-save-whisper" role="status">
                     {saveWhisper}
                   </span>
                 </div>
-                <div className="minimal-canvas-icons">
-                  <button
-                    type="button"
-                    className={`minimal-icon-btn ${studioMode === "edit" ? "is-active" : ""}`}
-                    aria-label={
-                      studioMode === "edit"
-                        ? "Volver a vista Carta"
-                        : "Editar ficha"
-                    }
-                    aria-pressed={studioMode === "edit"}
-                    title={
-                      studioMode === "edit"
-                        ? "Volver a vista Carta"
-                        : "Editar ficha"
-                    }
-                    onClick={() =>
-                      setStudioMode((prev) =>
-                        prev === "preview" ? "edit" : "preview",
-                      )
-                    }
+
+                {confirmDelete && (
+                  <div
+                    className="inline-confirm-bar"
+                    role="alertdialog"
+                    aria-label="Confirmar eliminación del anexo"
                   >
-                    <UiIcon name="edit" size={16} />
-                  </button>
-                  <a
-                    className="minimal-icon-btn"
-                    href={client.pdfUrl(draft.id, 1)}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label="Descargar PDF"
-                    title="Abrir PDF"
-                  >
-                    <UiIcon name="download" size={16} />
-                  </a>
-                  <button
-                    type="button"
-                    className="minimal-icon-btn is-danger"
-                    disabled={busy !== null}
-                    aria-label="Eliminar ficha"
-                    title="Eliminar ficha"
-                    onClick={() => setConfirmDelete((prev) => !prev)}
-                  >
-                    <UiIcon name="trash" size={16} />
-                  </button>
-                </div>
-              </div>
-
-              {confirmDelete && (
-                <div
-                  className="inline-confirm-bar"
-                  role="alertdialog"
-                  aria-label="Confirmar eliminación del anexo"
-                >
-                  <span>¿Eliminar esta ficha permanentemente?</span>
-                  <div className="annex-actions-bar">
-                    <button
-                      type="button"
-                      className="btn-danger-subtle btn-sm"
-                      disabled={busy !== null}
-                      onClick={() => void handleDelete()}
-                    >
-                      {busy === "deleting" ? "Eliminando…" : "Sí, eliminar"}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-sm"
-                      disabled={busy !== null}
-                      onClick={() => setConfirmDelete(false)}
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <LetterSheetPreview
-                draft={draft}
-                editing={studioMode === "edit"}
-                handlers={{
-                  onUpdateDraft: updateDraft,
-                  onUpdateSection: updateSection,
-                  onUpdateItem: updateItem,
-                  onAddItem: addItem,
-                  onRemoveItem: removeItem,
-                  onAddSection: addSection,
-                }}
-              />
-
-              <footer
-                className="minimal-print-dock"
-                aria-label="Barra de impresión"
-              >
-                {!settings?.printer_email ? (
-                  <div className="minimal-print-unconfigured">
-                    <span>
-                      Configura el correo de tu impresora Epson para imprimir desde aquí.
-                    </span>
-                    <button
-                      type="button"
-                      className="primary btn-sm"
-                      onClick={() => controller.navigate("printer")}
-                    >
-                      Configurar impresora
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <div className="minimal-print-dock-row">
-                      <div
-                        className="minimal-copies-pill"
-                        role="group"
-                        aria-label="Copias"
-                      >
-                        <button
-                          type="button"
-                          aria-label="Menos copias"
-                          disabled={copies <= 1 || busy !== null}
-                          onClick={() => setCopies((c) => Math.max(1, c - 1))}
-                        >
-                          <UiIcon name="minus" size={14} />
-                        </button>
-                        <input
-                          id="print-copies"
-                          type="number"
-                          aria-label="Número de copias"
-                          min={1}
-                          max={50}
-                          value={copies}
-                          onChange={(e) =>
-                            setCopies(
-                              Math.max(
-                                1,
-                                Math.min(50, Number(e.target.value) || 1),
-                              ),
-                            )
-                          }
-                        />
-                        <button
-                          type="button"
-                          aria-label="Más copias"
-                          disabled={copies >= 50 || busy !== null}
-                          onClick={() => setCopies((c) => Math.min(50, c + 1))}
-                        >
-                          <UiIcon name="plus" size={14} />
-                        </button>
-                      </div>
-
+                    <span>¿Eliminar esta ficha permanentemente?</span>
+                    <div className="annex-actions-bar">
                       <button
                         type="button"
-                        className={`minimal-schedule-toggle ${printMode === "scheduled" ? "is-scheduled" : ""}`}
-                        aria-pressed={printMode === "scheduled"}
-                        onClick={() => {
-                          if (printMode === "now") {
-                            setScheduledLocal(quickScheduleDate(1, 6, 30));
-                            setPrintMode("scheduled");
-                          } else {
-                            setPrintMode("now");
-                          }
-                        }}
-                      >
-                        <span>
-                          {printMode === "now" ? "Ahora" : "Mañana 6:30"}
-                        </span>
-                        <UiIcon name="chevron-down" size={13} />
-                      </button>
-
-                      {printMode === "scheduled" && (
-                        <input
-                          id="print-schedule"
-                          type="datetime-local"
-                          className="minimal-schedule-input"
-                          aria-label="Fecha y hora de impresión"
-                          value={scheduledLocal}
-                          onChange={(e) => setScheduledLocal(e.target.value)}
-                        />
-                      )}
-
-                      <button
-                        type="button"
-                        className="primary minimal-print-submit"
+                        className="btn-danger-subtle btn-sm"
                         disabled={busy !== null}
-                        onClick={() => void handlePrint()}
+                        onClick={() => void handleDelete()}
                       >
-                        <UiIcon name="printer" size={16} />
-                        {busy === "printing"
-                          ? "Enviando…"
-                          : printMode === "now"
-                            ? "Imprimir"
-                            : "Programar"}
+                        {busy === "deleting" ? "Eliminando…" : "Sí, eliminar"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-sm"
+                        disabled={busy !== null}
+                        onClick={() => setConfirmDelete(false)}
+                      >
+                        Cancelar
                       </button>
                     </div>
-                    {!settings.smtp_configured && (
-                      <p className="minimal-print-whisper" role="status">
-                        SMTP sin configurar en el servidor ({settings.printer_email}).
-                      </p>
-                    )}
-                  </>
+                  </div>
                 )}
-              </footer>
-            </div>
-          )}
+
+                <LetterSheetPreview
+                  draft={draft}
+                  editing={studioMode === "edit"}
+                  handlers={{
+                    onUpdateDraft: updateDraft,
+                    onUpdateSection: updateSection,
+                    onUpdateItem: updateItem,
+                    onAddItem: addItem,
+                    onRemoveItem: removeItem,
+                    onAddSection: addSection,
+                  }}
+                />
+
+                <footer
+                  className="minimal-print-dock"
+                  aria-label="Barra de impresión"
+                >
+                  {!settings?.printer_email ? (
+                    <div className="minimal-print-unconfigured">
+                      <span>
+                        Configura el correo de tu impresora Epson para imprimir desde aquí.
+                      </span>
+                      <button
+                        type="button"
+                        className="btn-accent-pill"
+                        onClick={() => controller.navigate("printer")}
+                      >
+                        Configurar impresora
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="minimal-print-dock-row">
+                        <div
+                          className="minimal-copies-pill"
+                          role="group"
+                          aria-label="Copias"
+                        >
+                          <button
+                            type="button"
+                            aria-label="Menos copias"
+                            disabled={copies <= 1 || busy !== null}
+                            onClick={() => setCopies((c) => Math.max(1, c - 1))}
+                          >
+                            <UiIcon name="minus" size={14} />
+                          </button>
+                          <input
+                            id="print-copies"
+                            type="number"
+                            aria-label="Número de copias"
+                            min={1}
+                            max={50}
+                            value={copies}
+                            onChange={(e) =>
+                              setCopies(
+                                Math.max(
+                                  1,
+                                  Math.min(50, Number(e.target.value) || 1),
+                                ),
+                              )
+                            }
+                          />
+                          <button
+                            type="button"
+                            aria-label="Más copias"
+                            disabled={copies >= 50 || busy !== null}
+                            onClick={() => setCopies((c) => Math.min(50, c + 1))}
+                          >
+                            <UiIcon name="plus" size={14} />
+                          </button>
+                        </div>
+
+                        <span className="dock-sep" aria-hidden="true" />
+
+                        <button
+                          type="button"
+                          className={`minimal-schedule-toggle ${printMode === "scheduled" ? "is-scheduled" : ""}`}
+                          aria-pressed={printMode === "scheduled"}
+                          onClick={() => {
+                            if (printMode === "now") {
+                              setScheduledLocal(quickScheduleDate(1, 6, 30));
+                              setPrintMode("scheduled");
+                            } else {
+                              setPrintMode("now");
+                            }
+                          }}
+                        >
+                          <span>
+                            {printMode === "now" ? "Ahora" : "Mañana 6:30"}
+                          </span>
+                          <UiIcon name="chevron-down" size={13} />
+                        </button>
+
+                        {printMode === "scheduled" && (
+                          <input
+                            id="print-schedule"
+                            type="datetime-local"
+                            className="minimal-schedule-input"
+                            aria-label="Fecha y hora de impresión"
+                            value={scheduledLocal}
+                            onChange={(e) => setScheduledLocal(e.target.value)}
+                          />
+                        )}
+
+                        <span className="dock-sep" aria-hidden="true" />
+
+                        <button
+                          type="button"
+                          className="btn-accent-pill"
+                          disabled={busy !== null}
+                          onClick={() => void handlePrint()}
+                        >
+                          <UiIcon name="printer" size={15} />
+                          <span>
+                            {busy === "printing"
+                              ? "Enviando…"
+                              : printMode === "now"
+                                ? "Imprimir"
+                                : "Programar"}
+                          </span>
+                        </button>
+                      </div>
+                      {!settings.smtp_configured && (
+                        <p className="minimal-print-whisper" role="status">
+                          SMTP sin configurar en el servidor ({settings.printer_email}).
+                        </p>
+                      )}
+                    </>
+                  )}
+                </footer>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </section>

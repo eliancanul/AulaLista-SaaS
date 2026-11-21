@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { AcentaController, PanelView } from "./controller";
 import type { ChatUsage } from "./chat-contracts";
-import { Icon, UiIcon } from "./ui";
+import { UiIcon } from "./ui";
 import "./chat.css";
 
 export function ChatExitGuard({controller, onReview, onExit}: {
@@ -72,7 +72,10 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
   const input = useRef<HTMLTextAreaElement>(null);
   const previous = useRef(thread.status);
   const overflowRef = useRef<HTMLDivElement>(null);
+  const plusRef = useRef<HTMLDivElement>(null);
   const [overflowOpen, setOverflowOpen] = useState(false);
+  const [plusOpen, setPlusOpen] = useState(false);
+  const [isMultiline, setIsMultiline] = useState(false);
 
   useEffect(() => { void controller.chat.loadAvailability(); if (!state.activeId) void controller.chat.openActive(); }, [controller]);
   useEffect(() => {
@@ -82,15 +85,43 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
       input.current?.closest("form")?.contains(document.activeElement) && !document.querySelector("dialog[open]")) input.current.focus();
     previous.current = thread.status;
   }, [thread.status, panelView]);
+
+  // Rock-solid prototype caret & pill-to-multiline auto-grow math (24px line-height, max 6 lines = 144px)
   useEffect(() => {
-    if (!overflowOpen) return;
+    const el = input.current;
+    if (!el) return;
+    const raw = thread.draft;
+    if (!raw.length) {
+      el.style.height = "24px";
+      el.style.overflowY = "hidden";
+      setIsMultiline(false);
+      return;
+    }
+    el.style.height = "24px";
+    const natural = el.scrollHeight;
+    const nextMultiline = raw.includes("\n") || natural > 30;
+    setIsMultiline(nextMultiline);
+    const clamped = Math.max(24, Math.min(144, natural));
+    el.style.height = `${clamped}px`;
+    el.style.overflowY = natural > 144 ? "auto" : "hidden";
+  }, [thread.draft, isMultiline]);
+
+  useEffect(() => {
+    if (!overflowOpen && !plusOpen) return;
     const onPointerDown = (event: PointerEvent) => {
-      if (overflowRef.current && !overflowRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (overflowOpen && overflowRef.current && !overflowRef.current.contains(target)) {
         setOverflowOpen(false);
+      }
+      if (plusOpen && plusRef.current && !plusRef.current.contains(target)) {
+        setPlusOpen(false);
       }
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOverflowOpen(false);
+      if (event.key === "Escape") {
+        setOverflowOpen(false);
+        setPlusOpen(false);
+      }
     };
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
@@ -98,155 +129,297 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [overflowOpen]);
+  }, [overflowOpen, plusOpen]);
 
   const busy = thread.status === "sending" || thread.status === "loading";
   const canClearContext = !archive && !!thread.document && !busy && !thread.pending && !thread.needsRefresh;
   const throughTurn = !archive && thread.document ? thread.document.context.through_turn : 0;
   const turns = thread.document?.turns ?? [];
+  const hasMessages = turns.length > 0;
   const lastArchivedIdx = throughTurn > 0
     ? turns.reduce((acc, turn, idx) => (turn.number <= throughTurn ? idx : acc), -1)
     : -1;
+  const canSubmit = !busy && !thread.pending && !thread.needsRefresh && state.activeLoaded && !!thread.draft.trim() && state.availability === "available";
+  const showContextRevision = !archive && !!thread.document && thread.document.context.revision > 0;
 
-  return <section className={`chat-panel conversation-panel ${panel ? "with-panel" : ""}`} aria-labelledby="chat-title">
+  return <section
+    className={`chat-panel conversation-panel${panel ? " with-panel" : ""}${hasMessages ? " has-messages" : " is-empty"}${archive ? " is-archive" : ""}`}
+    aria-labelledby="chat-title"
+  >
     <div className="chat-history-area">
-    <header className="chat-topbar">
-      <div className="chat-heading">
-        {!archive && (
-          <p className="chat-context-kicker">
-            {activeSchool.shortName} · {activeSchool.grade}
-          </p>
-        )}
-        <h1 id="chat-title">
-          {archive ? thread.document?.conversation.title || "Historial anterior" : activeSubject.name}
-        </h1>
-        {archive && (
-          <p className="chat-archive-subtitle">
-            Archivo de sólo lectura. Sus mensajes no se incorporan al chat activo.
-          </p>
-        )}
-      </div>
-      <div className="chat-toolbar">
-        {archive ? (
-          <button className="chat-ghost-btn" onClick={() => controller.navigate("home")}>
-            Volver al chat activo
-          </button>
-        ) : (
-          <>
-            <button className="chat-ghost-btn" onClick={() => controller.navigate("conversations")}>
-              Consultar archivo anterior
+      <header className="chat-topbar">
+        <div className="chat-heading">
+          {archive ? (
+            <>
+              <h1 id="chat-title" className="chat-archive-title">
+                {thread.document?.conversation.title || "Historial anterior"}
+              </h1>
+              <p className="chat-archive-subtitle">
+                Archivo de sólo lectura. Sus mensajes no se incorporan al chat activo.
+              </p>
+            </>
+          ) : hasMessages ? (
+            <h1 id="chat-title" className="chat-context-label">
+              <span className="chat-school-dot" style={{ background: activeSchool.color }} aria-hidden="true" />
+              <span>{activeSchool.shortName} · {activeSubject.name}</span>
+            </h1>
+          ) : (
+            <span className="chat-topbar-spacer" aria-hidden="true" />
+          )}
+        </div>
+        <div className="chat-toolbar">
+          {archive ? (
+            <button type="button" className="chat-ghost-btn" onClick={() => controller.navigate("home")}>
+              Volver al chat activo
             </button>
-            <div className="chat-overflow" ref={overflowRef}>
-              <button
-                type="button"
-                className="chat-overflow-trigger"
-                aria-label="Opciones del chat"
-                aria-haspopup="menu"
-                aria-expanded={overflowOpen}
-                onClick={() => setOverflowOpen((prev) => !prev)}
-              >
-                <UiIcon name="more-horizontal" size={18} />
+          ) : (
+            <>
+              <button type="button" className="chat-ghost-btn" onClick={() => controller.navigate("conversations")}>
+                Consultar archivo anterior
               </button>
-              {overflowOpen && (
-                <div className="chat-overflow-menu" role="menu" aria-label="Opciones del chat">
-                  <button
-                    type="button"
-                    role="menuitem"
-                    disabled={!canClearContext}
-                    onClick={() => {
-                      setOverflowOpen(false);
-                      void controller.chat.updateContext(true);
-                    }}
-                  >
-                    Limpiar chat
-                  </button>
-                  {state.activeId && (
+              <div className="chat-overflow" ref={overflowRef}>
+                <button
+                  type="button"
+                  className={`chat-overflow-trigger${overflowOpen ? " open" : ""}`}
+                  aria-label="Opciones del chat"
+                  aria-haspopup="menu"
+                  aria-expanded={overflowOpen}
+                  onClick={() => setOverflowOpen((prev) => !prev)}
+                >
+                  <UiIcon name="more-horizontal" size={17} />
+                </button>
+                {overflowOpen && (
+                  <div className="chat-overflow-menu" role="menu" aria-label="Opciones del chat">
                     <button
                       type="button"
                       role="menuitem"
-                      disabled={busy}
+                      disabled={!canClearContext}
                       onClick={() => {
                         setOverflowOpen(false);
-                        void controller.chat.refresh();
+                        void controller.chat.updateContext(true);
                       }}
                     >
-                      Actualizar historial
+                      <UiIcon name="trash" size={15} />
+                      <span>Limpiar chat</span>
                     </button>
-                  )}
-                </div>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-    </header>
-    {!archive && thread.document && <p className="chat-note chat-context-meta">Contexto activo · revisión {thread.document.context.revision}. Usa {thread.document.context.notes ? "notas manuales y " : ""}los turnos confirmados posteriores al {thread.document.context.through_turn}. El historial anterior permanece guardado.</p>}
-    {thread.status === "loading" && <p role="status">Recuperando historial…</p>}
-    {thread.document?.next_cursor && <button className="chat-ghost-btn" disabled={busy} onClick={() => void controller.chat.refresh(state.activeId, true)}>Ver mensajes anteriores</button>}
-    <ol className="chat-turns" aria-label="Historial de la conversación">
-      {turns.map((turn, idx) => {
-        const isArchivedTurn = throughTurn > 0 && turn.number <= throughTurn;
-        return <Fragment key={turn.operation_id}>
-          <li className={`chat-turn${isArchivedTurn ? " is-archived" : ""}`}>
-            <article className="chat-message chat-user" aria-label={`Tu mensaje ${turn.number}`}>
-              <h2>Tú</h2><p>{turn.user_text}</p>
-            </article>
-            <article className="chat-message chat-assistant" aria-label={`Respuesta ${turn.number}`}>
-              <h2>Luna</h2>
-              {turn.state === "succeeded" ? <p>{turn.assistant_text}</p> :
-                <p>{turn.state === "failed" ? "Este intento falló. No hay respuesta confirmada." : turn.state === "generating" ? "Respuesta en proceso; consulta su estado." : "Resultado incierto; consulta su estado antes de enviar otro mensaje."}</p>}
-              <p className="chat-note">Contexto usado · revisión {turn.context_revision}</p>
-              <ChatUsageDetails usage={turn.usage} />
-            </article>
-          </li>
-          {idx === lastArchivedIdx && (
-            <li className="chat-archive-divider" role="separator" aria-label="Conversación anterior archivada">
-              <span>Conversación anterior · archivada</span>
-            </li>
+                    {state.activeId && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        disabled={busy}
+                        onClick={() => {
+                          setOverflowOpen(false);
+                          void controller.chat.refresh();
+                        }}
+                      >
+                        <UiIcon name="refresh" size={15} />
+                        <span>Actualizar historial</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </>
           )}
-        </Fragment>;
-      })}
-    </ol>
-    <div role="status" aria-live="polite" className="chat-status">
-      {thread.status === "sending" ? "Consultando el servidor…" : thread.contextNotice ||
-        (thread.document?.turns.at(-1)?.state === "succeeded" ? "Respuesta confirmada. Puedes continuar la conversación." : "")}
-    </div>
-    {thread.error && <p role="alert" className="chat-error">{thread.error}</p>}
-    {!state.activeLoaded && !busy && !archive && <button onClick={() => void controller.chat.openActive()}>Recuperar chat activo</button>}
-    {thread.needsRefresh && <p role="status">Actualiza el historial y revisa el contexto antes de continuar.</p>}
-    {thread.pending && <button className="primary" disabled={busy} onClick={() => void controller.chat.recover()}>{thread.pending.kind === "context" ? "Consultar estado del cambio de contexto" : "Consultar estado del envío"}</button>}
+        </div>
+      </header>
+
+      {!archive && !hasMessages && (
+        <div className="chat-greeting-block">
+          <p className="chat-greeting-context">
+            {activeSchool.shortName} · {activeSchool.grade}
+          </p>
+          <h1 id="chat-title" className="chat-greeting-title">
+            {activeSubject.name}, ¿qué preparamos hoy?
+          </h1>
+        </div>
+      )}
+
+      {showContextRevision && thread.document && (
+        <p className="chat-note chat-context-meta">
+          Contexto activo · revisión {thread.document.context.revision}. Usa {thread.document.context.notes ? "notas manuales y " : ""}los turnos confirmados posteriores al {thread.document.context.through_turn}. El historial anterior permanece guardado.
+        </p>
+      )}
+      {thread.status === "loading" && <p role="status" className="chat-whisper-status">Recuperando historial…</p>}
+      {thread.document?.next_cursor && (
+        <button type="button" className="chat-ghost-btn chat-load-more" disabled={busy} onClick={() => void controller.chat.refresh(state.activeId, true)}>
+          Ver mensajes anteriores
+        </button>
+      )}
+      <ol className="chat-turns" aria-label="Historial de la conversación">
+        {turns.map((turn, idx) => {
+          const isArchivedTurn = throughTurn > 0 && turn.number <= throughTurn;
+          return <Fragment key={turn.operation_id}>
+            <li className={`chat-turn${isArchivedTurn ? " is-archived" : ""}`}>
+              <article className="chat-message chat-user" aria-label={`Tu mensaje ${turn.number}`}>
+                <h2 className="sr-only">Tú</h2>
+                <p>{turn.user_text}</p>
+              </article>
+              <article className="chat-message chat-assistant" aria-label={`Respuesta ${turn.number}`}>
+                <h2 className="chat-assistant-head">
+                  <span className="luna-dot" aria-hidden="true" />
+                  <span>Luna</span>
+                </h2>
+                {turn.state === "succeeded" ? <p>{turn.assistant_text}</p> :
+                  <p>{turn.state === "failed" ? "Este intento falló. No hay respuesta confirmada." : turn.state === "generating" ? "Respuesta en proceso; consulta su estado." : "Resultado incierto; consulta su estado antes de enviar otro mensaje."}</p>}
+                <div className="chat-turn-meta">
+                  <p className="chat-note">Contexto usado · revisión {turn.context_revision}</p>
+                  <ChatUsageDetails usage={turn.usage} />
+                </div>
+              </article>
+            </li>
+            {idx === lastArchivedIdx && (
+              <li className="chat-archive-divider" role="separator" aria-label="Conversación anterior archivada">
+                <span>Conversación anterior · archivada</span>
+              </li>
+            )}
+          </Fragment>;
+        })}
+      </ol>
+      <div role="status" aria-live="polite" className="chat-status">
+        {thread.status === "sending" ? "Consultando el servidor…" : thread.contextNotice ||
+          (thread.document?.turns.at(-1)?.state === "succeeded" ? "Respuesta confirmada. Puedes continuar la conversación." : "")}
+      </div>
+      {thread.error && <p role="alert" className="chat-error">{thread.error}</p>}
+      {!state.activeLoaded && !busy && !archive && (
+        <button type="button" className="chat-ghost-btn" onClick={() => void controller.chat.openActive()}>
+          Recuperar chat activo
+        </button>
+      )}
+      {thread.needsRefresh && <p role="status" className="chat-whisper-status">Actualiza el historial y revisa el contexto antes de continuar.</p>}
+      {thread.pending && (
+        <button type="button" className="primary chat-recover-btn" disabled={busy} onClick={() => void controller.chat.recover()}>
+          {thread.pending.kind === "context" ? "Consultar estado del cambio de contexto" : "Consultar estado del envío"}
+        </button>
+      )}
     </div>
     {panel}
     {!archive && <div className="chat-compose-area">
-      <form className="chat-composer" onSubmit={event => { event.preventDefault(); void controller.chat.submit(); }}>
-        <label className="sr-only" htmlFor="chat-message">Mensaje para Luna</label>
-        <textarea id="chat-message" ref={input} value={thread.draft} disabled={!!thread.pending}
-          placeholder={`Pide una ficha o planeación de ${activeSubject.name} para ${activeSchool.grade}…`} aria-describedby="chat-input-hint"
-          onChange={event => controller.chat.setDraft(event.target.value)}
-          onKeyDown={event => {
-            if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && !event.nativeEvent.isComposing) {
-              event.preventDefault(); void controller.chat.submit();
-            }
-          }} />
-        <div className="chat-composer-actions">
-          <p id="chat-input-hint">Hasta 4096 caracteres y 8192 bytes · Ctrl/⌘ + Enter</p>
-          <button type="submit" className="primary chat-send-btn" disabled={busy || !!thread.pending || thread.needsRefresh || !state.activeLoaded || !thread.draft.trim() || state.availability !== "available"}>
-            <Icon name="send" small /> Enviar mensaje
-          </button>
-        </div>
-      </form>
+      <div className="chat-composer-shell" ref={plusRef}>
+        {plusOpen && (
+          <div className="chat-plus-popover" role="menu" aria-label="Acciones rápidas">
+            <div className="chat-popover-title">Acciones del espacio</div>
+            <button
+              type="button"
+              role="menuitem"
+              className="chat-popover-item"
+              onClick={() => {
+                setPlusOpen(false);
+                onContext();
+              }}
+            >
+              <UiIcon name="users" size={16} />
+              <span>Contexto de mi grupo</span>
+              <span className="chat-popover-hint">{activeSchool.grade}</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="chat-popover-item"
+              onClick={() => {
+                setPlusOpen(false);
+                onPlan();
+              }}
+            >
+              <UiIcon name="document" size={16} />
+              <span>Planear clase</span>
+              <span className="chat-popover-hint">NEM</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="chat-popover-item"
+              onClick={() => {
+                setPlusOpen(false);
+                controller.navigate("annexes");
+              }}
+            >
+              <UiIcon name="worksheet" size={16} />
+              <span>Ir a Anexos</span>
+              <span className="chat-popover-hint">Carta</span>
+            </button>
+          </div>
+        )}
+        <form
+          className={`chat-composer${isMultiline ? " is-multiline" : ""}`}
+          onSubmit={event => { event.preventDefault(); void controller.chat.submit(); }}
+        >
+          <label className="sr-only" htmlFor="chat-message">Mensaje para Luna</label>
+          <textarea
+            id="chat-message"
+            className="chat-composer-input"
+            ref={input}
+            rows={1}
+            value={thread.draft}
+            disabled={!!thread.pending}
+            placeholder={`Pide una ficha o planeación de ${activeSubject.name} para ${activeSchool.grade}…`}
+            aria-describedby="chat-input-hint"
+            onChange={event => controller.chat.setDraft(event.target.value)}
+            onKeyDown={event => {
+              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+                if (canSubmit) void controller.chat.submit();
+              }
+            }}
+          />
+          <p id="chat-input-hint" className="sr-only">
+            Hasta 4096 caracteres y 8192 bytes · Enter o Ctrl/⌘ + Enter para enviar
+          </p>
+          <div className="chat-composer-left">
+            <button
+              type="button"
+              className={`chat-composer-icon-btn${plusOpen ? " open" : ""}`}
+              aria-label="Más opciones"
+              aria-haspopup="menu"
+              aria-expanded={plusOpen}
+              title="Más opciones"
+              onClick={() => setPlusOpen((prev) => !prev)}
+            >
+              <UiIcon name="plus" size={17} />
+            </button>
+          </div>
+          <div className="chat-composer-right">
+            <button
+              type="submit"
+              className="chat-send-btn"
+              aria-label="Enviar mensaje"
+              title="Enviar mensaje"
+              disabled={!canSubmit}
+            >
+              <UiIcon name="arrow-up" size={17} />
+              <span className="sr-only">Enviar mensaje</span>
+            </button>
+          </div>
+        </form>
+      </div>
       {state.availability === "unavailable" && <div className="chat-availability">
         <p role="status">El chat no está disponible en este momento. Tu texto permanece en esta pestaña.</p>
-        <button onClick={() => void controller.chat.loadAvailability()}>Comprobar disponibilidad</button>
+        <button type="button" className="chat-ghost-btn" onClick={() => void controller.chat.loadAvailability()}>Comprobar disponibilidad</button>
       </div>}
-      {state.availability === "loading" && <p role="status">Comprobando disponibilidad del chat…</p>}
-      <div className="chat-footer-bar">
-        <nav className="chat-shortcuts" aria-label="Accesos del chat">
-          <button className="chat-ghost-btn" data-navigation-focus="shortcut-context" aria-controls="workspace-panel" aria-expanded={panelView === "chat-context"} onClick={onContext}>Revisar contexto</button>
-          <button className="chat-ghost-btn" data-navigation-focus="shortcut-planning" aria-controls="workspace-panel" aria-expanded={panelView === "tools"} onClick={onPlan}><Icon name="document" small />Planear</button>
-        </nav>
-        <p className="chat-note chat-privacy-whisper">Consultar el historial o guardar contexto no inicia una generación. Los textos sin guardar sólo permanecen en esta pestaña mientras tu sesión siga válida.</p>
-      </div>
+      {state.availability === "loading" && <p role="status" className="chat-whisper-status">Comprobando disponibilidad del chat…</p>}
+      <nav className="chat-shortcuts" aria-label="Accesos del chat">
+        <button
+          type="button"
+          className="chat-shortcut-pill"
+          data-navigation-focus="shortcut-context"
+          aria-controls="workspace-panel"
+          aria-expanded={panelView === "chat-context"}
+          onClick={onContext}
+        >
+          Revisar contexto
+        </button>
+        <button
+          type="button"
+          className="chat-shortcut-pill"
+          data-navigation-focus="shortcut-planning"
+          aria-controls="workspace-panel"
+          aria-expanded={panelView === "tools"}
+          onClick={onPlan}
+        >
+          <UiIcon name="document" size={14} />
+          <span>Planear</span>
+        </button>
+      </nav>
     </div>}
   </section>;
 }
