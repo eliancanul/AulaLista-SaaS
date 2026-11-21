@@ -159,6 +159,19 @@ it("edits directly on the US Letter Carta sheet when editing mode is active", ()
   expect(html).toContain('aria-label="Instrucciones de la ficha"');
   expect(html).toContain("+ Agregar actividad");
   expect(html).toContain("+ Agregar sección");
+  expect(html).toContain('aria-current="true"');
   expect(html).not.toContain("minimal-editor-panel");
 });
+
+it("renders accessible loading states before initial annexes resolve", () => {
+  const controller = makeController();
+  const html = renderToStaticMarkup(createElement(AnnexesView, { controller }));
+
+  expect(html).toContain("Cargando fichas…");
+  expect(html).toContain("Cargando estudio de anexos…");
+  expect(html).toContain('role="status"');
+  expect(html).not.toContain("Aún no tienes fichas");
+  expect(html).not.toContain("Elige o genera una ficha");
+});
+
 

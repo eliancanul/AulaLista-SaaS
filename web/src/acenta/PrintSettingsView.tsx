@@ -107,6 +107,9 @@ export function PrintSettingsView({
   );
   const [jobs, setJobs] = useState<PrintJob[]>(initialJobs ?? []);
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("all");
+  const [initialLoading, setInitialLoading] = useState(
+    initialSettings === undefined && initialJobs === undefined,
+  );
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [error, setError] = useState("");
@@ -126,11 +129,13 @@ export function PrintSettingsView({
   const filteredJobs = jobs.filter((j) => matchesFilter(j, queueFilter));
 
   const isReady = Boolean(settings?.printer_email && settings?.smtp_configured);
-  const readinessLabel = isReady
-    ? "Epson conectada"
-    : settings?.smtp_configured
-      ? "Falta correo Epson"
-      : "SMTP pendiente en servidor";
+  const readinessLabel = initialLoading
+    ? "Cargando estado…"
+    : isReady
+      ? "Epson conectada"
+      : settings?.smtp_configured
+        ? "Falta correo Epson"
+        : "SMTP pendiente en servidor";
 
   const load = async () => {
     try {
@@ -145,8 +150,11 @@ export function PrintSettingsView({
       setTimezone(s.timezone);
       setJobs(list);
       syncDot(list);
+      setError("");
     } catch (err) {
       setError(annexErrorMessage(err));
+    } finally {
+      setInitialLoading(false);
     }
   };
 
@@ -353,6 +361,16 @@ export function PrintSettingsView({
           <div role="alert" className="ac-banner is-error">
             <UiIcon name="alert" size={18} />
             <span>{error}</span>
+            {!settings && !initialLoading && (
+              <button
+                type="button"
+                className="minimal-ghost-btn"
+                disabled={busy !== null}
+                onClick={() => void handleRefresh()}
+              >
+                Reintentar
+              </button>
+            )}
           </div>
         )}
         {notice && (
@@ -601,7 +619,13 @@ export function PrintSettingsView({
             ))}
           </div>
 
-          {!filteredJobs.length ? (
+          {initialLoading ? (
+            <div className="minimal-queue-empty" role="status" aria-live="polite">
+              <UiIcon name="printer" size={22} />
+              <h3>Cargando cola de impresión…</h3>
+              <p>Recuperando la configuración de Epson y los envíos recientes.</p>
+            </div>
+          ) : !filteredJobs.length ? (
             <div className="minimal-queue-empty">
               <UiIcon name={EMPTY_QUEUE_STATE[queueFilter].icon} size={22} />
               <h3>{EMPTY_QUEUE_STATE[queueFilter].title}</h3>

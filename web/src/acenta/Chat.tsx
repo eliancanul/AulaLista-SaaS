@@ -72,7 +72,9 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
   const input = useRef<HTMLTextAreaElement>(null);
   const previous = useRef(thread.status);
   const overflowRef = useRef<HTMLDivElement>(null);
+  const overflowTriggerRef = useRef<HTMLButtonElement>(null);
   const plusRef = useRef<HTMLDivElement>(null);
+  const plusTriggerRef = useRef<HTMLButtonElement>(null);
   const [overflowOpen, setOverflowOpen] = useState(false);
   const [plusOpen, setPlusOpen] = useState(false);
   const [isMultiline, setIsMultiline] = useState(false);
@@ -119,8 +121,14 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setOverflowOpen(false);
-        setPlusOpen(false);
+        if (overflowOpen) {
+          setOverflowOpen(false);
+          overflowTriggerRef.current?.focus();
+        }
+        if (plusOpen) {
+          setPlusOpen(false);
+          plusTriggerRef.current?.focus();
+        }
       }
     };
     document.addEventListener("pointerdown", onPointerDown);
@@ -179,6 +187,7 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
               </button>
               <div className="chat-overflow" ref={overflowRef}>
                 <button
+                  ref={overflowTriggerRef}
                   type="button"
                   className={`chat-overflow-trigger${overflowOpen ? " open" : ""}`}
                   aria-label="Opciones del chat"
@@ -367,6 +376,7 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
           </p>
           <div className="chat-composer-left">
             <button
+              ref={plusTriggerRef}
               type="button"
               className={`chat-composer-icon-btn${plusOpen ? " open" : ""}`}
               aria-label="Más opciones"

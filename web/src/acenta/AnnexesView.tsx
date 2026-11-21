@@ -519,6 +519,9 @@ export function AnnexesView({
   );
 
   // Busy & feedback
+  const [initialLoading, setInitialLoading] = useState(
+    initialAnnexes === undefined,
+  );
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -546,8 +549,11 @@ export function AnnexesView({
       setDirty(false);
       setSaveState("idle");
       setConfirmDelete(false);
+      setError("");
     } catch (err) {
       setError(annexErrorMessage(err));
+    } finally {
+      setInitialLoading(false);
     }
   };
 
@@ -1018,7 +1024,11 @@ export function AnnexesView({
               )}
             </div>
 
-            {annexes.length === 0 ? (
+            {initialLoading ? (
+              <p role="status" className="minimal-empty-hint">
+                Cargando fichas…
+              </p>
+            ) : annexes.length === 0 ? (
               <p className="minimal-empty-hint">
                 Aún no tienes fichas. Escribe un tema arriba para crear la primera.
               </p>
@@ -1031,6 +1041,7 @@ export function AnnexesView({
                     key={item.id}
                     type="button"
                     className={`minimal-annex-row${item.id === selectedId ? " selected" : ""}`}
+                    aria-current={item.id === selectedId ? "true" : undefined}
                     onClick={() => selectAnnex(item)}
                   >
                     <span className="minimal-annex-row-title">{item.title}</span>
@@ -1050,6 +1061,19 @@ export function AnnexesView({
               <div role="alert" className="ac-banner is-error">
                 <UiIcon name="alert" size={18} />
                 <span>{error}</span>
+                {!annexes.length && !initialLoading && (
+                  <button
+                    type="button"
+                    className="minimal-ghost-btn"
+                    disabled={busy !== null}
+                    onClick={() => {
+                      setInitialLoading(true);
+                      void loadAll();
+                    }}
+                  >
+                    Reintentar
+                  </button>
+                )}
               </div>
             )}
             {notice && (
@@ -1059,7 +1083,19 @@ export function AnnexesView({
               </div>
             )}
 
-            {!draft ? (
+            {initialLoading ? (
+              <section
+                className="glass-card empty-state-card minimal-empty-canvas"
+                role="status"
+                aria-live="polite"
+              >
+                <UiIcon name="worksheet" size={28} />
+                <h2>Cargando estudio de anexos…</h2>
+                <p className="field-hint">
+                  Recuperando tus fichas guardadas y configuración de impresora.
+                </p>
+              </section>
+            ) : !draft ? (
               <section className="glass-card empty-state-card minimal-empty-canvas">
                 <UiIcon name="worksheet" size={28} />
                 <h2>Elige o genera una ficha</h2>

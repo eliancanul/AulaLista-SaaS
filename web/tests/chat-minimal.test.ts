@@ -86,3 +86,18 @@ it("omits archived-topic divider when through_turn is zero", async () => {
   expect(html).not.toContain("Conversación anterior · archivada");
   expect(html).not.toContain("chat-turn is-archived");
 });
+
+it("exposes accessible menu triggers and shows unavailable recovery action when chat is down", async () => {
+  const server = new ChatServer();
+  server.available = false;
+  const c = new AcentaController(new AcentaApi(session, server.transport));
+  await c.chat.loadAvailability();
+
+  const html = renderChat(c);
+  expect(html).toContain('aria-label="Más opciones"');
+  expect(html).toContain('aria-haspopup="menu"');
+  expect(html).toContain('aria-label="Enviar mensaje"');
+  expect(html).toContain("El chat no está disponible en este momento.");
+  expect(html).toContain("Comprobar disponibilidad");
+});
+

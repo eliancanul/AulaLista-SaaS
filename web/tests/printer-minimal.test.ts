@@ -110,3 +110,38 @@ it("shows empty queue state and pending status dot when printer email is missing
   expect(html).toContain("minimal-status-dot is-pending");
   expect(html).toContain("Sin envíos todavía");
 });
+
+it("shows initial loading status instead of flashing empty or SMTP-pending states", () => {
+  const controller = makeController();
+  const html = renderToStaticMarkup(
+    createElement(PrintSettingsView, { controller }),
+  );
+
+  expect(html).toContain("Cargando estado…");
+  expect(html).toContain("Cargando cola de impresión…");
+  expect(html).toContain('role="status"');
+  expect(html).not.toContain("Sin envíos todavía");
+  expect(html).not.toContain("SMTP pendiente en servidor");
+});
+
+it("shows SMTP pending status and retry/clear actions when failed jobs exist", () => {
+  const controller = makeController();
+  const html = renderToStaticMarkup(
+    createElement(PrintSettingsView, {
+      controller,
+      initialSettings: sampleSettings({ smtp_configured: false }),
+      initialJobs: [
+        sampleJob({
+          id: "job-err",
+          status: "failed",
+          last_error: "smtp_auth_failed",
+        }),
+      ],
+    }),
+  );
+
+  expect(html).toContain("SMTP pendiente en servidor");
+  expect(html).toContain("Limpiar errores");
+  expect(html).toContain("Reintentar");
+});
+
