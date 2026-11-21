@@ -125,6 +125,9 @@ export function PrintSettingsView({ controller }: { controller: AcentaController
       setDefaultTime(s.default_print_time);
       setTimezone(s.timezone);
       setJobs(list);
+      controller.schools.setHasScheduledPrint(
+        list.some((job) => job.status === "pending" || job.status === "sending"),
+      );
     } catch (err) {
       setError(annexErrorMessage(err));
     }

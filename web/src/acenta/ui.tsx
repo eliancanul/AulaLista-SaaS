@@ -42,7 +42,9 @@ export type UiIconName =
   | "send"
   | "alert"
   | "search"
-  | "chevron-down";
+  | "chevron-down"
+  | "more-horizontal"
+  | "close";
 
 export function UiIcon({
   name,
@@ -192,6 +194,21 @@ export function UiIcon({
       return (
         <svg {...shared}>
           <path d="M6.5 9.5L12 15l5.5-5.5" />
+        </svg>
+      );
+    case "more-horizontal":
+      return (
+        <svg {...shared}>
+          <circle cx="5.5" cy="12" r="1.25" fill="currentColor" stroke="none" />
+          <circle cx="12" cy="12" r="1.25" fill="currentColor" stroke="none" />
+          <circle cx="18.5" cy="12" r="1.25" fill="currentColor" stroke="none" />
+        </svg>
+      );
+    case "close":
+      return (
+        <svg {...shared}>
+          <path d="M18 6 6 18" />
+          <path d="m6 6 12 12" />
         </svg>
       );
   }

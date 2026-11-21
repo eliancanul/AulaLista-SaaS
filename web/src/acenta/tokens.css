@@ -7,40 +7,44 @@
   /* ------------------------------------------------------------------------
      1. Brand & Paper Surface Palette
      ------------------------------------------------------------------------ */
-  --ac-canvas: #f7f7f3;            /* Warm ivory cotton paper (app canvas) */
-  --ac-canvas-subtle: #f1f0ea;     /* Subtle recessed tray / studio backdrop */
+  --ac-canvas: #f7f7f5;            /* Warm alabaster cotton paper (app canvas) */
+  --ac-canvas-subtle: #f3f1ec;     /* Subtle recessed tray / sidebar paper */
   --ac-surface: #ffffff;           /* Crisp elevated editorial sheet */
-  --ac-surface-warm: #faf9f5;      /* Nested inset block (sections, queue items) */
-  --ac-surface-hover: #f5efe9;     /* Tactile paper hover wash */
-  --ac-selection: #f1e8e2;         /* Warm sand active/selected wash */
-  --ac-selection-strong: #e8d9cf;  /* Pressed/focused sand wash */
+  --ac-surface-warm: #f3f1ec;      /* Sidebar & nested inset block */
+  --ac-surface-hover: #f0ece5;     /* Tactile paper hover wash */
+  --ac-selection: #efe6e2;         /* Warm matte-clay active/selected wash */
+  --ac-selection-strong: #e4d4ce;  /* Pressed/focused wash */
+  --ac-glass-bg: rgba(255, 255, 255, 0.72);
+  --ac-glass-bg-strong: rgba(255, 255, 255, 0.88);
+  --ac-glass-stroke: rgba(255, 255, 255, 0.85);
+  --ac-glass-shadow-sm: 0 2px 10px rgba(28, 28, 26, 0.045), 0 0 0 1px rgba(28, 28, 26, 0.045);
 
   /* ------------------------------------------------------------------------
      2. Hairline Borders & Dividers (warm stone-slate)
      ------------------------------------------------------------------------ */
-  --ac-border-subtle: #e5e4de;     /* Card dividers, table rows, inset frames */
-  --ac-border: #cfd3d1;            /* Default control & card border */
-  --ac-border-strong: #9ca5a3;     /* Hover border / input affordance */
-  --ac-border-ink: #171e24;        /* Editorial crisp rule (sheet preview) */
+  --ac-border-subtle: #e5e3dc;     /* Card dividers, table rows, inset frames */
+  --ac-border: #d2d0c8;            /* Default control & card border */
+  --ac-border-strong: #a8a59c;     /* Hover border / input affordance */
+  --ac-border-ink: #1c1c1a;        /* Editorial crisp rule (sheet preview) */
 
   /* ------------------------------------------------------------------------
      3. Ink Hierarchy
      ------------------------------------------------------------------------ */
-  --ac-ink: #171e24;               /* Deep slate editorial ink */
-  --ac-ink-body: #2d363d;          /* Long-form body reading ink */
-  --ac-ink-secondary: #59636a;     /* Metadata, captions, hints */
-  --ac-ink-muted: #768087;         /* Placeholders, disabled labels */
-  --ac-ink-inverse: #ffffff;       /* Text on terracotta/ink fills */
+  --ac-ink: #1c1c1a;               /* Deep charcoal editorial ink */
+  --ac-ink-body: #32322f;          /* Long-form body reading ink */
+  --ac-ink-secondary: #68665f;     /* Metadata, captions, hints */
+  --ac-ink-muted: #8e8b83;         /* Placeholders, disabled labels, subtle actions */
+  --ac-ink-inverse: #ffffff;       /* Text on matte-clay/ink fills */
 
   /* ------------------------------------------------------------------------
-     4. Signature Terracotta Vermilion (Primary Brand Action)
+     4. Signature Matte Clay (Fixed Primary Brand Action — #964E3B)
      ------------------------------------------------------------------------ */
-  --ac-action: #b8422d;            /* Signature terracotta */
-  --ac-action-hover: #9e3724;      /* Deepened terracotta hover */
-  --ac-action-active: #842d1d;     /* Pressed terracotta */
-  --ac-action-soft: #fcf3ef;       /* Soft blush tint for callouts */
-  --ac-action-border: #e3b5a9;     /* Subtle terracotta hairline */
-  --ac-action-ink: #7e2b1d;        /* High-contrast terracotta ink on soft bg */
+  --ac-action: #964e3b;            /* Matte clay accent (fixed) */
+  --ac-action-hover: #7e3f2f;      /* Deepened matte clay hover */
+  --ac-action-active: #683325;     /* Pressed matte clay */
+  --ac-action-soft: rgba(150, 78, 59, 0.1); /* Soft clay tint for callouts */
+  --ac-action-border: rgba(150, 78, 59, 0.28); /* Subtle clay hairline */
+  --ac-action-ink: #6e3526;        /* High-contrast clay ink on soft bg */
 
   /* ------------------------------------------------------------------------
      5. Editorial Semantics (Botanical Sage, Warm Ochre, Muted Crimson, Slate)
@@ -48,8 +52,8 @@
   --ac-sage-bg: #edf5ef;
   --ac-sage-border: #9bc4a7;
   --ac-sage-ink: #1f5432;
-  --ac-sage-solid: #2d6a4f;
-  --ac-sage-solid-hover: #23533d;
+  --ac-sage-solid: #3d6b59;
+  --ac-sage-solid-hover: #2f5546;
 
   --ac-ochre-bg: #fbf4e6;
   --ac-ochre-border: #d9b878;
@@ -67,8 +71,8 @@
   --ac-neutral-ink: #465056;
 
   /* Backdrops */
-  --ac-backdrop: rgba(23, 30, 36, 0.48);
-  --ac-backdrop-soft: rgba(23, 30, 36, 0.32);
+  --ac-backdrop: rgba(28, 28, 26, 0.44);
+  --ac-backdrop-soft: rgba(28, 28, 26, 0.28);
 
   /* ------------------------------------------------------------------------
      6. Typography Scale
@@ -119,16 +123,16 @@
      9. Tactile Paper Elevation & Shadows
      ------------------------------------------------------------------------ */
   --ac-shadow-none: none;
-  --ac-shadow-xs: 0 1px 2px rgba(23, 30, 36, 0.04);
-  --ac-shadow-card: 0 1px 3px rgba(23, 30, 36, 0.05), 0 1px 2px rgba(23, 30, 36, 0.03);
-  --ac-shadow-elevated: 0 6px 20px rgba(23, 30, 36, 0.07), 0 2px 6px rgba(23, 30, 36, 0.04);
-  --ac-shadow-sheet: 0 12px 32px rgba(23, 30, 36, 0.1), 0 2px 6px rgba(23, 30, 36, 0.05);
-  --ac-shadow-dialog: 0 20px 48px rgba(23, 30, 36, 0.18), 0 4px 12px rgba(23, 30, 36, 0.08);
+  --ac-shadow-xs: 0 1px 2px rgba(28, 28, 26, 0.04);
+  --ac-shadow-card: 0 1px 3px rgba(28, 28, 26, 0.045), 0 1px 2px rgba(28, 28, 26, 0.03);
+  --ac-shadow-elevated: 0 6px 20px rgba(28, 28, 26, 0.06), 0 2px 6px rgba(28, 28, 26, 0.035);
+  --ac-shadow-sheet: 0 12px 32px rgba(28, 28, 26, 0.09), 0 2px 6px rgba(28, 28, 26, 0.045);
+  --ac-shadow-dialog: 0 20px 48px rgba(28, 28, 26, 0.16), 0 4px 12px rgba(28, 28, 26, 0.07);
 
   /* ------------------------------------------------------------------------
      10. Focus Ring & Motion
      ------------------------------------------------------------------------ */
-  --ac-focus-ring: 0 0 0 3px rgba(184, 66, 45, 0.22);
+  --ac-focus-ring: 0 0 0 3px rgba(150, 78, 59, 0.22);
   --ac-ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ac-ease-rail: cubic-bezier(0.4, 0, 0.2, 1);
   --ac-dur-fast: 140ms;
