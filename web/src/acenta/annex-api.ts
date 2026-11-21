@@ -210,6 +210,20 @@ export class AnnexPrintClient {
       45000,
     )) as PrintJob;
   }
+
+  async deletePrintJob(jobId: string): Promise<void> {
+    await this.api.scopedJson(`print-jobs/${jobId}`, "DELETE");
+  }
+
+  async clearPrintJobs(
+    status?: "all" | "failed" | "finished" | "sent" | "cancelled" | "pending",
+  ): Promise<{ deleted: number; skipped_sending: number }> {
+    const query = status && status !== "all" ? `?status=${encodeURIComponent(status)}` : "";
+    return (await this.api.scopedJson(`print-jobs${query}`, "DELETE")) as {
+      deleted: number;
+      skipped_sending: number;
+    };
+  }
 }
 
 export function annexErrorMessage(error: unknown): string {
@@ -241,6 +255,8 @@ export function annexErrorMessage(error: unknown): string {
       "No se pudo enviar el correo a la impresora Epson. Revisa la conexión SMTP.",
     annex_has_pending_print_jobs:
       "Este anexo tiene impresiones pendientes. Cancélalas primero en Impresora.",
+    print_job_sending:
+      "Este trabajo se está enviando en este momento y no se puede eliminar todavía.",
   };
   return map[error.code] ?? `Ocurrió un error (${error.code}). Intenta de nuevo.`;
 }

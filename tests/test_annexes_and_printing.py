@@ -434,3 +434,87 @@ def test_end_to_end_annex_generate_edit_approve_and_epson_print_queue(
         assert re_edited.status_code == 200
         assert re_edited.json()["status"] == "draft"
         assert re_edited.json()["approved_at"] is None
+
+        # 14. Delete single print job & clear print queue (protecting active sending jobs)
+        # Re-approve so we can enqueue one more failed job and one sending job
+        assert (
+            client.post(f"/scopes/{scope_a}/annexes/{annex_id}/approve").status_code
+            == 200
+        )
+        fake_mail.fail_with = "smtp_send_failed"
+        del_fail_1 = client.post(
+            f"/scopes/{scope_a}/annexes/{annex_id}/print",
+            json={"mode": "now", "copies": 1, "idempotency_key": "del-fail-1"},
+        )
+        del_fail_2 = client.post(
+            f"/scopes/{scope_a}/annexes/{annex_id}/print",
+            json={"mode": "now", "copies": 1, "idempotency_key": "del-fail-2"},
+        )
+        fake_mail.fail_with = None
+        assert del_fail_1.json()["status"] == "failed"
+        assert del_fail_2.json()["status"] == "failed"
+
+        # Another scope cannot delete scope_a's job
+        current_actor["id"] = actor_b
+        assert (
+            client.delete(
+                f"/scopes/{scope_a}/print-jobs/{del_fail_1.json()['id']}"
+            ).status_code
+            == 404
+        )
+        current_actor["id"] = actor_a
+
+        # Delete single job succeeds
+        del_one = client.delete(
+            f"/scopes/{scope_a}/print-jobs/{del_fail_1.json()['id']}"
+        )
+        assert del_one.status_code == 204
+        assert (
+            client.delete(
+                f"/scopes/{scope_a}/print-jobs/{del_fail_1.json()['id']}"
+            ).status_code
+            == 404
+        )
+
+        # Clear only failed jobs keeps sent/cancelled jobs
+        clear_failed = client.delete(f"/scopes/{scope_a}/print-jobs?status=failed")
+        assert clear_failed.status_code == 200
+        assert clear_failed.json() == {"deleted": 1, "skipped_sending": 0}
+        remaining_after_failed = client.get(f"/scopes/{scope_a}/print-jobs").json()[
+            "items"
+        ]
+        assert len(remaining_after_failed) >= 3
+        assert all(j["status"] != "failed" for j in remaining_after_failed)
+
+        # Mark one job as 'sending' directly in DB to verify active-sending protection
+        from sqlalchemy import update as sa_update
+        from sqlalchemy.orm import Session
+
+        from aulalista_api.print_jobs import PrintJob
+
+        sending_id = remaining_after_failed[0]["id"]
+        with Session(app.state.print_jobs.engine) as session:
+            session.execute(
+                sa_update(PrintJob)
+                .where(PrintJob.id == sending_id)
+                .values(status="sending", sent_at=None)
+            )
+            session.commit()
+
+        blocked_sending = client.delete(f"/scopes/{scope_a}/print-jobs/{sending_id}")
+        assert blocked_sending.status_code == 409
+        assert blocked_sending.json()["detail"] == "print_job_sending"
+
+        # Clear entire queue deletes everything except the sending job
+        clear_all = client.delete(f"/scopes/{scope_a}/print-jobs")
+        assert clear_all.status_code == 200
+        assert clear_all.json()["skipped_sending"] == 1
+        assert clear_all.json()["deleted"] == len(remaining_after_failed) - 1
+        final_jobs = client.get(f"/scopes/{scope_a}/print-jobs").json()["items"]
+        assert [j["id"] for j in final_jobs] == [sending_id]
+
+        # Invalid status filter returns 422
+        assert (
+            client.delete(f"/scopes/{scope_a}/print-jobs?status=bogus").status_code
+            == 422
+        )

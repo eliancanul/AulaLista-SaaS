@@ -350,6 +350,54 @@ class PrintJobsService:
             assert row is not None
             return print_job_document(row)
 
+    def delete_job(self, actor, scope_id: UUID, job_id: UUID) -> None:
+        with Session(self.engine) as session:
+            authorize(session, actor, scope_id)
+            job = session.scalar(
+                select(PrintJob)
+                .where(PrintJob.id == job_id, PrintJob.scope_id == scope_id)
+                .with_for_update()
+            )
+            if job is None:
+                raise MaterialError(404, "not_found")
+            if job.status == "sending":
+                raise MaterialError(409, "print_job_sending")
+            session.delete(job)
+            session.commit()
+
+    def clear_jobs(
+        self, actor, scope_id: UUID, *, status_filter: str | None = None
+    ) -> dict[str, int]:
+        normalized = (status_filter or "all").strip().lower()
+        allowed_filters: dict[str, tuple[str, ...] | None] = {
+            "all": None,
+            "finished": ("sent", "failed", "cancelled"),
+            "failed": ("failed",),
+            "sent": ("sent",),
+            "cancelled": ("cancelled",),
+            "pending": ("pending",),
+        }
+        if normalized not in allowed_filters:
+            raise MaterialError(422, "invalid_request")
+        target_statuses = allowed_filters[normalized]
+
+        with Session(self.engine) as session:
+            authorize(session, actor, scope_id)
+            stmt = select(PrintJob).where(PrintJob.scope_id == scope_id)
+            if target_statuses is not None:
+                stmt = stmt.where(PrintJob.status.in_(target_statuses))
+            rows = session.scalars(stmt.with_for_update()).all()
+            deleted = 0
+            skipped_sending = 0
+            for row in rows:
+                if row.status == "sending":
+                    skipped_sending += 1
+                    continue
+                session.delete(row)
+                deleted += 1
+            session.commit()
+            return {"deleted": deleted, "skipped_sending": skipped_sending}
+
     def dispatch_single_job(self, job_id: UUID) -> dict | None:
         """Atomically claim one pending job (`pending` -> `sending`) and send it once."""
         claimed = self._claim_jobs(limit=1, only_job_id=job_id)

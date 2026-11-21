@@ -62,6 +62,15 @@ it("AnnexPrintClient calls annex generation, approval, PDF url, and print queue 
         201,
       );
     }
+    if (path.endsWith("/print-jobs?status=failed") && method === "DELETE") {
+      return json({ deleted: 2, skipped_sending: 0 });
+    }
+    if (path.endsWith("/print-jobs") && method === "DELETE") {
+      return json({ deleted: 3, skipped_sending: 0 });
+    }
+    if (path.includes("/print-jobs/") && method === "DELETE") {
+      return new Response(null, { status: 204 });
+    }
     return json({ items: [] });
   });
 
@@ -91,10 +100,20 @@ it("AnnexPrintClient calls annex generation, approval, PDF url, and print queue 
     idempotency_key: "key-1",
   });
   expect(job.status).toBe("sent");
+
+  await client.deletePrintJob(job.id);
+  const clearedFailed = await client.clearPrintJobs("failed");
+  expect(clearedFailed).toEqual({ deleted: 2, skipped_sending: 0 });
+  const clearedAll = await client.clearPrintJobs("all");
+  expect(clearedAll).toEqual({ deleted: 3, skipped_sending: 0 });
+
   expect(calls.map((c) => `${c.method} ${c.url.split("/").slice(-2).join("/")}`)).toEqual([
     `GET ${session.scopeId}/annex-capability`,
     "POST annexes/generate",
     `POST ${sampleAnnex.id}/approve`,
     `POST ${sampleAnnex.id}/print`,
+    `DELETE print-jobs/${job.id}`,
+    `DELETE ${session.scopeId}/print-jobs?status=failed`,
+    `DELETE ${session.scopeId}/print-jobs`,
   ]);
 });
