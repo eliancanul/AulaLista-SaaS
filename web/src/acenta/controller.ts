@@ -45,7 +45,7 @@ export type SaveState =
   | "unknown"
   | "conflict";
 export type PanelView = "resources" | "tools" | "support" | "chat-context";
-export type View = "home" | "chat" | "conversations" | "example" | "result" | "planning" | "analytic" | "annexes" | "printer" | "documents" | "account" | PanelView;
+export type View = "home" | "chat" | "conversations" | "example" | "result" | "planning" | "analytic" | "annexes" | "printer" | "documents" | "billing" | "account" | PanelView;
 export const isPanelView = (view: View): view is PanelView => ["resources", "tools", "support", "chat-context"].includes(view);
 export type CreateIntent = {
   kind: "create";

@@ -13,6 +13,7 @@ from aulalista_api.agent_chat_routes import install_agent_chat_routes
 from aulalista_api.analytic_section_routes import install_analytic_section_routes
 from aulalista_api.annex_routes import install_annex_routes
 from aulalista_api.auth_routes import install_auth_routes
+from aulalista_api.billing_routes import install_billing_routes
 from aulalista_api.chat_routes import install_chat_routes
 from aulalista_api.config import load_settings
 from aulalista_api.curriculum_routes import install_curriculum_routes
@@ -125,5 +126,6 @@ def create_app(
     install_support_routes(app, engine)
     install_curriculum_routes(app, engine)
     install_document_routes(app, engine, web_search_provider=web_search_provider)
+    install_billing_routes(app, engine)
     install_web(app)
     return app
