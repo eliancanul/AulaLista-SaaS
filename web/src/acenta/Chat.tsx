@@ -4,6 +4,7 @@ import type { ChatUsage } from "./chat-contracts";
 import type { ActiveAgentTarget, AgentChatTurn } from "./agent-chat-controller";
 import type { AgentMode, SchoolSpace, SubjectSpace } from "./school-context";
 import { UiIcon } from "./ui";
+import { CurricularContextPanel } from "./CurricularContextPanel";
 import "./chat.css";
 
 function buildActiveAgentTarget(
@@ -163,6 +164,14 @@ export function ChatContextEditor({controller}: {controller: AcentaController}) 
           Guardar notas
         </button>
       </div>
+      <CurricularContextPanel
+        api={controller.api}
+        schoolId={activeSchool.id}
+        schoolName={activeSchool.shortName}
+        grade={activeSchool.gradeLong}
+        subjectId={isOrchestrator ? "__school__" : activeSubject.id}
+        subjectName={isOrchestrator ? "Toda la escuela" : activeSubject.name}
+      />
     </div>;
   }
 

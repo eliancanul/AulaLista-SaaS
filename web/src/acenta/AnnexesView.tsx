@@ -17,7 +17,9 @@ import {
   type AnnexDocument,
   type AnnexItem,
   type AnnexItemKind,
+  type AnnexRevisionSummary,
   type AnnexSection,
+  type AnnexTable,
   type PrintSettings,
 } from "./annex-api";
 import { UiIcon } from "./ui";
@@ -145,6 +147,19 @@ export function LetterSheetPreview({
               )}
             </>
           )}
+
+          {draft.content.curricular_trace &&
+            Object.keys(draft.content.curricular_trace).length > 0 && (
+              <p className="letter-curricular-trace">
+                {[
+                  draft.content.curricular_trace.phase,
+                  draft.content.curricular_trace.campo_formativo,
+                  draft.content.curricular_trace.pda,
+                ]
+                  .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+                  .join(" · ")}
+              </p>
+            )}
 
           <div className="letter-student-grid">
             {headerFields.map((rawField, idx) => {
@@ -413,14 +428,198 @@ export function LetterSheetPreview({
                 );
               })}
 
+              {section.bullets && section.bullets.length > 0 && (
+                <ul className="letter-bullets">
+                  {section.bullets.map((bullet, bIdx) => (
+                    <li key={bIdx}>{bullet}</li>
+                  ))}
+                </ul>
+              )}
+
+              {section.table && section.table.headers.length > 0 && (
+                <div className="letter-table-wrap">
+                  {editing && handlers ? (
+                    <div className="letter-table-editor">
+                      <table className="letter-table">
+                        <thead>
+                          <tr>
+                            {section.table.headers.map((header, cIdx) => (
+                              <th key={cIdx}>
+                                <input
+                                  aria-label={`Encabezado columna ${cIdx + 1}`}
+                                  value={header}
+                                  onChange={(e) => {
+                                    const value = e.target.value;
+                                    handlers.onUpdateSection(sIdx, (sec) => {
+                                      if (!sec.table) return sec;
+                                      const headers = sec.table.headers.map(
+                                        (h, i) => (i === cIdx ? value : h),
+                                      );
+                                      return {
+                                        ...sec,
+                                        table: { ...sec.table, headers },
+                                      };
+                                    });
+                                  }}
+                                />
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {section.table.rows.map((row, rIdx) => (
+                            <tr key={rIdx}>
+                              {section.table!.headers.map((_, cIdx) => (
+                                <td key={cIdx}>
+                                  <input
+                                    aria-label={`Celda fila ${rIdx + 1} columna ${cIdx + 1}`}
+                                    value={row[cIdx] ?? ""}
+                                    onChange={(e) => {
+                                      const value = e.target.value;
+                                      handlers.onUpdateSection(sIdx, (sec) => {
+                                        if (!sec.table) return sec;
+                                        const rows = sec.table.rows.map(
+                                          (r, ri) => {
+                                            if (ri !== rIdx) return r;
+                                            const copy = [
+                                              ...r,
+                                              ...Array(
+                                                Math.max(
+                                                  0,
+                                                  sec.table!.headers.length -
+                                                    r.length,
+                                                ),
+                                              ).fill(""),
+                                            ];
+                                            copy[cIdx] = value;
+                                            return copy;
+                                          },
+                                        );
+                                        return {
+                                          ...sec,
+                                          table: { ...sec.table, rows },
+                                        };
+                                      });
+                                    }}
+                                  />
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <div className="letter-table-toolbar">
+                        <button
+                          type="button"
+                          className="letter-inline-chip"
+                          onClick={() =>
+                            handlers.onUpdateSection(sIdx, (sec) => {
+                              if (!sec.table) return sec;
+                              return {
+                                ...sec,
+                                table: {
+                                  ...sec.table,
+                                  rows: [
+                                    ...sec.table.rows,
+                                    sec.table.headers.map(() => ""),
+                                  ],
+                                },
+                              };
+                            })
+                          }
+                        >
+                          + Fila
+                        </button>
+                        <button
+                          type="button"
+                          className="letter-inline-chip"
+                          onClick={() =>
+                            handlers.onUpdateSection(sIdx, (sec) => {
+                              if (!sec.table || sec.table.headers.length >= 6) {
+                                return sec;
+                              }
+                              return {
+                                ...sec,
+                                table: {
+                                  headers: [
+                                    ...sec.table.headers,
+                                    `Columna ${sec.table.headers.length + 1}`,
+                                  ],
+                                  rows: sec.table.rows.map((r) => [...r, ""]),
+                                },
+                              };
+                            })
+                          }
+                        >
+                          + Columna
+                        </button>
+                        <button
+                          type="button"
+                          className="letter-inline-chip"
+                          onClick={() =>
+                            handlers.onUpdateSection(sIdx, (sec) => ({
+                              ...sec,
+                              table: null,
+                            }))
+                          }
+                        >
+                          Quitar tabla
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <table className="letter-table">
+                      <thead>
+                        <tr>
+                          {section.table.headers.map((header, cIdx) => (
+                            <th key={cIdx}>{header}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {section.table.rows.map((row, rIdx) => (
+                          <tr key={rIdx}>
+                            {section.table!.headers.map((_, cIdx) => (
+                              <td key={cIdx}>{row[cIdx] ?? ""}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+
               {editing && handlers && (
-                <button
-                  type="button"
-                  className="letter-inline-add"
-                  onClick={() => handlers.onAddItem(sIdx)}
-                >
-                  + Agregar actividad
-                </button>
+                <div className="letter-inline-actions-row">
+                  <button
+                    type="button"
+                    className="letter-inline-add"
+                    onClick={() => handlers.onAddItem(sIdx)}
+                  >
+                    + Agregar actividad
+                  </button>
+                  {!section.table && (
+                    <button
+                      type="button"
+                      className="letter-inline-add"
+                      onClick={() =>
+                        handlers.onUpdateSection(sIdx, (sec) => ({
+                          ...sec,
+                          table: {
+                            headers: ["Criterio", "Nivel / Detalle", "Observaciones"],
+                            rows: [
+                              ["", "", ""],
+                              ["", "", ""],
+                            ],
+                          } as AnnexTable,
+                        }))
+                      }
+                    >
+                      + Agregar tabla
+                    </button>
+                  )}
+                </div>
               )}
             </section>
           );
@@ -434,6 +633,19 @@ export function LetterSheetPreview({
           >
             + Agregar sección
           </button>
+        )}
+
+        {draft.content.teacher_key && draft.content.teacher_key.length > 0 && (
+          <details className="letter-teacher-key">
+            <summary>
+              Clave docente ({draft.content.teacher_key.length} entradas · se imprime en hoja separada)
+            </summary>
+            <ol>
+              {draft.content.teacher_key.map((entry, idx) => (
+                <li key={idx}>{entry}</li>
+              ))}
+            </ol>
+          </details>
         )}
 
         <footer className="letter-footer">
@@ -495,6 +707,11 @@ export function AnnexesView({
   const [dirty, setDirty] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const draftVersionRef = useRef(0);
+  const [undoStack, setUndoStack] = useState<AnnexDocument[]>([]);
+  const [redoStack, setRedoStack] = useState<AnnexDocument[]>([]);
+  const [showRevisions, setShowRevisions] = useState(false);
+  const [revisions, setRevisions] = useState<AnnexRevisionSummary[]>([]);
+  const [revisionsLoading, setRevisionsLoading] = useState(false);
 
   // Minimalist studio defaults to live US Letter preview
   const [studioMode, setStudioMode] = useState<StudioMode>(
@@ -611,6 +828,10 @@ export function AnnexesView({
     draftVersionRef.current += 1;
     setSelectedId(doc.id);
     setDraft(structuredClone(doc));
+    setUndoStack([]);
+    setRedoStack([]);
+    setShowRevisions(false);
+    setRevisions([]);
     setDirty(false);
     setSaveState("idle");
     setConfirmDelete(false);
@@ -651,10 +872,110 @@ export function AnnexesView({
 
   const updateDraft = (updater: (current: AnnexDocument) => AnnexDocument) => {
     draftVersionRef.current += 1;
-    setDraft((prev) => (prev ? updater(prev) : prev));
+    setDraft((prev) => {
+      if (!prev) return prev;
+      setUndoStack((stack) => [...stack.slice(-39), structuredClone(prev)]);
+      setRedoStack([]);
+      return updater(prev);
+    });
     setDirty(true);
     setSaveState("idle");
     setNotice("");
+  };
+
+  const handleUndo = () => {
+    if (!draft || undoStack.length === 0) return;
+    const previous = undoStack[undoStack.length - 1];
+    draftVersionRef.current += 1;
+    setUndoStack((stack) => stack.slice(0, -1));
+    setRedoStack((stack) => [...stack.slice(-39), structuredClone(draft)]);
+    setDraft(structuredClone(previous));
+    setDirty(true);
+    setSaveState("idle");
+    setNotice("Cambio deshecho.");
+  };
+
+  const handleRedo = () => {
+    if (!draft || redoStack.length === 0) return;
+    const next = redoStack[redoStack.length - 1];
+    draftVersionRef.current += 1;
+    setRedoStack((stack) => stack.slice(0, -1));
+    setUndoStack((stack) => [...stack.slice(-39), structuredClone(draft)]);
+    setDraft(structuredClone(next));
+    setDirty(true);
+    setSaveState("idle");
+    setNotice("Cambio rehecho.");
+  };
+
+  useEffect(() => {
+    if (studioMode !== "edit" || !draft) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey)) return;
+      const key = event.key.toLowerCase();
+      if (key === "z" && !event.shiftKey) {
+        if (undoStack.length > 0) {
+          event.preventDefault();
+          handleUndo();
+        }
+      } else if ((key === "z" && event.shiftKey) || key === "y") {
+        if (redoStack.length > 0) {
+          event.preventDefault();
+          handleRedo();
+        }
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studioMode, draft, undoStack, redoStack]);
+
+  const toggleRevisions = async () => {
+    if (!draft) return;
+    if (showRevisions) {
+      setShowRevisions(false);
+      return;
+    }
+    setShowRevisions(true);
+    setRevisionsLoading(true);
+    try {
+      const list = await client.listAnnexRevisions(draft.id);
+      setRevisions(list);
+    } catch (err) {
+      setError(annexErrorMessage(err));
+    } finally {
+      setRevisionsLoading(false);
+    }
+  };
+
+  const handleRestoreRevision = async (revisionNumber: number) => {
+    if (!draft || busy !== null) return;
+    setBusy("restoring");
+    setError("");
+    setNotice("");
+    try {
+      const restored = await client.restoreAnnexRevision(
+        draft.id,
+        revisionNumber,
+      );
+      draftVersionRef.current += 1;
+      setAnnexes((prev) =>
+        prev.map((a) => (a.id === restored.id ? restored : a)),
+      );
+      setDraft(structuredClone(restored));
+      setUndoStack([]);
+      setRedoStack([]);
+      setDirty(false);
+      setSaveState("saved");
+      setNotice(
+        `Versión Rev. ${revisionNumber} restaurada como Rev. ${restored.revision}.`,
+      );
+      const list = await client.listAnnexRevisions(restored.id);
+      setRevisions(list);
+    } catch (err) {
+      setError(annexErrorMessage(err));
+    } finally {
+      setBusy(null);
+    }
   };
 
   const handleDelete = async () => {
@@ -1107,10 +1428,94 @@ export function AnnexesView({
               <div className="minimal-canvas-shell">
                 <div className="minimal-canvas-meta">
                   <span className="minimal-canvas-title">{draft.title}</span>
-                  <span className="minimal-save-whisper" role="status">
-                    {saveWhisper}
-                  </span>
+                  <div className="minimal-canvas-tools">
+                    {studioMode === "edit" && (
+                      <>
+                        <button
+                          type="button"
+                          className="glass-btn-sm"
+                          disabled={undoStack.length === 0}
+                          aria-label="Deshacer cambio"
+                          title="Deshacer (Ctrl/⌘+Z)"
+                          onClick={handleUndo}
+                        >
+                          Deshacer
+                        </button>
+                        <button
+                          type="button"
+                          className="glass-btn-sm"
+                          disabled={redoStack.length === 0}
+                          aria-label="Rehacer cambio"
+                          title="Rehacer (Ctrl/⌘+Shift+Z)"
+                          onClick={handleRedo}
+                        >
+                          Rehacer
+                        </button>
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      className={`glass-btn-sm${showRevisions ? " is-active" : ""}`}
+                      aria-expanded={showRevisions}
+                      onClick={() => void toggleRevisions()}
+                    >
+                      Historial
+                    </button>
+                    <span className="minimal-save-whisper" role="status">
+                      {saveWhisper}
+                    </span>
+                  </div>
                 </div>
+
+                {showRevisions && (
+                  <section
+                    className="annex-revisions-panel"
+                    aria-label="Historial de revisiones"
+                  >
+                    <div className="annex-revisions-head">
+                      <strong>Historial de revisiones</strong>
+                      <button
+                        type="button"
+                        className="minimal-ghost-btn"
+                        onClick={() => setShowRevisions(false)}
+                      >
+                        Cerrar
+                      </button>
+                    </div>
+                    {revisionsLoading ? (
+                      <p className="field-hint">Cargando historial…</p>
+                    ) : revisions.length === 0 ? (
+                      <p className="field-hint">
+                        Aún no hay revisiones guardadas para esta ficha.
+                      </p>
+                    ) : (
+                      <ul className="annex-revisions-list">
+                        {revisions.map((rev) => (
+                          <li key={rev.id} className="annex-revision-row">
+                            <div>
+                              <strong>Rev. {rev.revision}</strong> · {rev.title}
+                              <span className="annex-revision-meta">
+                                {" "}
+                                ({rev.reason}) ·{" "}
+                                {new Date(rev.created_at).toLocaleString("es-MX")}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              className="glass-btn-sm"
+                              disabled={busy !== null || rev.revision === draft.revision}
+                              onClick={() => void handleRestoreRevision(rev.revision)}
+                            >
+                              {rev.revision === draft.revision
+                                ? "Actual"
+                                : "Restaurar"}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                )}
 
                 {confirmDelete && (
                   <div

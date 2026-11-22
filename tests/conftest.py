@@ -146,7 +146,9 @@ def runtime_database(migrated_database, actors, monkeypatch):
             GRANT SELECT, INSERT, UPDATE ON agent_chat_channel, agent_chat_turn TO aulalista_runtime;
             GRANT SELECT, INSERT, UPDATE, DELETE ON print_job TO aulalista_runtime;
             GRANT SELECT, INSERT, UPDATE ON principal_account_preferences, account_link_challenge TO aulalista_runtime;
-            GRANT SELECT, INSERT, UPDATE ON support_ticket TO aulalista_runtime
+            GRANT SELECT, INSERT, UPDATE ON support_ticket TO aulalista_runtime;
+            GRANT SELECT, INSERT, UPDATE ON curricular_profile TO aulalista_runtime;
+            GRANT SELECT, INSERT, DELETE ON annex_revision TO aulalista_runtime
         """)
         )
     settings = load_settings()

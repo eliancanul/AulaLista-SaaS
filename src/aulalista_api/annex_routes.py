@@ -125,6 +125,22 @@ def install_annex_routes(
         await run_in_threadpool(service.delete, actor, scope_id, annex_id)
         return Response(status_code=204, headers={"Cache-Control": "no-store"})
 
+    @app.get("/scopes/{scope_id}/annexes/{annex_id}/revisions")
+    async def list_annex_revisions(
+        scope_id: UUID, annex_id: UUID, actor: Actor
+    ):
+        doc = await run_in_threadpool(service.list_revisions, actor, scope_id, annex_id)
+        return JSONResponse(doc, headers={"Cache-Control": "no-store"})
+
+    @app.post("/scopes/{scope_id}/annexes/{annex_id}/revisions/{revision}/restore")
+    async def restore_annex_revision(
+        scope_id: UUID, annex_id: UUID, revision: int, actor: Actor
+    ):
+        doc = await run_in_threadpool(
+            service.restore_revision, actor, scope_id, annex_id, revision
+        )
+        return JSONResponse(doc, headers={"Cache-Control": "no-store"})
+
     @app.get("/scopes/{scope_id}/annexes/{annex_id}/pdf")
     async def download_annex_pdf(
         scope_id: UUID,

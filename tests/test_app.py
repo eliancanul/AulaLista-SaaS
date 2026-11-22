@@ -98,6 +98,11 @@ def test_health_and_fail_closed_material_routes_are_registered(client):
         ("/scopes/{scope_id}/annexes/{annex_id}", {"PUT"}),
         ("/scopes/{scope_id}/annexes/{annex_id}/approve", {"POST"}),
         ("/scopes/{scope_id}/annexes/{annex_id}", {"DELETE"}),
+        ("/scopes/{scope_id}/annexes/{annex_id}/revisions", {"GET"}),
+        (
+            "/scopes/{scope_id}/annexes/{annex_id}/revisions/{revision}/restore",
+            {"POST"},
+        ),
         ("/scopes/{scope_id}/annexes/{annex_id}/pdf", {"GET"}),
         ("/scopes/{scope_id}/print-settings", {"GET"}),
         ("/scopes/{scope_id}/print-settings", {"PUT"}),
@@ -126,6 +131,12 @@ def test_health_and_fail_closed_material_routes_are_registered(client):
         ("/scopes/{scope_id}/support/tickets/{ticket_id}/screenshot", {"GET"}),
         ("/scopes/{scope_id}/support/tickets/{ticket_id}", {"PATCH"}),
         ("/scopes/{scope_id}/support/backlog.json", {"GET"}),
+        ("/scopes/{scope_id}/curriculum/catalog", {"GET"}),
+        ("/scopes/{scope_id}/curriculum/profiles", {"GET"}),
+        (
+            "/scopes/{scope_id}/curriculum/profiles/{school_id}/{subject_id}",
+            {"PUT"},
+        ),
     ]
 
 

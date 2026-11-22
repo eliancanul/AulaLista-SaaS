@@ -15,6 +15,7 @@ from aulalista_api.annex_routes import install_annex_routes
 from aulalista_api.auth_routes import install_auth_routes
 from aulalista_api.chat_routes import install_chat_routes
 from aulalista_api.config import load_settings
+from aulalista_api.curriculum_routes import install_curriculum_routes
 from aulalista_api.database import Readiness, make_engine
 from aulalista_api.material_routes import install_material_routes
 from aulalista_api.pilot import ManualPilotConfig
@@ -120,5 +121,6 @@ def create_app(
     install_agent_chat_routes(app, engine, provider=agent_chat_provider)
     install_account_routes(app, engine)
     install_support_routes(app, engine)
+    install_curriculum_routes(app, engine)
     install_web(app)
     return app

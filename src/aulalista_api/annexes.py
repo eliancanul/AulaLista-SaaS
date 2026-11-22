@@ -78,6 +78,31 @@ class Annex(Base):
     )
 
 
+class AnnexRevision(Base):
+    __tablename__ = "annex_revision"
+    __table_args__ = (
+        UniqueConstraint("annex_id", "revision", name="uq_annex_revision_number"),
+        Index("ix_annex_revision_annex_rev", "annex_id", "revision"),
+        CheckConstraint("revision >= 1", name="ck_annex_revision_positive"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    annex_id: Mapped[UUID] = mapped_column(ForeignKey("annex.id", ondelete="CASCADE"))
+    scope_id: Mapped[UUID] = mapped_column(ForeignKey("personal_scope.id"))
+    revision: Mapped[int] = mapped_column(Integer)
+    title: Mapped[str] = mapped_column(String(200))
+    subject: Mapped[str] = mapped_column(String(120))
+    grade: Mapped[str] = mapped_column(String(80))
+    topic: Mapped[str] = mapped_column(String(240))
+    instructions: Mapped[str] = mapped_column(Text)
+    content: Mapped[dict] = mapped_column(JSONB)
+    change_summary: Mapped[str] = mapped_column(String(240), default="")
+    curricular_trace: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class AnnexGenerateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     subject: str = Field(min_length=1, max_length=120)
@@ -86,6 +111,9 @@ class AnnexGenerateRequest(BaseModel):
     annex_type: str = Field(default="hoja-de-trabajo", min_length=1, max_length=64)
     language: Literal["es", "en"] = "es"
     extra_instructions: str = Field(default="", max_length=800)
+    school_id: str | None = Field(default=None, max_length=80)
+    subject_id: str | None = Field(default=None, max_length=80)
+    curricular_trace: dict | None = None
 
     @field_validator("subject", "grade", "topic", "annex_type", "extra_instructions")
     @classmethod
@@ -119,14 +147,20 @@ class AnnexUpdateRequest(BaseModel):
     topic: str = Field(min_length=1, max_length=240)
     instructions: str = Field(min_length=1, max_length=800)
     content: AnnexContentData
+    change_summary: str = Field(default="", max_length=240)
 
     @field_validator("title", "subject", "grade", "topic", "instructions")
     @classmethod
-    def clean(cls, value: str) -> str:
+    def clean_required(cls, value: str) -> str:
         cleaned = sanitize_print_text(value)
         if not cleaned:
             raise ValueError("empty_text")
         return cleaned
+
+    @field_validator("change_summary")
+    @classmethod
+    def clean_summary(cls, value: str) -> str:
+        return sanitize_print_text(value)
 
 
 def annex_document(row: Annex) -> dict:
@@ -151,8 +185,49 @@ def annex_document(row: Annex) -> dict:
     }
 
 
+def annex_revision_document(row: AnnexRevision) -> dict:
+    return {
+        "id": str(row.id),
+        "annex_id": str(row.annex_id),
+        "scope_id": str(row.scope_id),
+        "revision": row.revision,
+        "title": row.title,
+        "subject": row.subject,
+        "grade": row.grade,
+        "topic": row.topic,
+        "instructions": row.instructions,
+        "content": row.content,
+        "change_summary": row.change_summary,
+        "curricular_trace": row.curricular_trace,
+        "created_at": row.created_at.astimezone(UTC).isoformat(),
+    }
+
+
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+def _snapshot_revision(
+    session: Session, row: Annex, *, change_summary: str, created_at: datetime
+) -> None:
+    content = row.content if isinstance(row.content, dict) else {}
+    session.add(
+        AnnexRevision(
+            id=uuid4(),
+            annex_id=row.id,
+            scope_id=row.scope_id,
+            revision=row.revision,
+            title=row.title,
+            subject=row.subject,
+            grade=row.grade,
+            topic=row.topic,
+            instructions=row.instructions,
+            content=content,
+            change_summary=change_summary[:240],
+            curricular_trace=content.get("curricular_trace"),
+            created_at=created_at,
+        )
+    )
 
 
 class Annexes:
@@ -170,9 +245,19 @@ class Annexes:
 
     def generate(self, actor, scope_id: UUID, payload: AnnexGenerateRequest) -> dict:
         # Authorize BEFORE invoking the external OpenAI API.
+        curricular_hint = ""
         with Session(self.engine) as session:
             actor_id = authorize(session, actor, scope_id)
+            if payload.school_id:
+                from aulalista_api.curriculum import resolve_curricular_context_text
 
+                curricular_hint = resolve_curricular_context_text(
+                    session, scope_id, payload.school_id, payload.subject_id
+                )
+
+        merged_extra = "\n".join(
+            p for p in (payload.extra_instructions, curricular_hint) if p
+        )[:800]
         try:
             generated = self.generator.generate(
                 AnnexGenerationSpec(
@@ -181,11 +266,16 @@ class Annexes:
                     topic=payload.topic,
                     annex_type=payload.annex_type,
                     language=payload.language,
-                    extra_instructions=payload.extra_instructions,
+                    extra_instructions=merged_extra,
                 )
             )
         except AnnexGeneratorError as error:
             raise MaterialError(error.status, error.code) from None
+
+        content_dump = generated.payload.content.model_dump(mode="json")
+        if payload.curricular_trace:
+            content_dump["curricular_trace"] = payload.curricular_trace
+        content_dump["tool_kind"] = payload.annex_type
 
         instant = _now()
         with Session(self.engine) as session:
@@ -199,7 +289,7 @@ class Annexes:
                 grade=payload.grade,
                 topic=payload.topic,
                 instructions=generated.payload.instructions,
-                content=generated.payload.content.model_dump(mode="json"),
+                content=content_dump,
                 status="draft",
                 provenance=generated.provenance,
                 model=generated.model,
@@ -209,6 +299,13 @@ class Annexes:
                 updated_at=instant,
             )
             session.add(row)
+            session.flush()
+            _snapshot_revision(
+                session,
+                row,
+                change_summary="Versión inicial generada",
+                created_at=instant,
+            )
             session.commit()
             session.refresh(row)
             return annex_document(row)
@@ -236,6 +333,13 @@ class Annexes:
                 updated_at=instant,
             )
             session.add(row)
+            session.flush()
+            _snapshot_revision(
+                session,
+                row,
+                change_summary="Versión inicial manual",
+                created_at=instant,
+            )
             session.commit()
             session.refresh(row)
             return annex_document(row)
@@ -285,6 +389,77 @@ class Annexes:
             row.status = "draft"
             row.approved_at = None
             row.updated_at = instant
+            _snapshot_revision(
+                session,
+                row,
+                change_summary=payload.change_summary or f"Edición revisión {row.revision}",
+                created_at=instant,
+            )
+            session.commit()
+            session.refresh(row)
+            return annex_document(row)
+
+    def list_revisions(self, actor, scope_id: UUID, annex_id: UUID) -> dict:
+        with Session(self.engine) as session:
+            authorize(session, actor, scope_id)
+            annex = session.scalar(
+                select(Annex).where(Annex.id == annex_id, Annex.scope_id == scope_id)
+            )
+            if annex is None:
+                raise MaterialError(404, "not_found")
+            rows = session.scalars(
+                select(AnnexRevision)
+                .where(
+                    AnnexRevision.annex_id == annex_id,
+                    AnnexRevision.scope_id == scope_id,
+                )
+                .order_by(AnnexRevision.revision.desc())
+                .limit(50)
+            ).all()
+            return {
+                "annex_id": str(annex_id),
+                "current_revision": annex.revision,
+                "items": [annex_revision_document(r) for r in rows],
+            }
+
+    def restore_revision(
+        self, actor, scope_id: UUID, annex_id: UUID, target_revision: int
+    ) -> dict:
+        instant = _now()
+        with Session(self.engine) as session:
+            authorize(session, actor, scope_id)
+            row = session.scalar(
+                select(Annex)
+                .where(Annex.id == annex_id, Annex.scope_id == scope_id)
+                .with_for_update()
+            )
+            if row is None:
+                raise MaterialError(404, "not_found")
+            snapshot = session.scalar(
+                select(AnnexRevision).where(
+                    AnnexRevision.annex_id == annex_id,
+                    AnnexRevision.scope_id == scope_id,
+                    AnnexRevision.revision == target_revision,
+                )
+            )
+            if snapshot is None:
+                raise MaterialError(404, "revision_not_found")
+            row.title = snapshot.title
+            row.subject = snapshot.subject
+            row.grade = snapshot.grade
+            row.topic = snapshot.topic
+            row.instructions = snapshot.instructions
+            row.content = dict(snapshot.content or {})
+            row.revision += 1
+            row.status = "draft"
+            row.approved_at = None
+            row.updated_at = instant
+            _snapshot_revision(
+                session,
+                row,
+                change_summary=f"Restaurado desde revisión {target_revision}",
+                created_at=instant,
+            )
             session.commit()
             session.refresh(row)
             return annex_document(row)

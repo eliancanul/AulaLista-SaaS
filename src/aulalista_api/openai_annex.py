@@ -68,16 +68,39 @@ class AnnexItemData(BaseModel):
         return cleaned
 
 
+class AnnexTableData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    headers: list[str] = Field(min_length=1, max_length=8)
+    rows: list[list[str]] = Field(default_factory=list, max_length=24)
+
+    @field_validator("headers")
+    @classmethod
+    def clean_headers(cls, values: list[str]) -> list[str]:
+        return [sanitize_print_text(v)[:80] or "Columna" for v in values]
+
+    @field_validator("rows")
+    @classmethod
+    def clean_rows(cls, rows: list[list[str]]) -> list[list[str]]:
+        return [[sanitize_print_text(cell)[:240] for cell in row[:8]] for row in rows]
+
+
 class AnnexSectionData(BaseModel):
     model_config = ConfigDict(extra="forbid")
     heading: str = Field(min_length=1, max_length=160)
     prompt: str = Field(default="", max_length=600)
-    items: list[AnnexItemData] = Field(min_length=1, max_length=15)
+    items: list[AnnexItemData] = Field(default_factory=list, max_length=25)
+    bullets: list[str] = Field(default_factory=list, max_length=20)
+    table: AnnexTableData | None = None
 
     @field_validator("heading", "prompt")
     @classmethod
     def clean_fields(cls, value: str) -> str:
         return sanitize_print_text(value)
+
+    @field_validator("bullets")
+    @classmethod
+    def clean_bullets(cls, values: list[str]) -> list[str]:
+        return [sanitize_print_text(v)[:300] for v in values if sanitize_print_text(v)]
 
 
 class AnnexContentData(BaseModel):
@@ -88,8 +111,12 @@ class AnnexContentData(BaseModel):
         min_length=1,
         max_length=5,
     )
-    sections: list[AnnexSectionData] = Field(min_length=1, max_length=8)
+    sections: list[AnnexSectionData] = Field(min_length=1, max_length=12)
     footer_note: str = Field(default="", max_length=240)
+    tool_kind: str = Field(default="hoja-de-trabajo", max_length=64)
+    curricular_trace: dict[str, Any] | None = None
+    teacher_key: list[str] = Field(default_factory=list, max_length=40)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("subtitle", "footer_note")
     @classmethod
