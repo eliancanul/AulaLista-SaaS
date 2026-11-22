@@ -14,6 +14,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     func,
@@ -49,11 +50,12 @@ class PrincipalAccountPreferences(Base):
 class AccountLinkChallenge(Base):
     __tablename__ = "account_link_challenge"
     __table_args__ = (
+        Index("ix_account_link_principal", "principal_id", "created_at"),
         CheckConstraint("attempts BETWEEN 0 AND 5", name="ck_account_link_attempts"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    principal_id: Mapped[UUID] = mapped_column(ForeignKey("principal.id"), index=True)
+    principal_id: Mapped[UUID] = mapped_column(ForeignKey("principal.id"))
     email: Mapped[str] = mapped_column(String(320))
     code_mac: Mapped[str] = mapped_column(String(64))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
