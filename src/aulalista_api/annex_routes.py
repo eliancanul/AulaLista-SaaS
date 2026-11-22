@@ -58,6 +58,33 @@ def install_annex_routes(
             headers={"Cache-Control": "no-store"},
         )
 
+    @app.get("/scopes/{scope_id}/annexes/tools")
+    def list_didactic_tools(scope_id: UUID, actor: Actor):
+        return JSONResponse(
+            service.tools_catalog(actor, scope_id),
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.post("/scopes/{scope_id}/annexes/tools/generate", status_code=201)
+    async def generate_didactic_tool_annex(
+        scope_id: UUID, actor: Actor, request: Request
+    ):
+        from aulalista_api.didactic_generators import DidacticToolGenerateRequest
+
+        content = await bounded_content(
+            request,
+            media_type="application/json",
+            max_bytes=MAX_ANNEX_REQUEST_BYTES,
+        )
+        try:
+            payload = DidacticToolGenerateRequest.model_validate_json(content)
+        except ValidationError:
+            raise MaterialError(422, "invalid_request") from None
+        saved = await run_in_threadpool(service.generate_tool, actor, scope_id, payload)
+        return JSONResponse(
+            saved, status_code=201, headers={"Cache-Control": "no-store"}
+        )
+
     @app.post("/scopes/{scope_id}/annexes/generate", status_code=201)
     async def generate_annex(scope_id: UUID, actor: Actor, request: Request):
         content = await bounded_content(
@@ -86,6 +113,28 @@ def install_annex_routes(
         except ValidationError:
             raise MaterialError(422, "invalid_request") from None
         saved = await run_in_threadpool(service.create_manual, actor, scope_id, payload)
+        return JSONResponse(
+            saved, status_code=201, headers={"Cache-Control": "no-store"}
+        )
+
+    @app.post("/scopes/{scope_id}/annexes/{annex_id}/adapt", status_code=201)
+    async def adapt_annex(
+        scope_id: UUID, annex_id: UUID, actor: Actor, request: Request
+    ):
+        from aulalista_api.didactic_generators import AdaptAnnexRequest
+
+        content = await bounded_content(
+            request,
+            media_type="application/json",
+            max_bytes=MAX_ANNEX_REQUEST_BYTES,
+        )
+        try:
+            payload = AdaptAnnexRequest.model_validate_json(content)
+        except ValidationError:
+            raise MaterialError(422, "invalid_request") from None
+        saved = await run_in_threadpool(
+            service.adapt_annex, actor, scope_id, annex_id, payload
+        )
         return JSONResponse(
             saved, status_code=201, headers={"Cache-Control": "no-store"}
         )

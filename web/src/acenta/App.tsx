@@ -964,7 +964,15 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
                 />
               ) : <>
                 <PendingPlanning controller={controller} />
-                <ToolsCatalog category={category} onCategory={setCategory} onPlanning={() => controller.navigate("planning")} />
+                <ToolsCatalog
+                  category={category}
+                  onCategory={setCategory}
+                  onPlanning={() => controller.navigate("planning")}
+                  onSelectTool={(toolId) => {
+                    window.sessionStorage.setItem("acenta:selected-tool", toolId);
+                    controller.navigate("annexes");
+                  }}
+                />
                 <button className="text-action" onClick={actionExample}>Ajustar planeación · ejemplo</button>
               </>}
           </WorkspacePanel>} /> : s.view === "annexes" ? <AnnexesView controller={controller} /> : s.view === "printer" ? <PrintSettingsView controller={controller} /> : s.view === "account" ? <AccountView api={controller.api} onOpenSupport={openSupport} /> : s.view === "conversations" ? <Conversations controller={controller} /> : s.view === "analytic" ? <AnalyticForm controller={controller} /> : s.view === "planning" ? (derived.origin ? <AnalyticDerivedForm controller={controller} /> : <GuidedForm controller={controller} />) : s.view === "example" ? (
@@ -1327,7 +1335,19 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
               Cerrar
             </button>
           </header>
-          <ToolsCatalog category={category} onCategory={setCategory} onPlanning={() => { setOverlay(null); controller.navigate("planning"); }} />
+          <ToolsCatalog
+            category={category}
+            onCategory={setCategory}
+            onPlanning={() => {
+              setOverlay(null);
+              controller.navigate("planning");
+            }}
+            onSelectTool={(toolId) => {
+              window.sessionStorage.setItem("acenta:selected-tool", toolId);
+              setOverlay(null);
+              controller.navigate("annexes");
+            }}
+          />
           <footer>
             <button className="quiet" onClick={actionExample}>
               Ajustar planeación ↗

@@ -512,3 +512,117 @@ class Annexes:
             )
             session.delete(row)
             session.commit()
+
+    def tools_catalog(self, actor, scope_id: UUID) -> dict:
+        from aulalista_api.didactic_generators import DIDACTIC_TOOLS_CATALOG
+
+        with Session(self.engine) as session:
+            authorize(session, actor, scope_id)
+        return {"items": DIDACTIC_TOOLS_CATALOG}
+
+    def generate_tool(
+        self,
+        actor,
+        scope_id: UUID,
+        payload,
+    ) -> dict:
+        from aulalista_api.curriculum import CurricularProfile
+        from aulalista_api.didactic_generators import generate_didactic_tool
+
+        instant = _now()
+        with Session(self.engine) as session:
+            authorize(session, actor, scope_id)
+            trace: dict | None = None
+            if payload.school_id and payload.subject_id:
+                profile = session.scalar(
+                    select(CurricularProfile).where(
+                        CurricularProfile.scope_id == scope_id,
+                        CurricularProfile.school_id == payload.school_id,
+                        CurricularProfile.subject_id == payload.subject_id,
+                    )
+                )
+                if profile is not None:
+                    trace = {
+                        "phase": profile.phase,
+                        "campo_formativo": profile.campo_formativo,
+                        "pdas": list(profile.pdas or []),
+                        "ejes_articuladores": list(profile.ejes_articuladores or []),
+                    }
+            generated = generate_didactic_tool(payload, curricular_trace=trace)
+            row = Annex(
+                scope_id=scope_id,
+                actor_id=actor,
+                title=generated.title,
+                subject=payload.subject.strip(),
+                grade=payload.grade.strip(),
+                topic=payload.topic.strip(),
+                instructions=generated.instructions,
+                content=generated.content.model_dump(mode="json"),
+                status="draft",
+                provenance="manual-annex-v1",
+                model="didactic-engine-v1",
+                revision=1,
+                approved_at=None,
+                created_at=instant,
+                updated_at=instant,
+            )
+            session.add(row)
+            session.flush()
+            _snapshot_revision(
+                session,
+                row,
+                change_summary=f"Generado con herramienta {payload.tool_id}",
+                created_at=instant,
+            )
+            session.commit()
+            session.refresh(row)
+            return annex_document(row)
+
+    def adapt_annex(
+        self,
+        actor,
+        scope_id: UUID,
+        annex_id: UUID,
+        payload,
+    ) -> dict:
+        from aulalista_api.didactic_generators import adapt_existing_annex
+
+        instant = _now()
+        with Session(self.engine) as session:
+            authorize(session, actor, scope_id)
+            original = session.scalar(
+                select(Annex).where(Annex.id == annex_id, Annex.scope_id == scope_id)
+            )
+            if original is None:
+                raise MaterialError(404, "not_found")
+            orig_doc = annex_document(original)
+            adapted = adapt_existing_annex(orig_doc, payload)
+            row = Annex(
+                scope_id=scope_id,
+                actor_id=actor,
+                title=adapted.title,
+                subject=original.subject,
+                grade=(payload.target_grade or original.grade).strip(),
+                topic=original.topic,
+                instructions=adapted.instructions,
+                content=adapted.content.model_dump(mode="json"),
+                status="draft",
+                provenance="manual-annex-v1",
+                model="didactic-engine-v1",
+                revision=1,
+                approved_at=None,
+                created_at=instant,
+                updated_at=instant,
+            )
+            session.add(row)
+            session.flush()
+            _snapshot_revision(
+                session,
+                row,
+                change_summary=f"Adaptado desde '{original.title}' ({payload.adaptation_mode})",
+                created_at=instant,
+            )
+            session.commit()
+            session.refresh(row)
+            return annex_document(row)
+
