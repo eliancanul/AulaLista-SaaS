@@ -8,6 +8,7 @@ from typing import Literal
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+from aulalista_api.agent_chat_routes import install_agent_chat_routes
 from aulalista_api.analytic_section_routes import install_analytic_section_routes
 from aulalista_api.annex_routes import install_annex_routes
 from aulalista_api.auth_routes import install_auth_routes
@@ -40,6 +41,7 @@ def create_app(
     generation_profile=None,
     pilot_config=None,
     annex_generator=None,
+    agent_chat_provider=None,
     mail_sender=None,
     print_poller_seconds: int | None = None,
 ) -> FastAPI:
@@ -113,5 +115,6 @@ def create_app(
     install_annex_routes(app, engine, generator=annex_generator)
     install_print_routes(app, engine, mail_sender=mail_sender)
     install_school_space_routes(app, engine)
+    install_agent_chat_routes(app, engine, provider=agent_chat_provider)
     install_web(app)
     return app

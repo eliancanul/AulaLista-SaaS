@@ -79,6 +79,8 @@ def test_empty_database_migrates_and_upgrade_is_repeatable(empty_database):
         "annex",
         "teacher_print_settings",
         "teacher_school_spaces",
+        "agent_chat_channel",
+        "agent_chat_turn",
         "print_job",
     }
     command.check(Config("alembic.ini"))

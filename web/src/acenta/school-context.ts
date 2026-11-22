@@ -20,10 +20,13 @@ export interface SchoolSpace {
   subjects: SubjectSpace[];
 }
 
+export type AgentMode = "orchestrator" | "subject";
+
 export interface SchoolContextSnapshot {
   schools: SchoolSpace[];
   activeSchoolId: string;
   activeSubjectId: string;
+  activeAgentMode: AgentMode;
   hasScheduledPrint: boolean;
   syncStatus: "idle" | "loading" | "synced" | "saving";
 }
@@ -32,6 +35,7 @@ interface PersistedSchoolSpacesPayload {
   schools: SchoolSpace[];
   activeSchoolId: string;
   activeSubjectId: string;
+  activeAgentMode?: AgentMode;
 }
 
 const SCHOOL_PALETTE = ["#964e3b", "#3d6b59", "#4f667a", "#8f6d3b"] as const;
@@ -95,6 +99,7 @@ function freshSnapshot(): SchoolContextSnapshot {
     schools,
     activeSchoolId: schools[0].id,
     activeSubjectId: schools[0].subjects[0].id,
+    activeAgentMode: "subject",
     hasScheduledPrint: false,
     syncStatus: "idle",
   };
@@ -173,6 +178,7 @@ export class SchoolContextStore {
       })),
       activeSchoolId: state.activeSchoolId,
       activeSubjectId: state.activeSubjectId,
+      activeAgentMode: state.activeAgentMode,
     };
   }
 
@@ -219,11 +225,14 @@ export class SchoolContextStore {
             (sub) => sub.id === activeSchool.lastSubjectId,
           ) ??
           activeSchool.subjects[0];
+        const activeAgentMode: AgentMode =
+          response.activeAgentMode === "orchestrator" ? "orchestrator" : "subject";
         this.emit({
           ...this.state,
           schools,
           activeSchoolId: activeSchool.id,
           activeSubjectId: activeSubject.id,
+          activeAgentMode,
           syncStatus: "synced",
         });
         return true;
@@ -253,6 +262,15 @@ export class SchoolContextStore {
     );
   }
 
+  getActiveChannelKey(): string {
+    const school = this.getActiveSchool();
+    if (this.state.activeAgentMode === "orchestrator") {
+      return `orchestrator:${school.id}`;
+    }
+    const subject = this.getActiveSubject();
+    return `subject:${school.id}:${subject.id}`;
+  }
+
   switchSchool(schoolId: string): boolean {
     if (this.closed) return false;
     const school = this.state.schools.find((sc) => sc.id === schoolId);
@@ -266,6 +284,25 @@ export class SchoolContextStore {
       ...this.state,
       activeSchoolId: school.id,
       activeSubjectId: targetSubjectId,
+    });
+    this.persistCurrent();
+    return true;
+  }
+
+  selectOrchestrator(schoolId: string): boolean {
+    if (this.closed) return false;
+    const school = this.state.schools.find((sc) => sc.id === schoolId);
+    if (!school) return false;
+    const targetSubjectId = school.subjects.some(
+      (sub) => sub.id === school.lastSubjectId,
+    )
+      ? school.lastSubjectId
+      : school.subjects[0].id;
+    this.emit({
+      ...this.state,
+      activeSchoolId: school.id,
+      activeSubjectId: targetSubjectId,
+      activeAgentMode: "orchestrator",
     });
     this.persistCurrent();
     return true;
@@ -285,6 +322,7 @@ export class SchoolContextStore {
       schools,
       activeSchoolId: schoolId,
       activeSubjectId: subjectId,
+      activeAgentMode: "subject",
     });
     this.persistCurrent();
     return true;
@@ -321,6 +359,7 @@ export class SchoolContextStore {
       schools,
       activeSchoolId: schoolId,
       activeSubjectId: created.id,
+      activeAgentMode: "subject",
     });
     this.persistCurrent();
     return created;
@@ -360,6 +399,7 @@ export class SchoolContextStore {
       schools: [...this.state.schools, created],
       activeSchoolId: created.id,
       activeSubjectId: matId,
+      activeAgentMode: "subject",
     });
     this.persistCurrent();
     return created;

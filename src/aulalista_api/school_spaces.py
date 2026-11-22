@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -77,6 +78,7 @@ class SchoolSpacesUpdate(BaseModel):
     schools: list[SchoolSpaceModel] = Field(min_length=1, max_length=20)
     activeSchoolId: str = Field(min_length=1, max_length=80)
     activeSubjectId: str = Field(min_length=1, max_length=80)
+    activeAgentMode: Literal["orchestrator", "subject"] = "subject"
 
     @model_validator(mode="after")
     def validate_active_ids(self) -> SchoolSpacesUpdate:
@@ -131,16 +133,21 @@ def default_school_spaces_payload() -> dict:
         ],
         "activeSchoolId": "benito",
         "activeSubjectId": "benito-mat",
+        "activeAgentMode": "subject",
     }
 
 
 def school_spaces_document(scope_id: UUID, row: TeacherSchoolSpaces | None) -> dict:
     data = row.payload if row is not None else default_school_spaces_payload()
+    mode = data.get("activeAgentMode")
+    if mode not in ("orchestrator", "subject"):
+        mode = "subject"
     return {
         "scope_id": str(scope_id),
         "schools": data["schools"],
         "activeSchoolId": data["activeSchoolId"],
         "activeSubjectId": data["activeSubjectId"],
+        "activeAgentMode": mode,
         "updated_at": row.updated_at.isoformat() if row is not None else None,
     }
 

@@ -41,9 +41,22 @@
      python3 -c "import os, base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
      ```
    - `AULALISTA_ALLOWED_EMAILS`: los 2 correos de Gmail de tus papás separados por coma (`mama@gmail.com,papa@gmail.com`).
-   - `OPENAI_API_KEY` y `OPENAI_MODEL=gpt-6-luna`.
+   - `AULALISTA_OPENAI_ANNEXES_ENABLED=true`, `AULALISTA_OPENAI_CHAT_ENABLED=true`, `AULALISTA_CHAT_SCOPE_BUDGET_USD=10`, `OPENAI_API_KEY` y `OPENAI_MODEL=gpt-6-luna`.
    - Variables `SMTP_*` + `PRINT_FROM_EMAIL`.
    - `AULALISTA_PRINT_CRON_SECRET`: cadena aleatoria larga.
 4. **Trabajos programados si usas Render Free (que se duerme por inactividad):**
    - Si tu servicio en Render entra en suspensión, configura un cron gratuito externo (ej. cron-job.org cada 5 min) haciendo `POST https://tu-app.onrender.com/internal/print-jobs/dispatch` con header `X-Print-Cron-Secret: <tu-secreto>`.
    - El despacho usa `SELECT ... FOR UPDATE SKIP LOCKED`, por lo que nunca duplica impresiones.
+
+---
+
+## 4) ¿Render o AWS Free Tier / créditos de prueba?
+
+- **Opción más rápida para mañana (recomendada): Render + Neon Postgres.**
+  - 0 configuración de redes/VPC/IAM/certificados SSL; conectas el repo con `deploy/render.example.yaml`, pegas las variables y en ~10 minutos tienes HTTPS funcionando.
+- **Si prefieres usar tu prueba/créditos de AWS sin complicarte:**
+  - **Evita** armar VPC + ECS + ALB + RDS a mano para 2 docentes (consume horas y es fácil pasarse del Free Tier).
+  - Usa **AWS App Runner** (o **AWS Lightsail Container**, \$7/mes cubierto por créditos) apuntando al `Dockerfile` de la raíz del repositorio + **Neon Postgres** (gratis) para la BD.
+  - Ventaja de AWS App Runner / Lightsail sobre Render Free: **no se duerme por inactividad**, así que `AULALISTA_PRINT_POLLER_SECONDS=60` despacha las impresiones programadas sin necesidad de cron externo, y da HTTPS automático.
+  - Recuerda configurar una **Billing Alarm** en AWS Budgets (ej. en \$5 USD) para evitar sorpresas.
+

@@ -143,6 +143,7 @@ def runtime_database(migrated_database, actors, monkeypatch):
             GRANT SELECT, INSERT, UPDATE, DELETE ON annex TO aulalista_runtime;
             GRANT SELECT, INSERT, UPDATE ON teacher_print_settings TO aulalista_runtime;
             GRANT SELECT, INSERT, UPDATE ON teacher_school_spaces TO aulalista_runtime;
+            GRANT SELECT, INSERT, UPDATE ON agent_chat_channel, agent_chat_turn TO aulalista_runtime;
             GRANT SELECT, INSERT, UPDATE, DELETE ON print_job TO aulalista_runtime
         """)
         )
