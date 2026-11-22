@@ -2407,51 +2407,153 @@ dialog::backdrop {
 
 .docs-dropzone {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
+  text-align: center;
   gap: 16px;
-  flex-wrap: wrap;
-  padding: 20px 22px;
-  border-radius: 16px;
-  border: 1.5px dashed rgba(31, 111, 84, 0.35);
-  background: linear-gradient(135deg, rgba(238, 246, 242, 0.72), rgba(255, 255, 255, 0.92));
-  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+  min-height: 256px;
+  padding: 36px 28px;
+  border-radius: 20px;
+  border: 2.5px dashed rgba(31, 111, 84, 0.45);
+  background:
+    radial-gradient(circle at top center, rgba(31, 111, 84, 0.08), transparent 62%),
+    linear-gradient(180deg, rgba(238, 246, 242, 0.78) 0%, rgba(255, 255, 255, 0.96) 100%);
+  box-shadow: 0 8px 24px rgba(28, 25, 23, 0.04);
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+.docs-dropzone:hover,
+.docs-dropzone:focus-visible {
+  border-color: #1f6f54;
+  background:
+    radial-gradient(circle at top center, rgba(31, 111, 84, 0.13), transparent 65%),
+    linear-gradient(180deg, rgba(232, 244, 238, 0.92) 0%, rgba(255, 255, 255, 0.99) 100%);
+  box-shadow: 0 12px 28px rgba(31, 111, 84, 0.1);
+  outline: none;
 }
 
 .docs-dropzone.is-dragging {
+  border-style: solid;
   border-color: #1f6f54;
-  background: rgba(238, 246, 242, 0.95);
-  transform: scale(1.005);
+  background: rgba(226, 243, 235, 0.96);
+  box-shadow: 0 16px 34px rgba(31, 111, 84, 0.18);
+  transform: scale(1.01);
 }
 
 .docs-dropzone.is-busy {
   opacity: 0.78;
+  cursor: progress;
+}
+
+.docs-dropzone-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #e3f2eb;
+  color: #1f6f54;
+  border: 1px solid rgba(31, 111, 84, 0.18);
+  box-shadow: 0 6px 14px rgba(31, 111, 84, 0.1);
+}
+
+.docs-dropzone.is-dragging .docs-dropzone-icon {
+  background: #1f6f54;
+  color: #ffffff;
 }
 
 .docs-dropzone-copy {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-width: 600px;
+  align-items: center;
+  gap: 8px;
+  max-width: 680px;
+}
+
+.docs-dropzone-kicker {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 11px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: rgba(31, 111, 84, 0.11);
+  color: #175742;
 }
 
 .docs-dropzone-copy strong {
-  font-size: 15px;
+  font-size: 20px;
+  line-height: 1.28;
+  letter-spacing: -0.015em;
   color: var(--ac-ink, #1c1917);
+}
+
+.docs-dropzone-sub {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ac-ink-secondary, #57534e);
+  max-width: 580px;
+}
+
+.docs-examples-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 6px;
+}
+
+.docs-example-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #ffffff;
+  color: #1c1917;
+  border: 1px solid rgba(31, 111, 84, 0.22);
+  box-shadow: 0 1px 2px rgba(28, 25, 23, 0.04);
+}
+
+.docs-dropzone-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.docs-dropzone-btn {
+  padding: 11px 22px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 12px;
 }
 
 .docs-format-pills {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   flex-wrap: wrap;
-  margin-top: 2px;
 }
 
 .docs-format-pill {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
+  padding: 2px 9px;
   border-radius: 999px;
   font-size: 11px;
   font-weight: 600;

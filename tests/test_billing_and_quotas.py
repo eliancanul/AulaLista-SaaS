@@ -60,14 +60,17 @@ def test_plans_catalog_realtime_usage_and_preview_switch(runtime_database, monke
     app.dependency_overrides[require_actor] = lambda: current_actor[0]
 
     with TestClient(app) as client:
-        # 1. Plan catalog: printing is unlimited across all plans
+        # 1. Plan catalog: printing is limited in free (5/month) and unlimited in Pro/Escuela
         plans_resp = client.get(f"/scopes/{scope_id}/billing/plans")
         assert plans_resp.status_code == 200
         plans_data = plans_resp.json()
         assert plans_data["active_plan_id"] == "free"
         assert plans_data["stripe_configured"] is False
         assert [p["id"] for p in plans_data["plans"]] == ["free", "docente", "escuela"]
-        assert all(p["limits"]["print_jobs"] is None for p in plans_data["plans"])
+        limits_by_plan = {p["id"]: p["limits"] for p in plans_data["plans"]}
+        assert limits_by_plan["free"]["print_jobs"] == 5
+        assert limits_by_plan["docente"]["print_jobs"] is None
+        assert limits_by_plan["escuela"]["print_jobs"] is None
 
         # 2. Generate a didactic annex so usage counter increments transparently
         gen = client.post(
@@ -90,9 +93,9 @@ def test_plans_catalog_realtime_usage_and_preview_switch(runtime_database, monke
         assert summary["usage"]["annexes"]["limit"] == 25
         assert summary["usage"]["annexes"]["remaining"] == 24
         assert summary["usage"]["annexes"]["unlimited"] is False
-        assert summary["usage"]["print_jobs"]["limit"] is None
-        assert summary["usage"]["print_jobs"]["remaining"] is None
-        assert summary["usage"]["print_jobs"]["unlimited"] is True
+        assert summary["usage"]["print_jobs"]["limit"] == 5
+        assert summary["usage"]["print_jobs"]["remaining"] == 5
+        assert summary["usage"]["print_jobs"]["unlimited"] is False
         assert summary["usage"]["print_jobs"]["at_limit"] is False
         assert summary["usage"]["print_jobs"]["near_limit"] is False
         assert summary["quota_status"] == "healthy"
