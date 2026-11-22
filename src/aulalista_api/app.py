@@ -17,6 +17,7 @@ from aulalista_api.chat_routes import install_chat_routes
 from aulalista_api.config import load_settings
 from aulalista_api.curriculum_routes import install_curriculum_routes
 from aulalista_api.database import Readiness, make_engine
+from aulalista_api.document_routes import install_document_routes
 from aulalista_api.material_routes import install_material_routes
 from aulalista_api.pilot import ManualPilotConfig
 from aulalista_api.planning_edit_routes import install_planning_edit_routes
@@ -46,6 +47,7 @@ def create_app(
     annex_generator=None,
     agent_chat_provider=None,
     mail_sender=None,
+    web_search_provider=None,
     print_poller_seconds: int | None = None,
 ) -> FastAPI:
     if pilot_config is not None:
@@ -122,5 +124,6 @@ def create_app(
     install_account_routes(app, engine)
     install_support_routes(app, engine)
     install_curriculum_routes(app, engine)
+    install_document_routes(app, engine, web_search_provider=web_search_provider)
     install_web(app)
     return app

@@ -35,6 +35,7 @@ import { AnnexesView } from "./AnnexesView";
 import { PrintSettingsView } from "./PrintSettingsView";
 import { SupportPanel } from "./SupportPanel";
 import { AccountView } from "./AccountView";
+import { DocumentsView } from "./DocumentsView";
 import {
   collectDebugBundle,
   installDebugTelemetry,
@@ -850,6 +851,16 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
           </button>
           <button
             type="button"
+            aria-label="Documentos"
+            title={expanded ? undefined : "Documentos"}
+            className={`sidebar-nav-item${s.view === "documents" ? " selected" : ""}`}
+            onClick={() => controller.navigate("documents")}
+          >
+            <UiIcon name="document" size={17} />
+            {expanded && <span>Documentos</span>}
+          </button>
+          <button
+            type="button"
             aria-label="Impresora"
             title={expanded ? undefined : "Impresora"}
             className={`sidebar-nav-item${s.view === "printer" ? " selected" : ""}`}
@@ -939,14 +950,14 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
         className={
           conversational
             ? "conversation-main"
-            : s.view === "annexes" || s.view === "printer" || s.view === "account"
+            : s.view === "annexes" || s.view === "documents" || s.view === "printer" || s.view === "account"
               ? "studio-main"
               : s.view === "example"
                 ? "home-main"
                 : "content-main"
         }
       >
-        {!conversational && s.view !== "planning" && s.view !== "analytic" && s.view !== "annexes" && s.view !== "printer" && s.view !== "account" && <AccountLinks />}
+        {!conversational && s.view !== "planning" && s.view !== "analytic" && s.view !== "annexes" && s.view !== "documents" && s.view !== "printer" && s.view !== "account" && <AccountLinks />}
         {conversational ? <Chat controller={controller} panelView={panelView}
           onContext={() => openPanel("chat-context")} onPlan={() => { setCategory("Planear"); openPanel("tools"); }}
           panel={panelView && <WorkspacePanel view={panelView} onClose={closePanel}>
@@ -975,7 +986,7 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
                 />
                 <button className="text-action" onClick={actionExample}>Ajustar planeación · ejemplo</button>
               </>}
-          </WorkspacePanel>} /> : s.view === "annexes" ? <AnnexesView controller={controller} /> : s.view === "printer" ? <PrintSettingsView controller={controller} /> : s.view === "account" ? <AccountView api={controller.api} onOpenSupport={openSupport} /> : s.view === "conversations" ? <Conversations controller={controller} /> : s.view === "analytic" ? <AnalyticForm controller={controller} /> : s.view === "planning" ? (derived.origin ? <AnalyticDerivedForm controller={controller} /> : <GuidedForm controller={controller} />) : s.view === "example" ? (
+          </WorkspacePanel>} /> : s.view === "annexes" ? <AnnexesView controller={controller} /> : s.view === "documents" ? <DocumentsView controller={controller} /> : s.view === "printer" ? <PrintSettingsView controller={controller} /> : s.view === "account" ? <AccountView api={controller.api} onOpenSupport={openSupport} /> : s.view === "conversations" ? <Conversations controller={controller} /> : s.view === "analytic" ? <AnalyticForm controller={controller} /> : s.view === "planning" ? (derived.origin ? <AnalyticDerivedForm controller={controller} /> : <GuidedForm controller={controller} />) : s.view === "example" ? (
           <section className="home-panel">
             <header className="home-heading">
               <Logo />

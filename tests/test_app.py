@@ -140,6 +140,12 @@ def test_health_and_fail_closed_material_routes_are_registered(client):
             "/scopes/{scope_id}/curriculum/profiles/{school_id}/{subject_id}",
             {"PUT"},
         ),
+        ("/scopes/{scope_id}/documents", {"GET"}),
+        ("/scopes/{scope_id}/documents", {"POST"}),
+        ("/scopes/{scope_id}/documents/{doc_id}", {"GET"}),
+        ("/scopes/{scope_id}/documents/{doc_id}/revoke", {"POST"}),
+        ("/scopes/{scope_id}/documents/{doc_id}/generate-annex", {"POST"}),
+        ("/scopes/{scope_id}/web-search", {"POST"}),
     ]
 
 

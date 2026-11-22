@@ -148,7 +148,10 @@ def runtime_database(migrated_database, actors, monkeypatch):
             GRANT SELECT, INSERT, UPDATE ON principal_account_preferences, account_link_challenge TO aulalista_runtime;
             GRANT SELECT, INSERT, UPDATE ON support_ticket TO aulalista_runtime;
             GRANT SELECT, INSERT, UPDATE ON curricular_profile TO aulalista_runtime;
-            GRANT SELECT, INSERT, DELETE ON annex_revision TO aulalista_runtime
+            GRANT SELECT, INSERT, DELETE ON annex_revision TO aulalista_runtime;
+            GRANT SELECT, INSERT, UPDATE ON teacher_document TO aulalista_runtime;
+            GRANT SELECT, INSERT, DELETE ON document_blob TO aulalista_runtime;
+            GRANT SELECT, INSERT ON document_revocation_tombstone TO aulalista_runtime
         """)
         )
     settings = load_settings()
