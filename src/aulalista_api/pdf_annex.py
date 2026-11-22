@@ -17,6 +17,7 @@ from reportlab.pdfgen import canvas as rl_canvas
 from reportlab.platypus import (
     HRFlowable,
     KeepTogether,
+    PageBreak,
     Paragraph,
     SimpleDocTemplate,
     Spacer,
@@ -577,6 +578,26 @@ def render_annex_pdf(annex_doc: dict[str, Any], *, copies: int = 1) -> bytes:
     if isinstance(subtitle, str) and subtitle.strip():
         story.append(Paragraph(_p_text(subtitle), styles["subtitle"]))
 
+    trace = content.get("curricular_trace")
+    if isinstance(trace, dict):
+        trace_bits = [
+            str(trace.get(k, "")).strip()
+            for k in ("phase", "campo_formativo")
+            if str(trace.get(k, "")).strip()
+        ]
+        pda_titles = [
+            str(p.get("title", "")).strip()
+            for p in (trace.get("pdas") or [])
+            if isinstance(p, dict) and str(p.get("title", "")).strip()
+        ]
+        if trace_bits or pda_titles:
+            trace_line = " · ".join(trace_bits)
+            if pda_titles:
+                trace_line += (" · PDA: " if trace_line else "PDA: ") + "; ".join(
+                    pda_titles[:3]
+                )
+            story.append(Paragraph(_p_text(trace_line), styles["meta"]))
+
     header_fields = content.get("student_header_fields") or ["Nombre", "Fecha", "Grupo"]
     story.append(_student_header_table(header_fields, styles, usable_width))
     story.extend(_editorial_double_rule(usable_width))
@@ -599,6 +620,8 @@ def render_annex_pdf(annex_doc: dict[str, Any], *, copies: int = 1) -> bytes:
         heading = str(section.get("heading", "")).strip()
         prompt = str(section.get("prompt", "")).strip()
         items = section.get("items") or []
+        bullets = section.get("bullets") or []
+        table_data = section.get("table")
         section_header: list[Any] = []
         if s_idx > 0:
             section_header.append(Spacer(1, 0.08 * inch))
@@ -648,6 +671,62 @@ def render_annex_pdf(annex_doc: dict[str, Any], *, copies: int = 1) -> bytes:
 
         if section_header:
             story.extend(section_header)
+            section_header = []
+
+        if isinstance(bullets, list) and bullets:
+            for bullet in bullets:
+                b_text = str(bullet).strip()
+                if b_text:
+                    story.append(
+                        Paragraph(f"&#8226; {_p_text(b_text)}", styles["item"])
+                    )
+            story.append(Spacer(1, 0.06 * inch))
+
+        if isinstance(table_data, dict) and table_data.get("headers"):
+            headers = [str(h) for h in table_data["headers"][:8]]
+            col_count = max(1, len(headers))
+            col_width = usable_width / col_count
+            matrix: list[list[Any]] = [
+                [Paragraph(f"<b>{_p_text(h)}</b>", styles["checklist_item"]) for h in headers]
+            ]
+            for raw_row in (table_data.get("rows") or [])[:24]:
+                padded = list(raw_row[:col_count]) + [""] * max(0, col_count - len(raw_row))
+                matrix.append(
+                    [Paragraph(_p_text(str(cell)), styles["checklist_item"]) for cell in padded]
+                )
+            tbl = Table(matrix, colWidths=[col_width] * col_count, repeatRows=1)
+            tbl.setStyle(
+                TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EAEAEA")),
+                        ("BOX", (0, 0), (-1, -1), 0.75, colors.HexColor("#222222")),
+                        ("INNERGRID", (0, 0), (-1, -1), 0.45, colors.HexColor("#666666")),
+                        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                        ("TOPPADDING", (0, 0), (-1, -1), 5),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                    ]
+                )
+            )
+            story.append(Spacer(1, 0.05 * inch))
+            story.append(tbl)
+            story.append(Spacer(1, 0.08 * inch))
+
+    teacher_key = content.get("teacher_key")
+    if isinstance(teacher_key, list) and any(str(x).strip() for x in teacher_key):
+        story.append(PageBreak())
+        story.append(Paragraph("CLAVE DOCENTE · NO REPARTIR AL ALUMNADO", styles["meta"]))
+        story.append(
+            Paragraph(_p_text(f"Clave: {annex_doc.get('title', 'Anexo')}"), styles["title"])
+        )
+        story.extend(_editorial_double_rule(usable_width))
+        for k_idx, entry in enumerate(teacher_key, start=1):
+            text = str(entry).strip()
+            if text:
+                story.append(
+                    Paragraph(f"<b>{k_idx}.</b> {_p_text(text)}", styles["item"])
+                )
 
     doc.build(story, canvasmaker=_make_numbered_canvas(footer_note, margin))
     return duplicate_pdf_copies(buf.getvalue(), copies)

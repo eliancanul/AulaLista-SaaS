@@ -2516,3 +2516,132 @@
 }
 
 
+
+/* ==========================================================================
+   Structured Tables, Curricular Trace, Teacher Key & Revision History (PR B)
+   ========================================================================== */
+.letter-curricular-trace {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: #555555;
+  font-style: italic;
+}
+
+.letter-bullets {
+  margin: 4px 0 6px 20px;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  color: #111111;
+}
+
+.letter-table-wrap {
+  margin: 8px 0;
+  overflow-x: auto;
+}
+
+.letter-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  color: #111111;
+}
+
+.letter-table th,
+.letter-table td {
+  border: 1px solid #333333;
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.letter-table th {
+  background: #f0f0f0;
+  font-weight: 700;
+}
+
+.letter-table-editor input {
+  width: 100%;
+  min-width: 72px;
+  padding: 2px 4px;
+  font-size: 12.5px;
+}
+
+.letter-table-toolbar,
+.letter-inline-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.letter-teacher-key {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px dashed #666666;
+  border-radius: 6px;
+  background: #f9f8f5;
+  font-size: 12.5px;
+  color: #222222;
+}
+
+.letter-teacher-key summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.letter-teacher-key ol {
+  margin: 8px 0 0 18px;
+  display: grid;
+  gap: 4px;
+}
+
+.minimal-canvas-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.annex-revisions-panel {
+  border: 1px solid var(--ac-glass-stroke);
+  background: var(--ac-glass-bg-strong);
+  backdrop-filter: var(--ac-glass-blur);
+  border-radius: var(--ac-radius-lg);
+  padding: 14px 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.annex-revisions-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.annex-revisions-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.annex-revision-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: var(--ac-radius-md);
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--ac-border-subtle);
+  font-size: 13px;
+}
+
+.annex-revision-meta {
+  color: var(--ac-ink-muted);
+  font-size: 12px;
+}

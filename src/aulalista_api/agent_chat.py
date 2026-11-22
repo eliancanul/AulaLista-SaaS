@@ -588,6 +588,20 @@ class AgentChatService:
                     )
             messages.append({"role": "user", "content": request.text})
 
+            from aulalista_api.curriculum import resolve_curricular_context_text
+
+            curricular_summary = resolve_curricular_context_text(
+                session,
+                scope_id,
+                school_id,
+                channel.subject_id if agent_kind == "subject" else None,
+            )
+            combined_notes = "\n\n".join(
+                part
+                for part in (curricular_summary, channel.context_notes)
+                if part and part.strip()
+            )
+
             if agent_kind == "orchestrator":
                 digests, subject_pairs, other_schools = _school_subject_digests(
                     session, scope_id, school_id
@@ -597,7 +611,7 @@ class AgentChatService:
                     school_name=channel.school_name,
                     grade=channel.grade,
                     shift=channel.shift,
-                    context_notes=channel.context_notes,
+                    context_notes=combined_notes,
                     subject_digests=digests,
                     other_schools=other_schools,
                 )
@@ -608,7 +622,7 @@ class AgentChatService:
                     grade=channel.grade,
                     shift=channel.shift,
                     subject_name=channel.subject_name,
-                    context_notes=channel.context_notes,
+                    context_notes=combined_notes,
                     orchestrator_brief=_orchestrator_brief_for_subject(
                         session, scope_id, school_id
                     ),

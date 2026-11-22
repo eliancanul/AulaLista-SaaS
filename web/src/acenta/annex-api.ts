@@ -10,10 +10,17 @@ export interface AnnexItem {
   answer_lines: number;
 }
 
+export interface AnnexTable {
+  headers: string[];
+  rows: string[][];
+}
+
 export interface AnnexSection {
   heading: string;
   prompt: string;
   items: AnnexItem[];
+  bullets?: string[];
+  table?: AnnexTable | null;
 }
 
 export interface AnnexContent {
@@ -21,6 +28,10 @@ export interface AnnexContent {
   student_header_fields: string[];
   sections: AnnexSection[];
   footer_note: string;
+  tool_kind?: string;
+  curricular_trace?: Record<string, unknown> | null;
+  teacher_key?: string[];
+  metadata?: Record<string, unknown>;
 }
 
 export interface AnnexDocument {
@@ -100,6 +111,18 @@ export interface PrintAnnexInput {
   idempotency_key?: string;
 }
 
+export interface AnnexRevisionSummary {
+  id: string;
+  annex_id: string;
+  revision: number;
+  title: string;
+  subject: string;
+  grade: string;
+  topic: string;
+  reason: string;
+  created_at: string;
+}
+
 export class AnnexPrintClient {
   constructor(private readonly api: AcentaApi) {}
 
@@ -151,6 +174,23 @@ export class AnnexPrintClient {
 
   async deleteAnnex(annexId: string): Promise<void> {
     await this.api.scopedJson(`annexes/${annexId}`, "DELETE");
+  }
+
+  async listAnnexRevisions(annexId: string): Promise<AnnexRevisionSummary[]> {
+    const res = (await this.api.scopedJson(
+      `annexes/${annexId}/revisions`,
+    )) as { items: AnnexRevisionSummary[] };
+    return res.items;
+  }
+
+  async restoreAnnexRevision(
+    annexId: string,
+    revision: number,
+  ): Promise<AnnexDocument> {
+    return (await this.api.scopedJson(
+      `annexes/${annexId}/revisions/${revision}/restore`,
+      "POST",
+    )) as AnnexDocument;
   }
 
   async getPrintSettings(): Promise<PrintSettings> {
