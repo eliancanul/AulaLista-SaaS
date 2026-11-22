@@ -13,6 +13,7 @@ import {
   humanizePrintError,
   needsDrawingBox,
   stripLeadingNumber,
+  type AdaptationMode,
   type AnnexCapability,
   type AnnexDocument,
   type AnnexItem,
@@ -20,10 +21,26 @@ import {
   type AnnexRevisionSummary,
   type AnnexSection,
   type AnnexTable,
+  type DidacticToolId,
   type PrintSettings,
 } from "./annex-api";
+import { QuizProjector, type QuizSlide } from "./QuizProjector";
 import { UiIcon } from "./ui";
 import "./annexes.css";
+
+const DIDACTIC_TOOL_IDS = new Set<DidacticToolId>([
+  "comprension-lectora",
+  "adaptar-material",
+  "tarjetas-repaso",
+  "bingo-tematico",
+  "proyecto-aula",
+  "diagnostico-breve",
+  "rubrica-cotejo",
+  "memorama",
+  "sopa-de-letras",
+  "adivina-pistas",
+  "quiz-proyectar",
+]);
 
 const DEFAULT_HEADER_FIELDS = ["Nombre", "Fecha", "Grupo"];
 
@@ -635,6 +652,80 @@ export function LetterSheetPreview({
           </button>
         )}
 
+        {(() => {
+          const meta = draft.content.metadata as Record<string, unknown> | undefined;
+          const ws = meta?.wordsearch as
+            | { grid?: string[][]; seed?: number }
+            | undefined;
+          const bingo = meta?.bingo as
+            | {
+                seed?: number;
+                boards?: Array<{ board_number: number; cells: string[][] }>;
+              }
+            | undefined;
+          const cutCards = meta?.cut_cards as
+            | Array<{ front: string; back: string }>
+            | undefined;
+          return (
+            <>
+              {ws?.grid && ws.grid.length > 0 && (
+                <div className="letter-wordsearch" aria-label="Cuadrícula de sopa de letras">
+                  <table className="letter-ws-grid">
+                    <tbody>
+                      {ws.grid.map((row, rIdx) => (
+                        <tr key={rIdx}>
+                          {row.map((cell, cIdx) => (
+                            <td key={cIdx}>{cell}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {bingo?.boards && bingo.boards.length > 0 && (
+                <div className="letter-bingo-grid" aria-label="Tableros de bingo">
+                  {bingo.boards.slice(0, 4).map((b) => (
+                    <div key={b.board_number} className="letter-bingo-card">
+                      <strong>Tablero #{b.board_number}</strong>
+                      <table className="letter-table">
+                        <tbody>
+                          {b.cells.map((row, rIdx) => (
+                            <tr key={rIdx}>
+                              {row.map((cell, cIdx) => (
+                                <td key={cIdx} className={cell === "LIBRE" ? "is-free" : ""}>
+                                  {cell}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))}
+                  {bingo.boards.length > 4 && (
+                    <p className="field-hint">
+                      +{bingo.boards.length - 4} tableros únicos adicionales incluidos en el PDF.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {cutCards && cutCards.length > 0 && (
+                <div className="letter-cut-cards" aria-label="Tarjetas recortables">
+                  {cutCards.slice(0, 8).map((card, idx) => (
+                    <div key={idx} className="letter-cut-card">
+                      <strong>{card.front}</strong>
+                      <p>{card.back}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          );
+        })()}
+
         {draft.content.teacher_key && draft.content.teacher_key.length > 0 && (
           <details className="letter-teacher-key">
             <summary>
@@ -712,6 +803,9 @@ export function AnnexesView({
   const [showRevisions, setShowRevisions] = useState(false);
   const [revisions, setRevisions] = useState<AnnexRevisionSummary[]>([]);
   const [revisionsLoading, setRevisionsLoading] = useState(false);
+  const [projecting, setProjecting] = useState(false);
+  const [showAdapt, setShowAdapt] = useState(false);
+  const [adaptMode, setAdaptMode] = useState<AdaptationMode>("lectura_facil");
 
   // Minimalist studio defaults to live US Letter preview
   const [studioMode, setStudioMode] = useState<StudioMode>(
@@ -724,7 +818,18 @@ export function AnnexesView({
   const [subject, setSubject] = useState(activeSubject.name);
   const [grade, setGrade] = useState(activeSchool.gradeLong);
   const [topic, setTopic] = useState("");
-  const [annexType, setAnnexType] = useState("hoja-de-trabajo");
+  const [annexType, setAnnexType] = useState(() => {
+    try {
+      const picked = window.sessionStorage.getItem("acenta:selected-tool");
+      if (picked) {
+        window.sessionStorage.removeItem("acenta:selected-tool");
+        return picked;
+      }
+    } catch {
+      // ignore storage restrictions
+    }
+    return "hoja-de-trabajo";
+  });
   const [extraInstructions, setExtraInstructions] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -832,6 +937,8 @@ export function AnnexesView({
     setRedoStack([]);
     setShowRevisions(false);
     setRevisions([]);
+    setShowAdapt(false);
+    setProjecting(false);
     setDirty(false);
     setSaveState("idle");
     setConfirmDelete(false);
@@ -839,6 +946,8 @@ export function AnnexesView({
     setError("");
     setNotice("");
   };
+
+  const isDidacticTool = DIDACTIC_TOOL_IDS.has(annexType as DidacticToolId);
 
   const handleGenerate = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -850,19 +959,53 @@ export function AnnexesView({
     setError("");
     setNotice("");
     try {
-      const created = await client.generateAnnex({
-        subject,
-        grade,
-        topic: topic.trim(),
-        annex_type: annexType,
-        language: "es",
-        extra_instructions: extraInstructions.trim(),
-      });
+      const created = isDidacticTool
+        ? await client.generateDidacticTool({
+            tool_id: annexType as DidacticToolId,
+            subject,
+            grade,
+            topic: topic.trim(),
+            source_text: extraInstructions.trim(),
+            terms: extraInstructions
+              .split(",")
+              .map((t) => t.trim())
+              .filter((t) => t.length >= 2)
+              .slice(0, 16),
+            school_id: activeSchool.id,
+            subject_id: activeSubject.id,
+          })
+        : await client.generateAnnex({
+            subject,
+            grade,
+            topic: topic.trim(),
+            annex_type: annexType,
+            language: "es",
+            extra_instructions: extraInstructions.trim(),
+          });
       setAnnexes((prev) => [created, ...prev]);
       selectAnnex(created);
       setTopic("");
       setExtraInstructions("");
-      setNotice("Ficha generada y lista en tamaño Carta.");
+      setNotice("Recurso generado y listo en tamaño Carta.");
+    } catch (err) {
+      setError(annexErrorMessage(err));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleAdapt = async () => {
+    if (!draft || busy !== null) return;
+    setBusy("adapting");
+    setError("");
+    setNotice("");
+    try {
+      const adapted = await client.adaptAnnex(draft.id, {
+        adaptation_mode: adaptMode,
+      });
+      setAnnexes((prev) => [adapted, ...prev]);
+      selectAnnex(adapted);
+      setNotice("Copia adaptada creada (el recurso original quedó intacto).");
     } catch (err) {
       setError(annexErrorMessage(err));
     } finally {
@@ -1257,7 +1400,9 @@ export function AnnexesView({
                 type="submit"
                 aria-label={busy === "generating" ? "Generando…" : "Generar ficha"}
                 title="Generar ficha"
-                disabled={busy !== null || capability?.available === false}
+                disabled={
+                  busy !== null || (!isDidacticTool && capability?.available === false)
+                }
               >
                 <UiIcon name="arrow-up" size={15} />
               </button>
@@ -1270,11 +1415,26 @@ export function AnnexesView({
                 value={annexType}
                 onChange={(e) => setAnnexType(e.target.value)}
               >
-                <option value="hoja-de-trabajo">Hoja de trabajo</option>
-                <option value="lectura-con-preguntas">Lectura con preguntas</option>
-                <option value="ejercicios-de-practica">Ejercicios de práctica</option>
-                <option value="evaluacion-corta">Evaluación breve</option>
-                <option value="lista-de-cotejo">Lista de cotejo</option>
+                <optgroup label="Herramientas didácticas">
+                  <option value="comprension-lectora">Preguntas sobre un texto</option>
+                  <option value="rubrica-cotejo">Rúbrica y lista de cotejo</option>
+                  <option value="diagnostico-breve">Diagnóstico breve</option>
+                  <option value="proyecto-aula">Proyecto de aula (NEM)</option>
+                  <option value="tarjetas-repaso">Tarjetas de repaso</option>
+                  <option value="memorama">Memorama recortable</option>
+                  <option value="sopa-de-letras">Sopa de letras</option>
+                  <option value="bingo-tematico">Bingo temático</option>
+                  <option value="adivina-pistas">Adivina con pistas</option>
+                  <option value="quiz-proyectar">Quiz para proyectar</option>
+                  <option value="adaptar-material">Adaptar material</option>
+                </optgroup>
+                <optgroup label="Generador abierto con IA">
+                  <option value="hoja-de-trabajo">Hoja de trabajo</option>
+                  <option value="lectura-con-preguntas">Lectura con preguntas</option>
+                  <option value="ejercicios-de-practica">Ejercicios de práctica</option>
+                  <option value="evaluacion-corta">Evaluación breve</option>
+                  <option value="lista-de-cotejo">Lista de cotejo</option>
+                </optgroup>
               </select>
               <button
                 type="button"
@@ -1453,6 +1613,26 @@ export function AnnexesView({
                         </button>
                       </>
                     )}
+                    {Array.isArray(
+                      (draft.content.metadata as Record<string, unknown> | undefined)
+                        ?.quiz_slides,
+                    ) && (
+                      <button
+                        type="button"
+                        className="btn-accent-pill"
+                        onClick={() => setProjecting(true)}
+                      >
+                        Proyectar Quiz
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className={`glass-btn-sm${showAdapt ? " is-active" : ""}`}
+                      aria-expanded={showAdapt}
+                      onClick={() => setShowAdapt((prev) => !prev)}
+                    >
+                      Adaptar
+                    </button>
                     <button
                       type="button"
                       className={`glass-btn-sm${showRevisions ? " is-active" : ""}`}
@@ -1466,6 +1646,62 @@ export function AnnexesView({
                     </span>
                   </div>
                 </div>
+
+                {showAdapt && (
+                  <section
+                    className="annex-revisions-panel"
+                    aria-label="Adaptar ficha sin alterar original"
+                  >
+                    <div className="annex-revisions-head">
+                      <strong>Crear copia adaptada (original intacto)</strong>
+                      <button
+                        type="button"
+                        className="minimal-ghost-btn"
+                        onClick={() => setShowAdapt(false)}
+                      >
+                        Cerrar
+                      </button>
+                    </div>
+                    <div className="minimal-canvas-tools">
+                      <select
+                        aria-label="Modo de adaptación"
+                        value={adaptMode}
+                        onChange={(e) =>
+                          setAdaptMode(e.target.value as AdaptationMode)
+                        }
+                      >
+                        <option value="lectura_facil">Lectura fácil</option>
+                        <option value="bajar_nivel">Bajar nivel / andamiaje</option>
+                        <option value="subir_reto">Subir reto / ampliación</option>
+                        <option value="apoyo_visual">Apoyo visual / dibujar</option>
+                        <option value="resumen_esquema">Resumen en esquema</option>
+                      </select>
+                      <button
+                        type="button"
+                        className="btn-accent-pill"
+                        disabled={busy !== null}
+                        onClick={() => void handleAdapt()}
+                      >
+                        {busy === "adapting" ? "Adaptando…" : "Crear adaptación"}
+                      </button>
+                    </div>
+                  </section>
+                )}
+
+                {projecting &&
+                  Array.isArray(
+                    (draft.content.metadata as Record<string, unknown> | undefined)
+                      ?.quiz_slides,
+                  ) && (
+                    <QuizProjector
+                      title={draft.title}
+                      slides={
+                        (draft.content.metadata as Record<string, unknown>)
+                          .quiz_slides as QuizSlide[]
+                      }
+                      onClose={() => setProjecting(false)}
+                    />
+                  )}
 
                 {showRevisions && (
                   <section

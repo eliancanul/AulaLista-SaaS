@@ -123,6 +123,40 @@ export interface AnnexRevisionSummary {
   created_at: string;
 }
 
+export type DidacticToolId =
+  | "comprension-lectora"
+  | "adaptar-material"
+  | "tarjetas-repaso"
+  | "bingo-tematico"
+  | "proyecto-aula"
+  | "diagnostico-breve"
+  | "rubrica-cotejo"
+  | "memorama"
+  | "sopa-de-letras"
+  | "adivina-pistas"
+  | "quiz-proyectar";
+
+export type AdaptationMode =
+  | "lectura_facil"
+  | "bajar_nivel"
+  | "subir_reto"
+  | "apoyo_visual"
+  | "resumen_esquema";
+
+export interface DidacticToolGenerateInput {
+  tool_id: DidacticToolId;
+  subject: string;
+  grade: string;
+  topic: string;
+  source_text?: string;
+  terms?: string[];
+  seed?: number | null;
+  board_count?: number;
+  adaptation_mode?: AdaptationMode;
+  school_id?: string | null;
+  subject_id?: string | null;
+}
+
 export class AnnexPrintClient {
   constructor(private readonly api: AcentaApi) {}
 
@@ -151,6 +185,33 @@ export class AnnexPrintClient {
       "POST",
       input,
       60000,
+    )) as AnnexDocument;
+  }
+
+  async generateDidacticTool(
+    input: DidacticToolGenerateInput,
+  ): Promise<AnnexDocument> {
+    return (await this.api.scopedJson(
+      "annexes/tools/generate",
+      "POST",
+      input,
+      30000,
+    )) as AnnexDocument;
+  }
+
+  async adaptAnnex(
+    annexId: string,
+    input: {
+      adaptation_mode: AdaptationMode;
+      target_grade?: string | null;
+      extra_instructions?: string;
+    },
+  ): Promise<AnnexDocument> {
+    return (await this.api.scopedJson(
+      `annexes/${annexId}/adapt`,
+      "POST",
+      input,
+      30000,
     )) as AnnexDocument;
   }
 

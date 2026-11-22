@@ -713,6 +713,110 @@ def render_annex_pdf(annex_doc: dict[str, Any], *, copies: int = 1) -> bytes:
             story.append(tbl)
             story.append(Spacer(1, 0.08 * inch))
 
+    metadata = content.get("metadata") if isinstance(content.get("metadata"), dict) else {}
+
+    # Word search printable letter grid
+    wordsearch = metadata.get("wordsearch") if isinstance(metadata.get("wordsearch"), dict) else None
+    if wordsearch and isinstance(wordsearch.get("grid"), list) and wordsearch["grid"]:
+        grid = wordsearch["grid"]
+        size = len(grid)
+        cell_size = min(0.36 * inch, usable_width / max(1, size))
+        ws_table = Table(
+            [[str(ch) for ch in row] for row in grid],
+            colWidths=[cell_size] * size,
+            rowHeights=[cell_size] * size,
+        )
+        ws_table.setStyle(
+            TableStyle(
+                [
+                    ("FONTNAME", (0, 0), (-1, -1), "Courier-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 10.5),
+                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("BOX", (0, 0), (-1, -1), 1.0, colors.black),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#777777")),
+                ]
+            )
+        )
+        story.append(Spacer(1, 0.08 * inch))
+        story.append(ws_table)
+        story.append(Spacer(1, 0.1 * inch))
+
+    # Bingo unique boards (2 per page cleanly)
+    bingo = metadata.get("bingo") if isinstance(metadata.get("bingo"), dict) else None
+    if bingo and isinstance(bingo.get("boards"), list) and bingo["boards"]:
+        for board in bingo["boards"]:
+            cells = board.get("cells") or []
+            if not cells:
+                continue
+            b_num = board.get("board_number", 1)
+            cols = max(1, len(cells[0]))
+            col_w = usable_width / cols
+            rows_p = [
+                [Paragraph(f"<b>{_p_text(str(c))}</b>", styles["checklist_item"]) for c in row]
+                for row in cells
+            ]
+            b_tbl = Table(rows_p, colWidths=[col_w] * cols, rowHeights=[0.65 * inch] * len(rows_p))
+            b_tbl.setStyle(
+                TableStyle(
+                    [
+                        ("BOX", (0, 0), (-1, -1), 1.2, colors.black),
+                        ("INNERGRID", (0, 0), (-1, -1), 0.6, colors.HexColor("#333333")),
+                        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                        ("BACKGROUND", (1, 1), (1, 1), colors.HexColor("#EAEAEA")),
+                    ]
+                )
+            )
+            story.append(
+                KeepTogether(
+                    [
+                        Spacer(1, 0.08 * inch),
+                        Paragraph(f"<b>Tablero #{b_num}</b>", styles["section"]),
+                        Spacer(1, 0.04 * inch),
+                        b_tbl,
+                    ]
+                )
+            )
+
+    # Cuttable cards grid (flashcards, memorama, clue cards)
+    cut_cards = metadata.get("cut_cards") if isinstance(metadata.get("cut_cards"), list) else None
+    if cut_cards:
+        story.append(PageBreak())
+        story.append(Paragraph("TARJETAS RECORTABLES · RECORTAR POR LOS BORDES", styles["meta"]))
+        story.append(Spacer(1, 0.06 * inch))
+        card_rows: list[list[Any]] = []
+        pair_buf: list[Any] = []
+        for card in cut_cards[:24]:
+            if not isinstance(card, dict):
+                continue
+            front = str(card.get("front", "")).strip()
+            back = str(card.get("back", "")).strip()
+            cell_html = f"<b>{_p_text(front)}</b><br/><br/>{_p_text(back)}"
+            pair_buf.append(Paragraph(cell_html, styles["checklist_item"]))
+            if len(pair_buf) == 2:
+                card_rows.append(pair_buf)
+                pair_buf = []
+        if pair_buf:
+            pair_buf.append(Paragraph("", styles["checklist_item"]))
+            card_rows.append(pair_buf)
+        if card_rows:
+            c_tbl = Table(card_rows, colWidths=[usable_width / 2.0, usable_width / 2.0])
+            c_tbl.setStyle(
+                TableStyle(
+                    [
+                        ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#333333")),
+                        ("INNERGRID", (0, 0), (-1, -1), 0.6, colors.HexColor("#555555")),
+                        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                        ("TOPPADDING", (0, 0), (-1, -1), 10),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+                    ]
+                )
+            )
+            story.append(c_tbl)
+
     teacher_key = content.get("teacher_key")
     if isinstance(teacher_key, list) and any(str(x).strip() for x in teacher_key):
         story.append(PageBreak())
@@ -721,6 +825,38 @@ def render_annex_pdf(annex_doc: dict[str, Any], *, copies: int = 1) -> bytes:
             Paragraph(_p_text(f"Clave: {annex_doc.get('title', 'Anexo')}"), styles["title"])
         )
         story.extend(_editorial_double_rule(usable_width))
+        if wordsearch and isinstance(wordsearch.get("grid"), list) and wordsearch.get("placements"):
+            highlighted: set[tuple[int, int]] = set()
+            for p in wordsearch["placements"]:
+                r0, c0 = p["start"]
+                r1, c1 = p["end"]
+                steps = max(abs(r1 - r0), abs(c1 - c0))
+                dr = 0 if steps == 0 else (r1 - r0) // steps
+                dc = 0 if steps == 0 else (c1 - c0) // steps
+                for i in range(steps + 1):
+                    highlighted.add((r0 + i * dr, c0 + i * dc))
+            grid = wordsearch["grid"]
+            size = len(grid)
+            cell_size = min(0.32 * inch, usable_width / max(1, size))
+            sol_tbl = Table(
+                [[str(ch) for ch in row] for row in grid],
+                colWidths=[cell_size] * size,
+                rowHeights=[cell_size] * size,
+            )
+            sol_style = [
+                ("FONTNAME", (0, 0), (-1, -1), "Courier"),
+                ("FONTSIZE", (0, 0), (-1, -1), 9.5),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("BOX", (0, 0), (-1, -1), 0.9, colors.black),
+                ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#999999")),
+            ]
+            for r, c in highlighted:
+                sol_style.append(("BACKGROUND", (c, r), (c, r), colors.HexColor("#DCDCDC")))
+                sol_style.append(("FONTNAME", (c, r), (c, r), "Courier-Bold"))
+            sol_tbl.setStyle(TableStyle(sol_style))
+            story.append(sol_tbl)
+            story.append(Spacer(1, 0.1 * inch))
         for k_idx, entry in enumerate(teacher_key, start=1):
             text = str(entry).strip()
             if text:

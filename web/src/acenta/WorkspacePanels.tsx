@@ -149,7 +149,32 @@ export function ResourceLibrary({controller, onEditor}: {controller: AcentaContr
             </button>
           </section>);
 }
-export function ToolsCatalog({category, onCategory, onPlanning}: {category: string; onCategory: (category: string) => void; onPlanning: () => void}) {
+const TOOL_LABEL_TO_ID: Record<string, string> = {
+  "Proyecto de aula": "proyecto-aula",
+  "Hoja de actividades": "hoja-de-trabajo",
+  "Preguntas sobre un texto": "comprension-lectora",
+  "Adaptar material": "adaptar-material",
+  "Tarjetas de repaso": "tarjetas-repaso",
+  "Diagnóstico breve": "diagnostico-breve",
+  "Rúbrica y lista de cotejo": "rubrica-cotejo",
+  "Bingo temático": "bingo-tematico",
+  Memorama: "memorama",
+  "Sopa de letras": "sopa-de-letras",
+  "Adivina con pistas": "adivina-pistas",
+  "Quiz para proyectar": "quiz-proyectar",
+};
+
+export function ToolsCatalog({
+  category,
+  onCategory,
+  onPlanning,
+  onSelectTool,
+}: {
+  category: string;
+  onCategory: (category: string) => void;
+  onPlanning: () => void;
+  onSelectTool?: (toolId: string) => void;
+}) {
   const categories = Object.keys(toolCatalog);
   return <>
     <div className="tool-tabs" role="tablist" aria-label="Categorías">
@@ -162,11 +187,17 @@ export function ToolsCatalog({category, onCategory, onPlanning}: {category: stri
           event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("button")[next]?.focus();
         }}>{name}</button>)}
     </div>
-    <p className="field-hint">Planeación de clase usa el formulario existente; las demás herramientas están pendientes.</p>
+    <p className="field-hint">Todas las herramientas están activas y listas para editar, imprimir o proyectar.</p>
     <div className="catalog-items" role="tabpanel" id="tool-category-panel" aria-labelledby={`tool-category-${categories.indexOf(category)}`}>
       {toolCatalog[category].map(name => name === "Planeación de clase"
-        ? <button key={name} onClick={onPlanning}>{name}</button>
-        : <p key={name}>{name}<span className="tool-unavailable">Todavía no disponible</span></p>)}
+        ? <button key={name} type="button" onClick={onPlanning}>{name}</button>
+        : <button
+            key={name}
+            type="button"
+            onClick={() => onSelectTool?.(TOOL_LABEL_TO_ID[name] ?? "hoja-de-trabajo")}
+          >
+            {name}
+          </button>)}
     </div>
   </>;
 }
