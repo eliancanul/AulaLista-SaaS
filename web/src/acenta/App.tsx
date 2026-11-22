@@ -33,6 +33,18 @@ import { Chat, ChatContextEditor, ChatExitGuard, Conversations } from "./Chat";
 import { WorkspacePanel, ResourceLibrary, ToolsCatalog, PendingPlanning } from "./WorkspacePanels";
 import { AnnexesView } from "./AnnexesView";
 import { PrintSettingsView } from "./PrintSettingsView";
+import { SupportPanel } from "./SupportPanel";
+import { AccountView } from "./AccountView";
+import {
+  collectDebugBundle,
+  installDebugTelemetry,
+  recordBreadcrumb,
+  type DebugBundle,
+} from "./debug-telemetry";
+import {
+  captureViewportScreenshot,
+  type CapturedScreenshot,
+} from "./screen-capture";
 export function AccessView() {
   const [auth] = useState(() => new AuthController());
   useEffect(() => { void auth.start(); }, [auth]);
@@ -416,6 +428,21 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
   const [chatExit, setChatExit] = useState(false);
   const [derivedExit, setDerivedExit] = useState(false);
   const [analyticExit, setAnalyticExit] = useState(false);
+  const [supportCapture, setSupportCapture] = useState<{
+    screenshot: CapturedScreenshot | null;
+    bundle: DebugBundle;
+    viewName: string;
+  } | null>(null);
+  useEffect(() => {
+    installDebugTelemetry();
+  }, []);
+  useEffect(() => {
+    recordBreadcrumb("view", s.view, {
+      school: schoolState.activeSchoolId,
+      subject: schoolState.activeSubjectId,
+      agentMode: schoolState.activeAgentMode,
+    });
+  }, [s.view, schoolState.activeSchoolId, schoolState.activeSubjectId, schoolState.activeAgentMode]);
   const analyticExitGeneration = useRef(0);
   const dismissAnalyticExit = () => {
     analyticExitGeneration.current++;
@@ -534,6 +561,30 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
   if (s.closed) return <AccessView />;
   const panelView = isPanelView(s.view) ? s.view : null;
   const conversational = s.view === "home" || s.view === "chat" || !!panelView;
+  const captureForSupport = async () => {
+    const activeSchool = controller.schools.getActiveSchool();
+    const activeSubject = controller.schools.getActiveSubject();
+    const currentView = controller.snapshot().view;
+    const [screenshot, bundle] = await Promise.all([
+      captureViewportScreenshot(),
+      Promise.resolve(
+        collectDebugBundle({
+          view: currentView,
+          schoolId: activeSchool?.id ?? null,
+          schoolName: activeSchool?.shortName ?? null,
+          grade: activeSchool?.grade ?? null,
+          subjectId: activeSubject?.id ?? null,
+          subjectName: activeSubject?.name ?? null,
+          agentMode: controller.schools.snapshot().activeAgentMode,
+          agentChatAvailable: controller.agentChat.snapshot().availability === "available",
+          agentChatModel: controller.agentChat.snapshot().model,
+          workspaceError: controller.snapshot().error,
+          recoveryWarning: controller.snapshot().recoveryWarning,
+        }),
+      ),
+    ]);
+    return { screenshot, bundle, viewName: currentView };
+  };
   const openPanel = (view: PanelView) => {
     const origin = {x: window.scrollX, y: window.scrollY,
       focus: (document.activeElement as HTMLElement | null)?.dataset.navigationFocus ?? (view === "chat-context" ? "shortcut-context" : `panel-${view}`)};
@@ -541,6 +592,13 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
     controller.navigate(view);
     panelReturn.current = origin;
     setPosition({value: {x: window.scrollX, y: window.scrollY, focus: "workspace-panel-title", panelY: 0}, reveal: true});
+  };
+  const openSupport = () => {
+    void (async () => {
+      const captured = await captureForSupport();
+      setSupportCapture(captured);
+      openPanel("support");
+    })();
   };
   const closePanel = () => {
     if (!panelView) return;
@@ -844,10 +902,20 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
             aria-controls="workspace-panel"
             aria-expanded={panelView === "support"}
             data-navigation-focus="panel-support"
-            onClick={() => openPanel("support")}
+            onClick={openSupport}
           >
             <UiIcon name="chat" size={17} />
             {expanded && <span>Soporte</span>}
+          </button>
+          <button
+            type="button"
+            aria-label="Mi cuenta"
+            title={expanded ? undefined : "Mi cuenta"}
+            className={`sidebar-nav-item${s.view === "account" ? " selected" : ""}`}
+            onClick={() => controller.navigate("account")}
+          >
+            <UiIcon name="users" size={17} />
+            {expanded && <span>Mi cuenta</span>}
           </button>
         </div>
         <div className="rail-flex" />
@@ -871,25 +939,35 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
         className={
           conversational
             ? "conversation-main"
-            : s.view === "annexes" || s.view === "printer"
+            : s.view === "annexes" || s.view === "printer" || s.view === "account"
               ? "studio-main"
               : s.view === "example"
                 ? "home-main"
                 : "content-main"
         }
       >
-        {!conversational && s.view !== "planning" && s.view !== "analytic" && s.view !== "annexes" && s.view !== "printer" && <AccountLinks />}
+        {!conversational && s.view !== "planning" && s.view !== "analytic" && s.view !== "annexes" && s.view !== "printer" && s.view !== "account" && <AccountLinks />}
         {conversational ? <Chat controller={controller} panelView={panelView}
           onContext={() => openPanel("chat-context")} onPlan={() => { setCategory("Planear"); openPanel("tools"); }}
           panel={panelView && <WorkspacePanel view={panelView} onClose={closePanel}>
             {panelView === "resources" ? <ResourceLibrary controller={controller} onEditor={() => setShowEditor(true)} /> :
               panelView === "chat-context" ? <ChatContextEditor controller={controller} /> :
-              panelView === "support" ? <p>Soporte todavía no está disponible en Acenta.</p> : <>
+              panelView === "support" ? (
+                <SupportPanel
+                  api={controller.api}
+                  viewName={supportCapture?.viewName ?? s.view}
+                  initialScreenshot={supportCapture?.screenshot ?? null}
+                  initialDebugBundle={
+                    supportCapture?.bundle ?? collectDebugBundle({ view: s.view })
+                  }
+                  onRecapture={captureForSupport}
+                />
+              ) : <>
                 <PendingPlanning controller={controller} />
                 <ToolsCatalog category={category} onCategory={setCategory} onPlanning={() => controller.navigate("planning")} />
                 <button className="text-action" onClick={actionExample}>Ajustar planeación · ejemplo</button>
               </>}
-          </WorkspacePanel>} /> : s.view === "annexes" ? <AnnexesView controller={controller} /> : s.view === "printer" ? <PrintSettingsView controller={controller} /> : s.view === "conversations" ? <Conversations controller={controller} /> : s.view === "analytic" ? <AnalyticForm controller={controller} /> : s.view === "planning" ? (derived.origin ? <AnalyticDerivedForm controller={controller} /> : <GuidedForm controller={controller} />) : s.view === "example" ? (
+          </WorkspacePanel>} /> : s.view === "annexes" ? <AnnexesView controller={controller} /> : s.view === "printer" ? <PrintSettingsView controller={controller} /> : s.view === "account" ? <AccountView api={controller.api} onOpenSupport={openSupport} /> : s.view === "conversations" ? <Conversations controller={controller} /> : s.view === "analytic" ? <AnalyticForm controller={controller} /> : s.view === "planning" ? (derived.origin ? <AnalyticDerivedForm controller={controller} /> : <GuidedForm controller={controller} />) : s.view === "example" ? (
           <section className="home-panel">
             <header className="home-heading">
               <Logo />

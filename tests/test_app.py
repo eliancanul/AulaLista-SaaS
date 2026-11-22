@@ -115,6 +115,17 @@ def test_health_and_fail_closed_material_routes_are_registered(client):
         ("/scopes/{scope_id}/agent-chat/channels/{channel_key}", {"GET"}),
         ("/scopes/{scope_id}/agent-chat/channels/{channel_key}/turns", {"POST"}),
         ("/scopes/{scope_id}/agent-chat/channels/{channel_key}/context", {"POST"}),
+        ("/scopes/{scope_id}/account", {"GET"}),
+        ("/scopes/{scope_id}/account/preferences", {"PUT"}),
+        ("/scopes/{scope_id}/account/link/email/request", {"POST"}),
+        ("/scopes/{scope_id}/account/link/email/verify", {"POST"}),
+        ("/scopes/{scope_id}/account/link/google", {"POST"}),
+        ("/scopes/{scope_id}/support/tickets", {"POST"}),
+        ("/scopes/{scope_id}/support/tickets", {"GET"}),
+        ("/scopes/{scope_id}/support/tickets/{ticket_id}", {"GET"}),
+        ("/scopes/{scope_id}/support/tickets/{ticket_id}/screenshot", {"GET"}),
+        ("/scopes/{scope_id}/support/tickets/{ticket_id}", {"PATCH"}),
+        ("/scopes/{scope_id}/support/backlog.json", {"GET"}),
     ]
 
 
