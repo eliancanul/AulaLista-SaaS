@@ -19,12 +19,15 @@ function MeterCard({
   unit: string;
   isCurrency?: boolean;
 }) {
+  const isUnlimited = Boolean(meter.unlimited) || meter.limit === null;
   const usedDisplay = isCurrency
     ? `$${meter.used.toFixed(2)} USD`
     : `${meter.used} ${unit}`;
-  const limitDisplay = isCurrency
-    ? `$${meter.limit.toFixed(2)} USD`
-    : `${meter.limit} ${unit}`;
+  const limitDisplay = isUnlimited
+    ? "Sin límite"
+    : isCurrency
+      ? `$${(meter.limit ?? 0).toFixed(2)} USD`
+      : `${meter.limit} ${unit}`;
   const barColor = meter.at_limit
     ? "#c62828"
     : meter.near_limit
@@ -51,48 +54,68 @@ function MeterCard({
       >
         <strong style={{ fontSize: 13 }}>{label}</strong>
         <span style={{ fontSize: 12, color: "#64748b" }}>
-          {usedDisplay} / {limitDisplay}
+          {isUnlimited ? usedDisplay : `${usedDisplay} / ${limitDisplay}`}
         </span>
       </div>
-      <div
-        role="progressbar"
-        aria-label={label}
-        aria-valuenow={Math.round(meter.percent)}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        style={{
-          height: 8,
-          borderRadius: 999,
-          background: "#e2e8f0",
-          overflow: "hidden",
-        }}
-      >
+      {isUnlimited ? (
         <div
           style={{
-            width: `${Math.min(100, meter.percent)}%`,
-            height: "100%",
-            background: barColor,
-            transition: "width 180ms ease",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "4px 10px",
+            borderRadius: 999,
+            background: "#eef6f2",
+            color: "#1f6f54",
+            fontSize: 11.5,
+            fontWeight: 600,
           }}
-        />
-      </div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          marginTop: 6,
-          fontSize: 11,
-          color: "#64748b",
-        }}
-      >
-        <span>{meter.percent.toFixed(1)}% usado</span>
-        <span>
-          Restante:{" "}
-          {isCurrency
-            ? `$${meter.remaining.toFixed(2)}`
-            : `${meter.remaining}`}
-        </span>
-      </div>
+        >
+          Ilimitado · Sin costo extra
+        </div>
+      ) : (
+        <>
+          <div
+            role="progressbar"
+            aria-label={label}
+            aria-valuenow={Math.round(meter.percent)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            style={{
+              height: 8,
+              borderRadius: 999,
+              background: "#e2e8f0",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                width: `${Math.min(100, meter.percent)}%`,
+                height: "100%",
+                background: barColor,
+                transition: "width 180ms ease",
+              }}
+            />
+          </div>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              marginTop: 6,
+              fontSize: 11,
+              color: "#64748b",
+            }}
+          >
+            <span>{meter.percent.toFixed(1)}% usado</span>
+            <span>
+              Restante:{" "}
+              {isCurrency
+                ? `$${(meter.remaining ?? 0).toFixed(2)}`
+                : `${meter.remaining ?? 0}`}
+            </span>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -256,33 +279,54 @@ export function BillingView({
                   letterSpacing: "0.04em",
                   padding: "3px 8px",
                   borderRadius: 999,
-                  background: "#eef6f2",
-                  color: "#1f6f54",
+                  background:
+                    summary.subscription.is_courtesy ||
+                    summary.subscription.billing_provider === "courtesy_pro"
+                      ? "#fef3c7"
+                      : "#eef6f2",
+                  color:
+                    summary.subscription.is_courtesy ||
+                    summary.subscription.billing_provider === "courtesy_pro"
+                      ? "#92400e"
+                      : "#1f6f54",
                   marginBottom: 6,
                 }}
               >
-                Plan activo · {summary.subscription.status}
+                {summary.subscription.is_courtesy ||
+                summary.subscription.billing_provider === "courtesy_pro"
+                  ? "Cuenta Pro de cortesía · Sin cobro"
+                  : `Plan activo · ${summary.subscription.status}`}
               </span>
               <h2 style={{ margin: "2px 0 4px", fontSize: 20 }}>
                 {summary.subscription.plan_name}
               </h2>
               <p className="support-muted" style={{ margin: 0, fontSize: 13 }}>
-                {summary.subscription.price_mxn_monthly === 0
-                  ? "$0 MXN / mes"
-                  : `$${summary.subscription.price_mxn_monthly} ${summary.subscription.currency} / mes`}{" "}
+                {summary.subscription.is_courtesy ||
+                summary.subscription.billing_provider === "courtesy_pro"
+                  ? "$0 MXN / mes · Cortesía activa sin vencimiento"
+                  : summary.subscription.price_mxn_monthly === 0
+                    ? "$0 MXN / mes"
+                    : `$${summary.subscription.price_mxn_monthly} ${summary.subscription.currency} / mes`}{" "}
                 · Proveedor:{" "}
-                {summary.stripe_configured ? "Stripe" : "Vista previa beta"}
+                {summary.subscription.is_courtesy ||
+                summary.subscription.billing_provider === "courtesy_pro"
+                  ? "Cortesía Pro"
+                  : summary.stripe_configured
+                    ? "Stripe"
+                    : "Vista previa beta"}
               </p>
             </div>
-            {summary.stripe_configured && (
-              <button
-                type="button"
-                className="support-btn-secondary"
-                onClick={() => void handlePortal()}
-              >
-                Administrar facturación (Stripe)
-              </button>
-            )}
+            {summary.stripe_configured &&
+              !summary.subscription.is_courtesy &&
+              summary.subscription.billing_provider !== "courtesy_pro" && (
+                <button
+                  type="button"
+                  className="support-btn-secondary"
+                  onClick={() => void handlePortal()}
+                >
+                  Administrar facturación (Stripe)
+                </button>
+              )}
           </section>
 
           <h2 style={{ fontSize: 16, marginBottom: 10 }}>

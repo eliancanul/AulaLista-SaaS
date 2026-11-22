@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { AcentaController } from "./controller";
 import { ApiError } from "./api";
 import type { DidacticToolId } from "./annex-api";
@@ -21,6 +21,52 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function mimeBadge(mime: string, filename: string): string {
+  if (mime === "application/pdf" || filename.toLowerCase().endsWith(".pdf")) {
+    return "PDF";
+  }
+  if (
+    mime.includes("wordprocessingml") ||
+    filename.toLowerCase().endsWith(".docx")
+  ) {
+    return "DOCX";
+  }
+  if (mime.startsWith("image/")) {
+    return "IMG";
+  }
+  return "DOC";
+}
+
+function statusLabel(status: TeacherDocumentItem["status"]): string {
+  switch (status) {
+    case "ready":
+      return "Listo";
+    case "failed":
+      return "Sin texto";
+    case "revoked":
+      return "Purgado";
+    default:
+      return "Procesando";
+  }
+}
+
+const TOOL_OPTIONS: { id: DidacticToolId; label: string }[] = [
+  { id: "comprension-lectora", label: "Preguntas de comprensión lectora" },
+  { id: "adaptar-material", label: "Adaptar material (lectura fácil)" },
+  { id: "diagnostico-breve", label: "Diagnóstico breve" },
+  { id: "tarjetas-repaso", label: "Tarjetas de repaso recortables" },
+  { id: "quiz-proyectar", label: "Quiz interactivo para proyectar" },
+  { id: "sopa-de-letras", label: "Sopa de letras" },
+  { id: "rubrica-cotejo", label: "Rúbrica y lista de cotejo" },
+  { id: "proyecto-aula", label: "Proyecto de aula" },
+];
+
 export function DocumentsView({
   controller,
 }: {
@@ -34,13 +80,23 @@ export function DocumentsView({
   const school = controller.schools.getActiveSchool();
   const subject = controller.schools.getActiveSubject();
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [docs, setDocs] = useState<TeacherDocumentItem[]>([]);
   const [selected, setSelected] = useState<TeacherDocumentItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [filterText, setFilterText] = useState("");
+  const [showRevoked, setShowRevoked] = useState(false);
+  const [confirmRevokeId, setConfirmRevokeId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+
+  // Annex derivation options
   const [toolId, setToolId] = useState<DidacticToolId>("comprension-lectora");
+  const [customTopic, setCustomTopic] = useState("");
 
   // Optional cited web search
   const [query, setQuery] = useState("");
@@ -65,10 +121,7 @@ export function DocumentsView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client]);
 
-  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
+  const uploadFile = async (file: File) => {
     if (file.size > 10 * 1024 * 1024) {
       setError("El archivo supera el límite de 10 MB.");
       return;
@@ -76,17 +129,23 @@ export function DocumentsView({
     setBusy("uploading");
     setError("");
     setNotice("");
+    setConfirmRevokeId(null);
     try {
       const b64 = await fileToBase64(file);
       const uploaded = await client.uploadDocument(file.name, b64);
       setDocs((prev) => [uploaded, ...prev]);
       setSelected(uploaded);
+      setCustomTopic("");
       setNotice(
-        `Documento '${uploaded.filename}' validado y procesado (${uploaded.ocr_engine}).`,
+        uploaded.status === "ready"
+          ? `Documento «${uploaded.filename}» procesado correctamente (${uploaded.page_count || 1} pág.).`
+          : `Archivo «${uploaded.filename}» guardado, pero no se pudo extraer texto legible (${uploaded.error_code ?? "sin texto"}).`,
       );
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(`Archivo rechazado (${err.code}). Solo PDF, DOCX, PNG o JPEG válidos.`);
+        setError(
+          `Archivo rechazado (${err.code}). Verifica que sea un PDF, DOCX, PNG o JPEG válido.`,
+        );
       } else {
         setError("No se pudo subir el documento.");
       }
@@ -95,7 +154,29 @@ export function DocumentsView({
     }
   };
 
+  const handleFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (file) {
+      await uploadFile(file);
+    }
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setDragging(false);
+    if (busy !== null) return;
+    const file = event.dataTransfer.files?.[0];
+    if (file) {
+      void uploadFile(file);
+    }
+  };
+
   const handleSelect = async (doc: TeacherDocumentItem) => {
+    setConfirmRevokeId(null);
+    setCustomTopic("");
     if (doc.status === "revoked") {
       setSelected(doc);
       return;
@@ -106,7 +187,7 @@ export function DocumentsView({
       const full = await client.readDocument(doc.id);
       setSelected(full);
     } catch {
-      setError("No se pudo leer el documento.");
+      setError("No se pudo leer el contenido extraído del documento.");
     } finally {
       setBusy(null);
     }
@@ -122,13 +203,26 @@ export function DocumentsView({
       if (selected?.id === purged.id) {
         setSelected(purged);
       }
+      setConfirmRevokeId(null);
       setNotice(
-        `Acceso revocado y archivo binario purgado permanentemente ('${purged.filename}').`,
+        `Acceso revocado y archivo binario purgado permanentemente («${purged.filename}»).`,
       );
     } catch {
-      setError("No se pudo revocar el documento.");
+      setError("No se pudo revocar y purgar el documento.");
     } finally {
       setBusy(null);
+    }
+  };
+
+  const handleCopy = async (text: string, key: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(key);
+      window.setTimeout(() => {
+        setCopiedId((cur) => (cur === key ? null : cur));
+      }, 1800);
+    } catch {
+      setError("No se pudo copiar al portapapeles.");
     }
   };
 
@@ -142,6 +236,7 @@ export function DocumentsView({
         tool_id: toolId,
         subject: subject.name,
         grade: school.gradeLong,
+        topic: customTopic.trim() || undefined,
       });
       setNotice("Ficha editable creada en Anexos a partir de tu documento.");
       controller.navigate("annexes");
@@ -160,6 +255,9 @@ export function DocumentsView({
     try {
       const res = await client.webSearch(query.trim());
       setCitations(res.citations);
+      if (res.citations.length === 0) {
+        setSearchError("No se encontraron fuentes verificables para esa consulta.");
+      }
     } catch (err) {
       if (err instanceof ApiError && err.code === "web_search_unavailable") {
         setSearchError(
@@ -173,19 +271,46 @@ export function DocumentsView({
     }
   };
 
+  const visibleDocs = docs.filter((d) => {
+    if (!showRevoked && d.status === "revoked") return false;
+    if (
+      filterText.trim() &&
+      !d.filename.toLowerCase().includes(filterText.trim().toLowerCase())
+    ) {
+      return false;
+    }
+    return true;
+  });
+
+  const activeCount = docs.filter((d) => d.status !== "revoked").length;
+  const revokedCount = docs.length - activeCount;
+  const extractedText = selected?.extracted_text ?? "";
+  const wordCount = extractedText.trim()
+    ? extractedText.trim().split(/\s+/).length
+    : 0;
+
   return (
-    <section className="account-studio" aria-label="Documentos y OCR">
-      <header className="studio-topbar">
-        <div className="studio-topbar-left">
-          <h1 className="studio-title">Documentos</h1>
-          <p className="minimal-studio-kicker">
-            PDF, DOCX, PNG y JPEG · validación segura, OCR aislado y purga irreversible
+    <section className="account-studio-view docs-studio" aria-label="Documentos y OCR">
+      <header className="account-studio-header">
+        <div>
+          <h1>Documentos y lecturas</h1>
+          <p className="support-muted">
+            Sube guías en PDF, Word o imágenes para extraer texto de forma segura y
+            convertirlas en fichas listas para tu clase.
           </p>
         </div>
-        <div className="topbar-right">
+        <div className="docs-header-actions">
           <button
             type="button"
-            className="minimal-ghost-btn"
+            className="support-btn-secondary"
+            onClick={() => void refresh()}
+            disabled={loading || busy !== null}
+          >
+            Actualizar
+          </button>
+          <button
+            type="button"
+            className="support-btn-secondary"
             onClick={() => controller.navigate("home")}
           >
             Volver al chat
@@ -193,170 +318,357 @@ export function DocumentsView({
         </div>
       </header>
 
-      <div className="account-grid">
-        {error && (
-          <div role="alert" className="ac-banner is-error">
-            {error}
+      {error && (
+        <p role="alert" className="support-error">
+          {error}
+        </p>
+      )}
+      {notice && (
+        <p role="status" className="support-success">
+          {notice}
+        </p>
+      )}
+
+      {/* Drag & drop upload zone */}
+      <div
+        className={`docs-dropzone${dragging ? " is-dragging" : ""}${busy === "uploading" ? " is-busy" : ""}`}
+        onDragOver={(e) => {
+          e.preventDefault();
+          if (!dragging) setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={handleDrop}
+      >
+        <div className="docs-dropzone-copy">
+          <strong>
+            {busy === "uploading"
+              ? "Validando y extrayendo texto…"
+              : "Arrastra tu archivo aquí o selecciónalo desde tu equipo"}
+          </strong>
+          <span className="support-muted">
+            Validación binaria estricta, extracción en proceso aislado y purga irreversible cuando lo decidas.
+          </span>
+          <div className="docs-format-pills" aria-label="Formatos permitidos">
+            <span className="docs-format-pill">PDF</span>
+            <span className="docs-format-pill">DOCX</span>
+            <span className="docs-format-pill">PNG</span>
+            <span className="docs-format-pill">JPG</span>
+            <span className="docs-format-meta">Máx. 10 MB</span>
           </div>
-        )}
-        {notice && (
-          <div role="status" className="ac-banner is-success">
-            {notice}
-          </div>
-        )}
-
-        <article className="glass-card account-card">
-          <h2>Subir documento real</h2>
-          <p className="field-hint">
-            Validación estricta por firma binaria (máx. 10 MB). Extracción en proceso aislado.
-          </p>
-          <label className="btn-accent-pill" style={{ width: "fit-content" }}>
-            {busy === "uploading" ? "Procesando…" : "Elegir PDF, DOCX o imagen"}
-            <input
-              type="file"
-              accept=".pdf,.docx,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
-              style={{ display: "none" }}
-              disabled={busy !== null}
-              onChange={(e) => void handleUpload(e)}
-            />
-          </label>
-
-          <h3>Tus documentos ({docs.length})</h3>
-          {loading ? (
-            <p className="field-hint">Cargando…</p>
-          ) : docs.length === 0 ? (
-            <p className="field-hint">Todavía no has subido documentos reales.</p>
-          ) : (
-            <ul className="annex-revisions-list">
-              {docs.map((doc) => (
-                <li key={doc.id} className="annex-revision-row">
-                  <div>
-                    <strong>{doc.filename}</strong>
-                    <span className="annex-revision-meta">
-                      {" "}
-                      · {doc.status} · {(doc.size_bytes / 1024).toFixed(1)} KB
-                    </span>
-                  </div>
-                  <div className="minimal-canvas-tools">
-                    {doc.status !== "revoked" && (
-                      <>
-                        <button
-                          type="button"
-                          className="glass-btn-sm"
-                          onClick={() => void handleSelect(doc)}
-                        >
-                          Ver texto
-                        </button>
-                        <button
-                          type="button"
-                          className="glass-btn-sm"
-                          disabled={busy !== null}
-                          onClick={() => void handleRevoke(doc)}
-                        >
-                          Revocar y purgar
-                        </button>
-                      </>
-                    )}
-                    {doc.status === "revoked" && (
-                      <span className="annex-revision-meta">Purgado</span>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </article>
-
-        <article className="glass-card account-card">
-          <h2>Texto extraído y generación</h2>
-          {selected && selected.status === "ready" ? (
-            <>
-              <p className="field-hint">
-                <strong>{selected.filename}</strong> · {selected.page_count} pág. ·{" "}
-                {selected.ocr_engine} · SHA-256{" "}
-                <code>{selected.sha256.slice(0, 12)}…</code>
-              </p>
-              <textarea
-                readOnly
-                rows={8}
-                aria-label="Texto extraído del documento"
-                value={selected.extracted_text ?? ""}
-                style={{ width: "100%", padding: 10 }}
-              />
-              <div className="minimal-canvas-tools">
-                <select
-                  aria-label="Herramienta destino"
-                  value={toolId}
-                  onChange={(e) => setToolId(e.target.value as DidacticToolId)}
-                >
-                  <option value="comprension-lectora">Preguntas sobre el texto</option>
-                  <option value="adaptar-material">Adaptar material (lectura fácil)</option>
-                  <option value="diagnostico-breve">Diagnóstico breve</option>
-                  <option value="tarjetas-repaso">Tarjetas de repaso</option>
-                  <option value="quiz-proyectar">Quiz para proyectar</option>
-                </select>
-                <button
-                  type="button"
-                  className="btn-accent-pill"
-                  disabled={busy !== null}
-                  onClick={() => void handleGenerateAnnex()}
-                >
-                  {busy === "generating"
-                    ? "Generando…"
-                    : "Crear ficha editable"}
-                </button>
-              </div>
-            </>
-          ) : (
-            <p className="field-hint">
-              Selecciona un documento procesado para revisar su texto extraído y crear una ficha editable.
-            </p>
-          )}
-        </article>
-
-        <article className="glass-card account-card">
-          <h2>Búsqueda web con citas (opcional)</h2>
-          <p className="field-hint">
-            Solo devuelve fuentes verificables con enlace HTTPS y fecha de consulta.
-          </p>
-          <form
-            className="minimal-canvas-tools"
-            onSubmit={(e) => void handleSearch(e)}
+        </div>
+        <div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.docx,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+            style={{ display: "none" }}
+            disabled={busy !== null}
+            onChange={(e) => void handleFileChange(e)}
+          />
+          <button
+            type="button"
+            className="support-btn-primary"
+            disabled={busy !== null}
+            onClick={() => fileInputRef.current?.click()}
           >
+            {busy === "uploading" ? "Procesando…" : "Elegir PDF, DOCX o imagen"}
+          </button>
+        </div>
+      </div>
+
+      {/* Main 2-column studio workspace */}
+      <div className="docs-workspace">
+        <article className="docs-card docs-list-panel">
+          <div className="docs-card-head">
+            <h2>
+              Tus documentos <span className="docs-count-badge">{activeCount}</span>
+            </h2>
+            {revokedCount > 0 && (
+              <label className="docs-toggle-revoked">
+                <input
+                  type="checkbox"
+                  checked={showRevoked}
+                  onChange={(e) => setShowRevoked(e.target.checked)}
+                />
+                <span>Ver purgados ({revokedCount})</span>
+              </label>
+            )}
+          </div>
+
+          {docs.length > 0 && (
             <input
               type="search"
-              aria-label="Consulta de búsqueda con citas"
-              placeholder="Ej. Ciclo del agua primaria México"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              style={{ flex: 1, minWidth: 220, padding: "8px 12px" }}
+              className="docs-filter-input"
+              aria-label="Filtrar documentos"
+              placeholder="Buscar por nombre de archivo…"
+              value={filterText}
+              onChange={(e) => setFilterText(e.target.value)}
             />
-            <button
-              type="submit"
-              className="glass-btn-sm"
-              disabled={busy !== null || !query.trim()}
-            >
-              {busy === "searching" ? "Buscando…" : "Buscar citas"}
-            </button>
-          </form>
-          {searchError && <p className="field-hint">{searchError}</p>}
-          {citations.length > 0 && (
-            <ul className="annex-revisions-list">
-              {citations.map((c, idx) => (
-                <li key={idx} className="annex-revision-row">
-                  <div>
-                    <a href={c.url} target="_blank" rel="noreferrer">
-                      <strong>{c.title}</strong>
-                    </a>{" "}
-                    <span className="annex-revision-meta">({c.domain})</span>
-                    <p style={{ margin: "4px 0 0", fontSize: 12.5 }}>{c.snippet}</p>
-                  </div>
-                </li>
-              ))}
+          )}
+
+          {loading ? (
+            <p className="support-muted">Cargando documentos…</p>
+          ) : visibleDocs.length === 0 ? (
+            <div className="docs-empty-state">
+              <p className="support-muted">
+                {docs.length === 0
+                  ? "Todavía no has subido documentos reales. Sube un PDF, Word o fotografía de libro de texto arriba."
+                  : "No hay documentos que coincidan con tu filtro."}
+              </p>
+            </div>
+          ) : (
+            <ul className="docs-list">
+              {visibleDocs.map((doc) => {
+                const isSelected = selected?.id === doc.id;
+                const badge = mimeBadge(doc.detected_mime, doc.filename);
+                return (
+                  <li key={doc.id}>
+                    <button
+                      type="button"
+                      className={`docs-list-item${isSelected ? " is-selected" : ""}${doc.status === "revoked" ? " is-revoked" : ""}`}
+                      onClick={() => void handleSelect(doc)}
+                    >
+                      <span className={`docs-type-tag is-${badge.toLowerCase()}`}>
+                        {badge}
+                      </span>
+                      <span className="docs-item-body">
+                        <strong className="docs-item-name">{doc.filename}</strong>
+                        <span className="docs-item-meta">
+                          {formatBytes(doc.size_bytes)}
+                          {doc.page_count > 0 ? ` · ${doc.page_count} pág.` : ""}
+                        </span>
+                      </span>
+                      <span className={`docs-status-pill is-${doc.status}`}>
+                        {statusLabel(doc.status)}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
+          )}
+        </article>
+
+        <article className="docs-card docs-detail-panel">
+          {!selected ? (
+            <div className="docs-empty-detail">
+              <h2>Texto extraído y creación de fichas</h2>
+              <p className="support-muted">
+                Selecciona un documento de tu biblioteca (o sube uno nuevo) para
+                revisar su texto extraído, copiarlo o convertirlo en una actividad
+                editable para <strong>{subject.name}</strong> ({school.grade}).
+              </p>
+            </div>
+          ) : selected.status === "revoked" ? (
+            <div className="docs-empty-detail">
+              <h2>{selected.filename}</h2>
+              <span className="docs-status-pill is-revoked">Purgado permanentemente</span>
+              <p className="support-muted" style={{ marginTop: 10 }}>
+                El archivo binario y su texto extraído fueron eliminados de forma
+                irreversible y bloqueados contra restauración.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="docs-detail-head">
+                <div>
+                  <h2 style={{ margin: "0 0 4px" }}>{selected.filename}</h2>
+                  <p className="support-muted" style={{ margin: 0, fontSize: 12 }}>
+                    {formatBytes(selected.size_bytes)}
+                    {selected.page_count > 0 ? ` · ${selected.page_count} pág.` : ""}
+                    {selected.ocr_engine ? ` · ${selected.ocr_engine}` : ""} · SHA-256{" "}
+                    <code>{selected.sha256.slice(0, 12)}…</code>
+                  </p>
+                </div>
+                <div className="docs-detail-actions">
+                  {extractedText && (
+                    <button
+                      type="button"
+                      className="support-btn-secondary"
+                      onClick={() => void handleCopy(extractedText, selected.id)}
+                    >
+                      {copiedId === selected.id ? "Texto copiado ✓" : "Copiar texto"}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="docs-btn-danger-ghost"
+                    disabled={busy !== null}
+                    onClick={() =>
+                      setConfirmRevokeId(
+                        confirmRevokeId === selected.id ? null : selected.id,
+                      )
+                    }
+                  >
+                    Revocar y purgar
+                  </button>
+                </div>
+              </div>
+
+              {confirmRevokeId === selected.id && (
+                <div className="docs-revoke-confirm" role="alert">
+                  <p>
+                    <strong>¿Purgar permanentemente «{selected.filename}»?</strong>{" "}
+                    Se borrará el archivo binario y el texto extraído sin posibilidad de
+                    recuperarlo.
+                  </p>
+                  <div className="docs-revoke-actions">
+                    <button
+                      type="button"
+                      className="docs-btn-danger"
+                      disabled={busy !== null}
+                      onClick={() => void handleRevoke(selected)}
+                    >
+                      {busy === "revoking" ? "Purgando…" : "Sí, purgar ahora"}
+                    </button>
+                    <button
+                      type="button"
+                      className="support-btn-secondary"
+                      onClick={() => setConfirmRevokeId(null)}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {selected.status === "ready" ? (
+                <>
+                  <div className="docs-text-meta">
+                    <span>Texto extraído</span>
+                    <span>
+                      {wordCount} palabras · {extractedText.length} caracteres
+                    </span>
+                  </div>
+                  <textarea
+                    className="docs-text-preview"
+                    readOnly
+                    rows={9}
+                    aria-label="Texto extraído del documento"
+                    value={extractedText}
+                  />
+
+                  <div className="docs-derive-box">
+                    <div className="docs-derive-head">
+                      <strong>Convertir en material editable</strong>
+                      <span className="docs-context-pill">
+                        {school.shortName} · {school.grade} · {subject.name}
+                      </span>
+                    </div>
+                    <div className="docs-derive-grid">
+                      <label className="docs-field">
+                        <span>Herramienta didáctica</span>
+                        <select
+                          aria-label="Herramienta destino"
+                          value={toolId}
+                          onChange={(e) =>
+                            setToolId(e.target.value as DidacticToolId)
+                          }
+                        >
+                          {TOOL_OPTIONS.map((opt) => (
+                            <option key={opt.id} value={opt.id}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="docs-field">
+                        <span>Tema o título (opcional)</span>
+                        <input
+                          type="text"
+                          placeholder={selected.filename.replace(/\.[^.]+$/, "")}
+                          value={customTopic}
+                          onChange={(e) => setCustomTopic(e.target.value)}
+                        />
+                      </label>
+                    </div>
+                    <button
+                      type="button"
+                      className="support-btn-primary"
+                      disabled={busy !== null}
+                      onClick={() => void handleGenerateAnnex()}
+                    >
+                      {busy === "generating"
+                        ? "Creando ficha en Anexos…"
+                        : "Crear ficha editable en Anexos"}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p className="support-muted" style={{ marginTop: 12 }}>
+                  No se detectó texto extraíble en este archivo ({selected.error_code ?? "sin texto"}).
+                  Puedes subir un PDF con texto seleccionable o un archivo DOCX.
+                </p>
+              )}
+            </>
           )}
         </article>
       </div>
+
+      {/* Cited web search */}
+      <article className="docs-card docs-search-card">
+        <div className="docs-card-head">
+          <div>
+            <h2>Búsqueda web con citas verificables</h2>
+            <p className="support-muted" style={{ margin: "2px 0 0", fontSize: 12.5 }}>
+              Devuelve únicamente enlaces HTTPS verificables con fecha de consulta para
+              respaldar tus planeaciones.
+            </p>
+          </div>
+        </div>
+        <form
+          className="docs-search-form"
+          onSubmit={(e) => void handleSearch(e)}
+        >
+          <input
+            type="search"
+            aria-label="Consulta de búsqueda con citas"
+            placeholder="Ej. Ciclo del agua primaria México SEP"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <button
+            type="submit"
+            className="support-btn-secondary"
+            disabled={busy !== null || !query.trim()}
+          >
+            {busy === "searching" ? "Buscando…" : "Buscar citas"}
+          </button>
+        </form>
+        {searchError && (
+          <p className="support-muted" style={{ margin: "8px 0 0", fontSize: 12.5 }}>
+            {searchError}
+          </p>
+        )}
+        {citations.length > 0 && (
+          <ul className="docs-citations-list">
+            {citations.map((c, idx) => {
+              const citeKey = `cite-${idx}`;
+              const formattedCitation = `${c.title} (${c.domain}) — ${c.url}`;
+              return (
+                <li key={idx} className="docs-citation-row">
+                  <div className="docs-citation-body">
+                    <div className="docs-citation-title-line">
+                      <a href={c.url} target="_blank" rel="noreferrer">
+                        <strong>{c.title}</strong>
+                      </a>
+                      <span className="docs-format-pill">{c.domain}</span>
+                    </div>
+                    <p>{c.snippet}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="support-btn-secondary"
+                    onClick={() => void handleCopy(formattedCitation, citeKey)}
+                  >
+                    {copiedId === citeKey ? "Copiada ✓" : "Copiar cita"}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </article>
     </section>
   );
 }
