@@ -766,7 +766,7 @@ export class AcentaApi {
   }
   async scopedJson(
     path: string,
-    method: "GET" | "POST" | "PUT" | "DELETE" = "GET",
+    method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" = "GET",
     body?: unknown,
     timeoutMs = 50000,
     idempotencyKey?: string,

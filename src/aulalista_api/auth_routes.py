@@ -10,6 +10,7 @@ from starlette.concurrency import run_in_threadpool
 from aulalista_api.auth import Auth, AuthError
 from aulalista_api.auth_config import load_auth_settings
 from aulalista_api.auth_google import GoogleVerifier
+from aulalista_api.mail_sender import load_auth_email_sender_from_env
 from aulalista_api.material_routes import bounded_content
 
 PRE_COOKIE = "__Host-acenta-pre"
@@ -92,7 +93,8 @@ def install_auth_routes(app: FastAPI, engine):
         if settings and settings.google_client_id
         else None
     )
-    app.state.auth = Auth(engine, settings, google=verifier)
+    email_sender = load_auth_email_sender_from_env()
+    app.state.auth = Auth(engine, settings, google=verifier, sender=email_sender)
 
     @app.exception_handler(AuthError)
     async def auth_error(request, error):

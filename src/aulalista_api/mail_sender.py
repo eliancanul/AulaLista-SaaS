@@ -65,6 +65,27 @@ def build_epson_pdf_message(
     return msg
 
 
+def build_otp_email_message(
+    *,
+    from_email: str,
+    to_email: str,
+    code: str,
+) -> EmailMessage:
+    """Build a plain-text transactional OTP email for teacher sign-in or linking."""
+    msg = EmailMessage()
+    msg["From"] = from_email
+    msg["To"] = to_email
+    msg["Subject"] = "Tu código de acceso a Acenta"
+    msg.set_content(
+        f"Hola,\n\n"
+        f"Tu código de acceso de un solo uso para Acenta es:\n\n"
+        f"    {code}\n\n"
+        f"Este código caduca en 10 minutos. Si no lo solicitaste, puedes ignorar este correo.\n",
+        charset="utf-8",
+    )
+    return msg
+
+
 class SmtpMailSender:
     """Standard-library SMTP sender (works with Gmail App Password or any SMTP server)."""
 
@@ -91,23 +112,7 @@ class SmtpMailSender:
     def is_configured(self) -> bool:
         return bool(self._host and self._from_email)
 
-    def send_pdf(
-        self,
-        *,
-        to_email: str,
-        filename: str,
-        pdf_bytes: bytes,
-        subject: str = "",
-    ) -> None:
-        if not self.is_configured:
-            raise MailSendError("smtp_not_configured", status=503)
-        msg = build_epson_pdf_message(
-            from_email=self._from_email,
-            to_email=to_email,
-            filename=filename,
-            pdf_bytes=pdf_bytes,
-            subject=subject,
-        )
+    def _deliver(self, msg: EmailMessage) -> None:
         try:
             if self._use_ssl:
                 with smtplib.SMTP_SSL(
@@ -134,6 +139,35 @@ class SmtpMailSender:
         except (smtplib.SMTPException, OSError, TimeoutError):
             raise MailSendError("smtp_send_failed", status=502) from None
 
+    def send_pdf(
+        self,
+        *,
+        to_email: str,
+        filename: str,
+        pdf_bytes: bytes,
+        subject: str = "",
+    ) -> None:
+        if not self.is_configured:
+            raise MailSendError("smtp_not_configured", status=503)
+        msg = build_epson_pdf_message(
+            from_email=self._from_email,
+            to_email=to_email,
+            filename=filename,
+            pdf_bytes=pdf_bytes,
+            subject=subject,
+        )
+        self._deliver(msg)
+
+    def send_otp(self, *, to_email: str, code: str) -> None:
+        if not self.is_configured:
+            raise MailSendError("smtp_not_configured", status=503)
+        msg = build_otp_email_message(
+            from_email=self._from_email,
+            to_email=to_email,
+            code=code,
+        )
+        self._deliver(msg)
+
 
 class UnconfiguredMailSender:
     @property
@@ -150,6 +184,9 @@ class UnconfiguredMailSender:
     ) -> None:
         raise MailSendError("smtp_not_configured", status=503)
 
+    def send_otp(self, *, to_email: str, code: str) -> None:
+        raise MailSendError("smtp_not_configured", status=503)
+
 
 @dataclass(frozen=True)
 class SentMailRecord:
@@ -164,6 +201,7 @@ class FakeMailSender:
 
     def __init__(self, *, fail_with: str | None = None):
         self.sent: list[SentMailRecord] = []
+        self.sent_otps: list[tuple[str, str]] = []
         self.fail_with = fail_with
 
     @property
@@ -189,6 +227,21 @@ class FakeMailSender:
             )
         )
 
+    def send_otp(self, *, to_email: str, code: str) -> None:
+        if self.fail_with:
+            raise MailSendError(self.fail_with, status=502)
+        self.sent_otps.append((to_email, code))
+
+
+class SmtpAuthEmailSender:
+    """Adapts SmtpMailSender to auth.EmailSender.send_code(email, code)."""
+
+    def __init__(self, sender: SmtpMailSender) -> None:
+        self._sender = sender
+
+    def send_code(self, email: str, code: str) -> None:
+        self._sender.send_otp(to_email=email, code=code)
+
 
 def load_mail_sender_from_env() -> MailSender:
     host = os.environ.get("SMTP_HOST", "").strip()
@@ -212,3 +265,13 @@ def load_mail_sender_from_env() -> MailSender:
         from_email=from_email,
         use_ssl=use_ssl,
     )
+
+
+def load_auth_email_sender_from_env() -> SmtpAuthEmailSender | None:
+    """Enable transactional SMTP OTP delivery only when explicitly opted-in."""
+    if os.environ.get("AULALISTA_EMAIL_OTP_ENABLED", "").strip().lower() != "true":
+        return None
+    sender = load_mail_sender_from_env()
+    if isinstance(sender, SmtpMailSender) and sender.is_configured:
+        return SmtpAuthEmailSender(sender)
+    return None
