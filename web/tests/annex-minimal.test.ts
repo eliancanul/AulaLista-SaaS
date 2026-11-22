@@ -141,3 +141,37 @@ it("syncs header kicker and generator prompt with active school and subject", ()
   expect(html).toContain("Nueva ficha para Conocimiento del Medio");
   expect(html).toContain("Tema para 3.º B…");
 });
+
+it("edits directly on the US Letter Carta sheet when editing mode is active", () => {
+  const controller = makeController();
+  const html = renderToStaticMarkup(
+    createElement(AnnexesView, {
+      controller,
+      initialAnnexes: [sampleAnnex()],
+      initialSettings: sampleSettings(),
+      initialEditing: true,
+    }),
+  );
+
+  expect(html).toContain('aria-label="Edición directa en hoja tamaño Carta"');
+  expect(html).toContain("letter-sheet is-editing");
+  expect(html).toContain('aria-label="Título de la ficha"');
+  expect(html).toContain('aria-label="Instrucciones de la ficha"');
+  expect(html).toContain("+ Agregar actividad");
+  expect(html).toContain("+ Agregar sección");
+  expect(html).toContain('aria-current="true"');
+  expect(html).not.toContain("minimal-editor-panel");
+});
+
+it("renders accessible loading states before initial annexes resolve", () => {
+  const controller = makeController();
+  const html = renderToStaticMarkup(createElement(AnnexesView, { controller }));
+
+  expect(html).toContain("Cargando fichas…");
+  expect(html).toContain("Cargando estudio de anexos…");
+  expect(html).toContain('role="status"');
+  expect(html).not.toContain("Aún no tienes fichas");
+  expect(html).not.toContain("Elige o genera una ficha");
+});
+
+

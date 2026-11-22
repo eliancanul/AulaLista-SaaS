@@ -11,7 +11,7 @@ from sqlalchemy.pool import NullPool
 
 from aulalista_api.config import Settings
 
-SCHEMA_REVISION = "0013_annexes_and_print_jobs"
+SCHEMA_REVISION = "0014_school_spaces"
 
 
 class Base(DeclarativeBase):

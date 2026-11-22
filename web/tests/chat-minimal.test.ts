@@ -27,7 +27,7 @@ it("shows borderless school/subject context and contextual composer placeholder"
   );
   let html = renderChat(c);
   expect(html).toContain("Benito Juárez · 4.º A");
-  expect(html).toContain(">Matemáticas</h1>");
+  expect(html).toContain(">Matemáticas, ¿qué preparamos hoy?</h1>");
   expect(html).toContain(
     "Pide una ficha o planeación de Matemáticas para 4.º A…",
   );
@@ -40,7 +40,7 @@ it("shows borderless school/subject context and contextual composer placeholder"
   c.schools.selectSubject("hidalgo", "hidalgo-con");
   html = renderChat(c);
   expect(html).toContain("Miguel Hidalgo · 3.º B");
-  expect(html).toContain(">Conocimiento del Medio</h1>");
+  expect(html).toContain(">Conocimiento del Medio, ¿qué preparamos hoy?</h1>");
   expect(html).toContain(
     "Pide una ficha o planeación de Conocimiento del Medio para 3.º B…",
   );
@@ -86,3 +86,18 @@ it("omits archived-topic divider when through_turn is zero", async () => {
   expect(html).not.toContain("Conversación anterior · archivada");
   expect(html).not.toContain("chat-turn is-archived");
 });
+
+it("exposes accessible menu triggers and shows unavailable recovery action when chat is down", async () => {
+  const server = new ChatServer();
+  server.available = false;
+  const c = new AcentaController(new AcentaApi(session, server.transport));
+  await c.chat.loadAvailability();
+
+  const html = renderChat(c);
+  expect(html).toContain('aria-label="Más opciones"');
+  expect(html).toContain('aria-haspopup="menu"');
+  expect(html).toContain('aria-label="Enviar mensaje"');
+  expect(html).toContain("El chat no está disponible en este momento.");
+  expect(html).toContain("Comprobar disponibilidad");
+});
+

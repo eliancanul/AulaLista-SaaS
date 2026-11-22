@@ -3,6 +3,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+CALLER_PORT="${PORT:-}"
+
 if [ -f ".env.local" ]; then
   set -a
   # shellcheck disable=SC1091
@@ -14,7 +16,7 @@ if [ -d "${HOME}/.local/bin" ]; then
   export PATH="${HOME}/.local/bin:${PATH}"
 fi
 
-export PORT="${PORT:-8010}"
+export PORT="${CALLER_PORT:-${PORT:-8010}}"
 export AULALISTA_LOCAL_INSECURE="true"
 export AULALISTA_DATABASE_URL="${AULALISTA_DATABASE_URL:-postgresql+psycopg://aulalista_test@127.0.0.1:55432/aulalista_test}"
 export AULALISTA_DOCS_ENABLED="${AULALISTA_DOCS_ENABLED:-true}"

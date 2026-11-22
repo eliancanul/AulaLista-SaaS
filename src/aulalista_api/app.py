@@ -19,6 +19,7 @@ from aulalista_api.pilot import ManualPilotConfig
 from aulalista_api.planning_edit_routes import install_planning_edit_routes
 from aulalista_api.planning_routes import install_planning_routes
 from aulalista_api.print_routes import install_print_routes
+from aulalista_api.school_space_routes import install_school_space_routes
 from aulalista_api.web import install_web
 
 
@@ -111,5 +112,6 @@ def create_app(
     install_analytic_section_routes(app, engine)
     install_annex_routes(app, engine, generator=annex_generator)
     install_print_routes(app, engine, mail_sender=mail_sender)
+    install_school_space_routes(app, engine)
     install_web(app)
     return app

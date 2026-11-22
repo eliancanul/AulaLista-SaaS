@@ -25,6 +25,26 @@ export function Logo({ large = false }: { large?: boolean }) {
     />
   );
 }
+export function LogoMark() {
+  return (
+    <svg
+      className="logo-mark"
+      viewBox="0 0 84 70"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-label="Acenta"
+    >
+      <path
+        d="M73.5 1.25V5.5C60.5 -2.25 33 6.25 21 22.25C6 42.25 17.25 66 37 68.25C7.5 69.75 -6 54.75 2.5 33C13 11.25 41 -3.25 73.5 1.25Z"
+        fill="currentColor"
+      />
+      <path
+        d="M69.75 68C76.65 68 82.25 62.4 82.25 55.5C82.25 48.6 76.65 43 69.75 43C62.85 43 57.25 48.6 57.25 55.5C57.25 62.4 62.85 68 69.75 68Z"
+        fill="var(--ac-action)"
+      />
+    </svg>
+  );
+}
 export type UiIconName =
   | "worksheet"
   | "printer"
@@ -40,11 +60,19 @@ export type UiIconName =
   | "minus"
   | "download"
   | "send"
+  | "arrow-up"
   | "alert"
   | "search"
   | "chevron-down"
+  | "chevron-left"
+  | "chevron-right"
   | "more-horizontal"
-  | "close";
+  | "close"
+  | "home"
+  | "folder"
+  | "document"
+  | "chat"
+  | "users";
 
 export function UiIcon({
   name,
@@ -209,6 +237,62 @@ export function UiIcon({
         <svg {...shared}>
           <path d="M18 6 6 18" />
           <path d="m6 6 12 12" />
+        </svg>
+      );
+    case "arrow-up":
+      return (
+        <svg {...shared} strokeWidth={2}>
+          <path d="M12 19V5" />
+          <path d="m5 12 7-7 7 7" />
+        </svg>
+      );
+    case "chevron-left":
+      return (
+        <svg {...shared} strokeWidth={1.8}>
+          <path d="m15 18-6-6 6-6" />
+        </svg>
+      );
+    case "chevron-right":
+      return (
+        <svg {...shared} strokeWidth={1.8}>
+          <path d="m9 18 6-6-6-6" />
+        </svg>
+      );
+    case "home":
+      return (
+        <svg {...shared}>
+          <path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19v-8.5Z" />
+          <path d="M9.5 20.5v-6h5v6" />
+        </svg>
+      );
+    case "folder":
+      return (
+        <svg {...shared}>
+          <path d="M3.5 7.5a2 2 0 0 1 2-2h4.2l2 2H18.5a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-10Z" />
+        </svg>
+      );
+    case "document":
+      return (
+        <svg {...shared}>
+          <path d="M7 3.5h7l4.5 4.5V19a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 19V5A1.5 1.5 0 0 1 7 3.5Z" />
+          <path d="M14 3.5V8h4.5" />
+          <path d="M9 12.5h6" />
+          <path d="M9 16h4" />
+        </svg>
+      );
+    case "chat":
+      return (
+        <svg {...shared}>
+          <path d="M5 18.5 3.5 20V6.5A2.5 2.5 0 0 1 6 4h12a2.5 2.5 0 0 1 2.5 2.5v8A2.5 2.5 0 0 1 18 17H7.5L5 18.5Z" />
+        </svg>
+      );
+    case "users":
+      return (
+        <svg {...shared}>
+          <path d="M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20" />
+          <circle cx="10" cy="8.5" r="3.5" />
+          <path d="M20 20v-1.5a3 3 0 0 0-2.2-2.9" />
+          <path d="M15.2 5.2a3.5 3.5 0 0 1 0 6.6" />
         </svg>
       );
   }

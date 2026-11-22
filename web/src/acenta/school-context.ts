@@ -1,4 +1,6 @@
-/** Session-scoped school and subject workspace organizer (in-memory only, purged on logout). */
+/** School and subject workspace organizer with optional backend persistence (purged on logout). */
+
+import type { AcentaApi } from "./api";
 
 export interface SubjectSpace {
   id: string;
@@ -23,6 +25,13 @@ export interface SchoolContextSnapshot {
   activeSchoolId: string;
   activeSubjectId: string;
   hasScheduledPrint: boolean;
+  syncStatus: "idle" | "loading" | "synced" | "saving";
+}
+
+interface PersistedSchoolSpacesPayload {
+  schools: SchoolSpace[];
+  activeSchoolId: string;
+  activeSubjectId: string;
 }
 
 const SCHOOL_PALETTE = ["#964e3b", "#3d6b59", "#4f667a", "#8f6d3b"] as const;
@@ -87,7 +96,35 @@ function freshSnapshot(): SchoolContextSnapshot {
     activeSchoolId: schools[0].id,
     activeSubjectId: schools[0].subjects[0].id,
     hasScheduledPrint: false,
+    syncStatus: "idle",
   };
+}
+
+function isValidPersistedPayload(
+  raw: unknown,
+): raw is PersistedSchoolSpacesPayload {
+  if (!raw || typeof raw !== "object") return false;
+  const candidate = raw as Record<string, unknown>;
+  if (!Array.isArray(candidate.schools) || candidate.schools.length === 0) {
+    return false;
+  }
+  if (
+    typeof candidate.activeSchoolId !== "string" ||
+    typeof candidate.activeSubjectId !== "string"
+  ) {
+    return false;
+  }
+  return candidate.schools.every((sc) => {
+    if (!sc || typeof sc !== "object") return false;
+    const item = sc as Record<string, unknown>;
+    return (
+      typeof item.id === "string" &&
+      typeof item.shortName === "string" &&
+      typeof item.grade === "string" &&
+      Array.isArray(item.subjects) &&
+      item.subjects.length > 0
+    );
+  });
 }
 
 export class SchoolContextStore {
@@ -95,6 +132,13 @@ export class SchoolContextStore {
   private listeners = new Set<() => void>();
   private closed = false;
   private counter = 0;
+  private persistEnabled = false;
+  private saveVersion = 0;
+  private readonly api?: AcentaApi;
+
+  constructor(api?: AcentaApi) {
+    this.api = api;
+  }
 
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
@@ -108,6 +152,90 @@ export class SchoolContextStore {
   private emit(next: SchoolContextSnapshot) {
     this.state = next;
     for (const listener of this.listeners) listener();
+  }
+
+  private toPayload(state: SchoolContextSnapshot): PersistedSchoolSpacesPayload {
+    return {
+      schools: state.schools.map((sc) => ({
+        id: sc.id,
+        shortName: sc.shortName,
+        grade: sc.grade,
+        gradeLong: sc.gradeLong,
+        shift: sc.shift,
+        color: sc.color,
+        initials: sc.initials,
+        lastSubjectId: sc.lastSubjectId,
+        subjects: sc.subjects.map((sub) =>
+          sub.activeTopic
+            ? { id: sub.id, name: sub.name, activeTopic: sub.activeTopic }
+            : { id: sub.id, name: sub.name },
+        ),
+      })),
+      activeSchoolId: state.activeSchoolId,
+      activeSubjectId: state.activeSubjectId,
+    };
+  }
+
+  private persistCurrent() {
+    if (this.closed || !this.api || !this.persistEnabled) return;
+    const version = ++this.saveVersion;
+    const payload = this.toPayload(this.state);
+    this.emit({ ...this.state, syncStatus: "saving" });
+    void this.api
+      .scopedJson("school-spaces", "PUT", payload)
+      .then(() => {
+        if (this.closed || this.saveVersion !== version) return;
+        this.emit({ ...this.state, syncStatus: "synced" });
+      })
+      .catch(() => {
+        if (this.closed || this.saveVersion !== version) return;
+        this.emit({ ...this.state, syncStatus: "idle" });
+      });
+  }
+
+  async load(): Promise<boolean> {
+    if (this.closed || !this.api) return false;
+    this.persistEnabled = true;
+    this.emit({ ...this.state, syncStatus: "loading" });
+    try {
+      const response = await this.api.scopedJson("school-spaces");
+      if (this.closed) return false;
+      if (isValidPersistedPayload(response)) {
+        const schools = response.schools.map((sc) => ({
+          ...sc,
+          gradeLong: sc.gradeLong || expandGradeLong(sc.grade),
+          shift: sc.shift || "Matutino",
+          color: sc.color || SCHOOL_PALETTE[0],
+          initials: sc.initials || deriveInitials(sc.shortName),
+          lastSubjectId: sc.lastSubjectId || sc.subjects[0].id,
+        }));
+        const activeSchool =
+          schools.find((sc) => sc.id === response.activeSchoolId) ?? schools[0];
+        const activeSubject =
+          activeSchool.subjects.find(
+            (sub) => sub.id === response.activeSubjectId,
+          ) ??
+          activeSchool.subjects.find(
+            (sub) => sub.id === activeSchool.lastSubjectId,
+          ) ??
+          activeSchool.subjects[0];
+        this.emit({
+          ...this.state,
+          schools,
+          activeSchoolId: activeSchool.id,
+          activeSubjectId: activeSubject.id,
+          syncStatus: "synced",
+        });
+        return true;
+      }
+      this.emit({ ...this.state, syncStatus: "idle" });
+      return false;
+    } catch {
+      if (!this.closed) {
+        this.emit({ ...this.state, syncStatus: "idle" });
+      }
+      return false;
+    }
   }
 
   getActiveSchool(): SchoolSpace {
@@ -139,6 +267,7 @@ export class SchoolContextStore {
       activeSchoolId: school.id,
       activeSubjectId: targetSubjectId,
     });
+    this.persistCurrent();
     return true;
   }
 
@@ -157,6 +286,7 @@ export class SchoolContextStore {
       activeSchoolId: schoolId,
       activeSubjectId: subjectId,
     });
+    this.persistCurrent();
     return true;
   }
 
@@ -174,7 +304,7 @@ export class SchoolContextStore {
       return existing;
     }
     const created: SubjectSpace = {
-      id: `${schoolId}-sub-${++this.counter}`,
+      id: `${schoolId}-sub-${Date.now().toString(36)}-${++this.counter}`,
       name,
     };
     const schools = this.state.schools.map((sc) =>
@@ -192,6 +322,7 @@ export class SchoolContextStore {
       activeSchoolId: schoolId,
       activeSubjectId: created.id,
     });
+    this.persistCurrent();
     return created;
   }
 
@@ -205,7 +336,7 @@ export class SchoolContextStore {
     const grade = input.grade.trim().slice(0, 24) || "4.º A";
     const shift = input.shift?.trim().slice(0, 24) || "Matutino";
     if (!shortName) return null;
-    const id = `school-${++this.counter}`;
+    const id = `school-${Date.now().toString(36)}-${++this.counter}`;
     const matId = `${id}-mat`;
     const espId = `${id}-esp`;
     const color =
@@ -230,6 +361,7 @@ export class SchoolContextStore {
       activeSchoolId: created.id,
       activeSubjectId: matId,
     });
+    this.persistCurrent();
     return created;
   }
 
@@ -240,6 +372,8 @@ export class SchoolContextStore {
 
   close() {
     this.closed = true;
+    this.persistEnabled = false;
+    this.saveVersion += 1;
     this.state = freshSnapshot();
     for (const listener of this.listeners) listener();
     this.listeners.clear();

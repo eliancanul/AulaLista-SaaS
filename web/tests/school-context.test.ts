@@ -112,4 +112,62 @@ describe("SchoolContextStore", () => {
       controller.schools.addSubject("benito", "Post cierre"),
     ).toBeNull();
   });
+
+  it("hydrates from GET school-spaces and persists mutations via PUT once loaded", async () => {
+    const calls: { url: string; method: string; body?: string }[] = [];
+    const persisted = {
+      schools: [
+        {
+          id: "juarez",
+          shortName: "Juárez",
+          initials: "JU",
+          grade: "5.º A",
+          gradeLong: "5.º de primaria",
+          shift: "Matutino",
+          color: "#a96245",
+          lastSubjectId: "juarez-his",
+          subjects: [
+            { id: "juarez-mat", name: "Matemáticas" },
+            { id: "juarez-his", name: "Historia" },
+          ],
+        },
+      ],
+      activeSchoolId: "juarez",
+      activeSubjectId: "juarez-his",
+    };
+
+    const api = new AcentaApi(session, (input, init) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const method = init?.method ?? "GET";
+      calls.push({
+        url,
+        method,
+        body: typeof init?.body === "string" ? init.body : undefined,
+      });
+      if (method === "GET") {
+        return Promise.resolve(json(persisted));
+      }
+      return Promise.resolve(json(JSON.parse(String(init?.body ?? "{}"))));
+    });
+
+    const store = new SchoolContextStore(api);
+    // Mutations before load() stay purely in-memory (no network calls)
+    store.selectSubject("benito", "benito-esp");
+    expect(calls).toHaveLength(0);
+
+    await store.load();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.method).toBe("GET");
+    expect(calls[0]?.url).toContain("/school-spaces");
+    expect(store.getActiveSchool().shortName).toBe("Juárez");
+    expect(store.getActiveSubject().name).toBe("Historia");
+
+    // Once loaded, mutations optimistically PUT to backend
+    store.addSubject("juarez", "Geografía");
+    await Promise.resolve();
+    expect(calls).toHaveLength(2);
+    expect(calls[1]?.method).toBe("PUT");
+    expect(calls[1]?.body).toContain("Geografía");
+  });
 });
+

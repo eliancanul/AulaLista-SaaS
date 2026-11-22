@@ -40,7 +40,31 @@ function quickScheduleDate(dayOffset: number, hour: number, minute: number): str
   return toLocalInputValue(d);
 }
 
-export function LetterSheetPreview({ draft }: { draft: AnnexDocument }) {
+interface LetterSheetEditHandlers {
+  onUpdateDraft: (updater: (current: AnnexDocument) => AnnexDocument) => void;
+  onUpdateSection: (
+    sIdx: number,
+    updater: (sec: AnnexSection) => AnnexSection,
+  ) => void;
+  onUpdateItem: (
+    sIdx: number,
+    iIdx: number,
+    patch: Partial<AnnexItem>,
+  ) => void;
+  onAddItem: (sIdx: number) => void;
+  onRemoveItem: (sIdx: number, iIdx: number) => void;
+  onAddSection: () => void;
+}
+
+export function LetterSheetPreview({
+  draft,
+  editing = false,
+  handlers,
+}: {
+  draft: AnnexDocument;
+  editing?: boolean;
+  handlers?: LetterSheetEditHandlers;
+}) {
   const headerFields =
     draft.content.student_header_fields.length > 0
       ? draft.content.student_header_fields
@@ -48,15 +72,80 @@ export function LetterSheetPreview({ draft }: { draft: AnnexDocument }) {
 
   return (
     <div className="letter-stage minimal-letter-stage">
-      <article className="letter-sheet" aria-label="Vista previa tamaño Carta">
+      <article
+        className={`letter-sheet${editing ? " is-editing" : ""}`}
+        aria-label={
+          editing
+            ? "Edición directa en hoja tamaño Carta"
+            : "Vista previa tamaño Carta"
+        }
+      >
         <header>
-          <p className="letter-kicker">
-            {draft.subject} · {draft.grade}
-          </p>
-          <h2 className="letter-title">{draft.title}</h2>
-          {draft.content.subtitle.trim() && (
-            <p className="letter-subtitle">{draft.content.subtitle}</p>
+          {editing && handlers ? (
+            <div className="letter-inline-kicker">
+              <input
+                aria-label="Asignatura de la ficha"
+                value={draft.subject}
+                onChange={(e) =>
+                  handlers.onUpdateDraft((cur) => ({
+                    ...cur,
+                    subject: e.target.value,
+                  }))
+                }
+              />
+              <span aria-hidden="true">·</span>
+              <input
+                aria-label="Grado de la ficha"
+                value={draft.grade}
+                onChange={(e) =>
+                  handlers.onUpdateDraft((cur) => ({
+                    ...cur,
+                    grade: e.target.value,
+                  }))
+                }
+              />
+            </div>
+          ) : (
+            <p className="letter-kicker">
+              {draft.subject} · {draft.grade}
+            </p>
           )}
+
+          {editing && handlers ? (
+            <>
+              <input
+                className="letter-inline-title"
+                aria-label="Título de la ficha"
+                value={draft.title}
+                onChange={(e) =>
+                  handlers.onUpdateDraft((cur) => ({
+                    ...cur,
+                    title: e.target.value,
+                  }))
+                }
+              />
+              <input
+                className="letter-inline-subtitle"
+                aria-label="Subtítulo de la ficha"
+                placeholder="Subtítulo opcional…"
+                value={draft.content.subtitle}
+                onChange={(e) =>
+                  handlers.onUpdateDraft((cur) => ({
+                    ...cur,
+                    content: { ...cur.content, subtitle: e.target.value },
+                  }))
+                }
+              />
+            </>
+          ) : (
+            <>
+              <h2 className="letter-title">{draft.title}</h2>
+              {draft.content.subtitle.trim() && (
+                <p className="letter-subtitle">{draft.content.subtitle}</p>
+              )}
+            </>
+          )}
+
           <div className="letter-student-grid">
             {headerFields.map((rawField, idx) => {
               const isWide = headerFields.length % 2 === 1 && idx === 0;
@@ -75,23 +164,211 @@ export function LetterSheetPreview({ draft }: { draft: AnnexDocument }) {
 
         <div className="letter-double-rule" aria-hidden="true" />
 
-        {draft.instructions.trim() && (
-          <p className="letter-instructions">
-            <strong>Instrucciones:</strong> {draft.instructions}
-          </p>
+        {editing && handlers ? (
+          <div className="letter-instructions letter-inline-instructions">
+            <strong>Instrucciones:</strong>
+            <textarea
+              aria-label="Instrucciones de la ficha"
+              rows={2}
+              placeholder="Escribe las instrucciones para el alumnado…"
+              value={draft.instructions}
+              onChange={(e) =>
+                handlers.onUpdateDraft((cur) => ({
+                  ...cur,
+                  instructions: e.target.value,
+                }))
+              }
+            />
+          </div>
+        ) : (
+          draft.instructions.trim() && (
+            <p className="letter-instructions">
+              <strong>Instrucciones:</strong> {draft.instructions}
+            </p>
+          )
         )}
 
         {draft.content.sections.map((section, sIdx) => {
           let questionIdx = 0;
           return (
             <section key={sIdx} className="letter-section">
-              {section.heading.trim() && (
-                <h3 className="letter-section-banner">{section.heading}</h3>
+              {editing && handlers ? (
+                <div className="letter-inline-section-head">
+                  <input
+                    className="letter-inline-banner-input"
+                    aria-label={`Título sección ${sIdx + 1}`}
+                    value={section.heading}
+                    onChange={(e) =>
+                      handlers.onUpdateSection(sIdx, (sec) => ({
+                        ...sec,
+                        heading: e.target.value,
+                      }))
+                    }
+                  />
+                  {draft.content.sections.length > 1 && (
+                    <button
+                      type="button"
+                      className="letter-inline-chip"
+                      onClick={() =>
+                        handlers.onUpdateDraft((cur) => ({
+                          ...cur,
+                          content: {
+                            ...cur.content,
+                            sections: cur.content.sections.filter(
+                              (_, i) => i !== sIdx,
+                            ),
+                          },
+                        }))
+                      }
+                    >
+                      Quitar sección
+                    </button>
+                  )}
+                </div>
+              ) : (
+                section.heading.trim() && (
+                  <h3 className="letter-section-banner">{section.heading}</h3>
+                )
               )}
-              {section.prompt.trim() && (
-                <p className="letter-section-prompt">{section.prompt}</p>
+
+              {editing && handlers ? (
+                <input
+                  className="letter-inline-prompt"
+                  aria-label={`Indicación sección ${sIdx + 1}`}
+                  placeholder="Indicación breve (opcional)…"
+                  value={section.prompt}
+                  onChange={(e) =>
+                    handlers.onUpdateSection(sIdx, (sec) => ({
+                      ...sec,
+                      prompt: e.target.value,
+                    }))
+                  }
+                />
+              ) : (
+                section.prompt.trim() && (
+                  <p className="letter-section-prompt">{section.prompt}</p>
+                )
               )}
+
               {section.items.map((item, iIdx) => {
+                if (editing && handlers) {
+                  if (item.kind !== "reading" && item.kind !== "checklist") {
+                    questionIdx += 1;
+                  }
+                  const hasDrawing =
+                    (item.kind === "question" || item.kind === "exercise") &&
+                    needsDrawingBox(item.text);
+                  const lineCount = hasDrawing
+                    ? Math.min(item.answer_lines, 3)
+                    : item.answer_lines;
+                  return (
+                    <div key={iIdx} className="letter-inline-item">
+                      <div className="letter-inline-item-bar">
+                        {item.kind !== "reading" &&
+                          item.kind !== "checklist" && (
+                            <strong className="letter-inline-num">
+                              {questionIdx}.
+                            </strong>
+                          )}
+                        <select
+                          aria-label="Tipo de elemento"
+                          value={item.kind}
+                          onChange={(e) =>
+                            handlers.onUpdateItem(sIdx, iIdx, {
+                              kind: e.target.value as AnnexItemKind,
+                            })
+                          }
+                        >
+                          <option value="question">Pregunta</option>
+                          <option value="exercise">Ejercicio</option>
+                          <option value="reading">Lectura</option>
+                          <option value="checklist">Lista de cotejo</option>
+                        </select>
+                        {(item.kind === "question" ||
+                          item.kind === "exercise") && (
+                          <div
+                            className="letter-inline-lines"
+                            role="group"
+                            aria-label="Líneas para responder"
+                          >
+                            <span>Líneas</span>
+                            <button
+                              type="button"
+                              aria-label="Menos líneas"
+                              disabled={item.answer_lines <= 0}
+                              onClick={() =>
+                                handlers.onUpdateItem(sIdx, iIdx, {
+                                  answer_lines: Math.max(
+                                    0,
+                                    item.answer_lines - 1,
+                                  ),
+                                })
+                              }
+                            >
+                              <UiIcon name="minus" size={12} />
+                            </button>
+                            <span className="ac-num">{item.answer_lines}</span>
+                            <button
+                              type="button"
+                              aria-label="Más líneas"
+                              disabled={item.answer_lines >= 10}
+                              onClick={() =>
+                                handlers.onUpdateItem(sIdx, iIdx, {
+                                  answer_lines: Math.min(
+                                    10,
+                                    item.answer_lines + 1,
+                                  ),
+                                })
+                              }
+                            >
+                              <UiIcon name="plus" size={12} />
+                            </button>
+                          </div>
+                        )}
+                        {section.items.length > 1 && (
+                          <button
+                            type="button"
+                            className="letter-inline-chip"
+                            onClick={() => handlers.onRemoveItem(sIdx, iIdx)}
+                          >
+                            Quitar
+                          </button>
+                        )}
+                      </div>
+                      <textarea
+                        className={`letter-inline-item-text${item.kind === "reading" ? " is-reading" : ""}`}
+                        aria-label={`Texto elemento ${iIdx + 1} sección ${sIdx + 1}`}
+                        rows={item.kind === "reading" ? 3 : 2}
+                        value={item.text}
+                        onChange={(e) =>
+                          handlers.onUpdateItem(sIdx, iIdx, {
+                            text: e.target.value,
+                          })
+                        }
+                      />
+                      {hasDrawing && (
+                        <div className="letter-drawing-box">
+                          <span className="letter-drawing-label">
+                            Espacio para dibujar / esquematizar
+                          </span>
+                        </div>
+                      )}
+                      {(item.kind === "question" ||
+                        item.kind === "exercise") &&
+                        lineCount > 0 && (
+                          <div
+                            className="letter-writing-lines"
+                            aria-hidden="true"
+                          >
+                            {Array.from({ length: lineCount }, (_, lIdx) => (
+                              <div key={lIdx} className="letter-writing-line" />
+                            ))}
+                          </div>
+                        )}
+                    </div>
+                  );
+                }
+
                 if (item.kind === "reading") {
                   return (
                     <div key={iIdx} className="letter-reading-box">
@@ -135,12 +412,49 @@ export function LetterSheetPreview({ draft }: { draft: AnnexDocument }) {
                   </div>
                 );
               })}
+
+              {editing && handlers && (
+                <button
+                  type="button"
+                  className="letter-inline-add"
+                  onClick={() => handlers.onAddItem(sIdx)}
+                >
+                  + Agregar actividad
+                </button>
+              )}
             </section>
           );
         })}
 
+        {editing && handlers && (
+          <button
+            type="button"
+            className="letter-inline-add is-section"
+            onClick={handlers.onAddSection}
+          >
+            + Agregar sección
+          </button>
+        )}
+
         <footer className="letter-footer">
-          <span>{draft.content.footer_note.trim() || "AulaLista · Acenta"}</span>
+          {editing && handlers ? (
+            <input
+              className="letter-inline-footer"
+              aria-label="Pie de página de la ficha"
+              placeholder="Pie de página (opcional)"
+              value={draft.content.footer_note}
+              onChange={(e) =>
+                handlers.onUpdateDraft((cur) => ({
+                  ...cur,
+                  content: { ...cur.content, footer_note: e.target.value },
+                }))
+              }
+            />
+          ) : (
+            <span>
+              {draft.content.footer_note.trim() || "AulaLista · Acenta"}
+            </span>
+          )}
           <span className="ac-num">Página 1</span>
         </footer>
       </article>
@@ -152,10 +466,12 @@ export function AnnexesView({
   controller,
   initialAnnexes,
   initialSettings,
+  initialEditing = false,
 }: {
   controller: AcentaController;
   initialAnnexes?: AnnexDocument[];
   initialSettings?: PrintSettings | null;
+  initialEditing?: boolean;
 }) {
   const client = useMemo(
     () => new AnnexPrintClient(controller.api),
@@ -181,7 +497,9 @@ export function AnnexesView({
   const draftVersionRef = useRef(0);
 
   // Minimalist studio defaults to live US Letter preview
-  const [studioMode, setStudioMode] = useState<StudioMode>("preview");
+  const [studioMode, setStudioMode] = useState<StudioMode>(
+    initialEditing ? "edit" : "preview",
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -201,6 +519,9 @@ export function AnnexesView({
   );
 
   // Busy & feedback
+  const [initialLoading, setInitialLoading] = useState(
+    initialAnnexes === undefined,
+  );
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -228,8 +549,11 @@ export function AnnexesView({
       setDirty(false);
       setSaveState("idle");
       setConfirmDelete(false);
+      setError("");
     } catch (err) {
       setError(annexErrorMessage(err));
+    } finally {
+      setInitialLoading(false);
     }
   };
 
@@ -512,22 +836,73 @@ export function AnnexesView({
           : `Rev. ${draft?.revision ?? 1}`;
 
   return (
-    <section className="annexes-page minimal-annexes-page">
-      <header className="studio-header minimal-studio-header">
-        <div className="studio-header-title">
+    <section className="anexos-studio">
+      <header className="studio-topbar">
+        <div className="studio-topbar-left">
+          <h1 className="studio-title">Anexos</h1>
           <p className="minimal-studio-kicker">
             {activeSchool.shortName} · {activeSchool.grade} · {activeSubject.name}
           </p>
-          <h1>Anexos</h1>
         </div>
-        <div className="studio-header-actions">
+
+        <div className="studio-topbar-center">
+          {draft && (
+            <div className="segmented-glass" role="group" aria-label="Modo de ficha">
+              <button
+                type="button"
+                className={studioMode === "edit" ? "active" : ""}
+                aria-label="Editar ficha"
+                aria-pressed={studioMode === "edit"}
+                onClick={() => setStudioMode("edit")}
+              >
+                Editar
+              </button>
+              <button
+                type="button"
+                className={studioMode === "preview" ? "active" : ""}
+                aria-label="Volver a vista Carta"
+                aria-pressed={studioMode === "preview"}
+                onClick={() => setStudioMode("preview")}
+              >
+                Vista previa
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="topbar-right">
+          {draft && (
+            <>
+              <a
+                className="glass-btn-sm"
+                href={client.pdfUrl(draft.id, 1)}
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Descargar PDF"
+                title="Abrir PDF"
+              >
+                <UiIcon name="download" size={14} />
+                <span>PDF</span>
+              </a>
+              <button
+                type="button"
+                className="minimal-icon-btn is-danger"
+                disabled={busy !== null}
+                aria-label="Eliminar ficha"
+                title="Eliminar ficha"
+                onClick={() => setConfirmDelete((prev) => !prev)}
+              >
+                <UiIcon name="trash" size={15} />
+              </button>
+            </>
+          )}
           <button
             type="button"
-            className="minimal-ghost-btn"
+            className="glass-btn-sm"
             onClick={() => controller.navigate("printer")}
           >
-            <UiIcon name="printer" size={16} />
-            Impresora
+            <UiIcon name="printer" size={14} />
+            <span>Impresora</span>
           </button>
           <button
             type="button"
@@ -539,27 +914,16 @@ export function AnnexesView({
         </div>
       </header>
 
-      {error && (
-        <div role="alert" className="ac-banner is-error">
-          <UiIcon name="alert" size={18} />
-          <span>{error}</span>
-        </div>
-      )}
-      {notice && (
-        <div role="status" className="ac-banner is-success">
-          <UiIcon name="check" size={18} />
-          <span>{notice}</span>
-        </div>
-      )}
-
-      <div className="annexes-grid minimal-annexes-grid">
-        <aside className="annexes-rail minimal-annexes-rail" aria-label="Generar y elegir fichas">
+      <div className="anexos-body">
+        <aside className="anexos-drawer" aria-label="Generar y elegir fichas">
           <form
-            className="annex-card minimal-gen-card"
+            className="anexos-mini-form"
             onSubmit={(e) => void handleGenerate(e)}
           >
-            <div className="annex-field">
-              <label htmlFor="annex-topic">Nueva ficha para {activeSubject.name}</label>
+            <label htmlFor="annex-topic" className="drawer-section-label">
+              Nueva ficha para {activeSubject.name}
+            </label>
+            <div className="mini-composer">
               <input
                 id="annex-topic"
                 value={topic}
@@ -567,6 +931,15 @@ export function AnnexesView({
                 placeholder={`Tema para ${activeSchool.grade}…`}
                 required
               />
+              <button
+                className="mini-send"
+                type="submit"
+                aria-label={busy === "generating" ? "Generando…" : "Generar ficha"}
+                title="Generar ficha"
+                disabled={busy !== null || capability?.available === false}
+              >
+                <UiIcon name="arrow-up" size={15} />
+              </button>
             </div>
 
             <div className="minimal-gen-row">
@@ -588,7 +961,7 @@ export function AnnexesView({
                 aria-expanded={showAdvanced}
                 onClick={() => setShowAdvanced((prev) => !prev)}
               >
-                {showAdvanced ? "Ocultar ajustes" : "Ajustar"}
+                {showAdvanced ? "Ocultar" : "Ajustar"}
               </button>
             </div>
 
@@ -632,23 +1005,14 @@ export function AnnexesView({
                 IA inactiva: define <code>OPENAI_API_KEY</code> en el servidor.
               </p>
             )}
-
-            <button
-              className="primary minimal-gen-submit"
-              type="submit"
-              disabled={busy !== null || capability?.available === false}
-            >
-              <UiIcon name="sparkles" size={16} />
-              {busy === "generating" ? "Generando…" : "Generar ficha"}
-            </button>
           </form>
 
           <section className="minimal-library-section" aria-label="Fichas guardadas">
             <div className="minimal-library-head">
-              <h2>Fichas</h2>
+              <h2 className="drawer-section-label">Fichas</h2>
               {annexes.length > 0 && (
-                <div className="annex-search minimal-search">
-                  <UiIcon name="search" size={14} className="annex-search-icon" />
+                <div className="search-glass">
+                  <UiIcon name="search" size={14} />
                   <input
                     type="search"
                     aria-label="Buscar anexos"
@@ -660,19 +1024,24 @@ export function AnnexesView({
               )}
             </div>
 
-            {annexes.length === 0 ? (
+            {initialLoading ? (
+              <p role="status" className="minimal-empty-hint">
+                Cargando fichas…
+              </p>
+            ) : annexes.length === 0 ? (
               <p className="minimal-empty-hint">
                 Aún no tienes fichas. Escribe un tema arriba para crear la primera.
               </p>
             ) : filteredAnnexes.length === 0 ? (
               <p className="minimal-empty-hint">Sin coincidencias.</p>
             ) : (
-              <div className="annex-list minimal-annex-list">
+              <div className="minimal-annex-list">
                 {filteredAnnexes.map((item) => (
                   <button
                     key={item.id}
                     type="button"
-                    className={`minimal-annex-row ${item.id === selectedId ? "selected" : ""}`}
+                    className={`minimal-annex-row${item.id === selectedId ? " selected" : ""}`}
+                    aria-current={item.id === selectedId ? "true" : undefined}
                     onClick={() => selectAnnex(item)}
                   >
                     <span className="minimal-annex-row-title">{item.title}</span>
@@ -686,435 +1055,224 @@ export function AnnexesView({
           </section>
         </aside>
 
-        <div className="annexes-canvas minimal-annexes-canvas">
-          {!draft ? (
-            <section className="annex-card empty-state-card minimal-empty-canvas">
-              <UiIcon name="worksheet" size={28} />
-              <h2>Elige o genera una ficha</h2>
-              <p className="field-hint">
-                Se mostrará lista en formato Carta para revisar, editar o imprimir directo en tu Epson.
-              </p>
-            </section>
-          ) : (
-            <div className="minimal-canvas-shell">
-              <div className="minimal-canvas-topbar">
+        <div className="studio-desk">
+          <div className="studio-desk-inner">
+            {error && (
+              <div role="alert" className="ac-banner is-error">
+                <UiIcon name="alert" size={18} />
+                <span>{error}</span>
+                {!annexes.length && !initialLoading && (
+                  <button
+                    type="button"
+                    className="minimal-ghost-btn"
+                    disabled={busy !== null}
+                    onClick={() => {
+                      setInitialLoading(true);
+                      void loadAll();
+                    }}
+                  >
+                    Reintentar
+                  </button>
+                )}
+              </div>
+            )}
+            {notice && (
+              <div role="status" className="ac-banner is-success">
+                <UiIcon name="check" size={18} />
+                <span>{notice}</span>
+              </div>
+            )}
+
+            {initialLoading ? (
+              <section
+                className="glass-card empty-state-card minimal-empty-canvas"
+                role="status"
+                aria-live="polite"
+              >
+                <UiIcon name="worksheet" size={28} />
+                <h2>Cargando estudio de anexos…</h2>
+                <p className="field-hint">
+                  Recuperando tus fichas guardadas y configuración de impresora.
+                </p>
+              </section>
+            ) : !draft ? (
+              <section className="glass-card empty-state-card minimal-empty-canvas">
+                <UiIcon name="worksheet" size={28} />
+                <h2>Elige o genera una ficha</h2>
+                <p className="field-hint">
+                  Se mostrará lista en formato Carta para revisar, editar o imprimir directo en tu Epson.
+                </p>
+              </section>
+            ) : (
+              <div className="minimal-canvas-shell">
                 <div className="minimal-canvas-meta">
                   <span className="minimal-canvas-title">{draft.title}</span>
                   <span className="minimal-save-whisper" role="status">
                     {saveWhisper}
                   </span>
                 </div>
-                <div className="minimal-canvas-icons">
-                  <button
-                    type="button"
-                    className={`minimal-icon-btn ${studioMode === "edit" ? "is-active" : ""}`}
-                    aria-label={
-                      studioMode === "edit"
-                        ? "Volver a vista Carta"
-                        : "Editar ficha"
-                    }
-                    aria-pressed={studioMode === "edit"}
-                    title={
-                      studioMode === "edit"
-                        ? "Volver a vista Carta"
-                        : "Editar ficha"
-                    }
-                    onClick={() =>
-                      setStudioMode((prev) =>
-                        prev === "preview" ? "edit" : "preview",
-                      )
-                    }
+
+                {confirmDelete && (
+                  <div
+                    className="inline-confirm-bar"
+                    role="alertdialog"
+                    aria-label="Confirmar eliminación del anexo"
                   >
-                    <UiIcon name="edit" size={16} />
-                  </button>
-                  <a
-                    className="minimal-icon-btn"
-                    href={client.pdfUrl(draft.id, 1)}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label="Descargar PDF"
-                    title="Abrir PDF"
-                  >
-                    <UiIcon name="download" size={16} />
-                  </a>
-                  <button
-                    type="button"
-                    className="minimal-icon-btn is-danger"
-                    disabled={busy !== null}
-                    aria-label="Eliminar ficha"
-                    title="Eliminar ficha"
-                    onClick={() => setConfirmDelete((prev) => !prev)}
-                  >
-                    <UiIcon name="trash" size={16} />
-                  </button>
-                </div>
-              </div>
-
-              {confirmDelete && (
-                <div
-                  className="inline-confirm-bar"
-                  role="alertdialog"
-                  aria-label="Confirmar eliminación del anexo"
-                >
-                  <span>¿Eliminar esta ficha permanentemente?</span>
-                  <div className="annex-actions-bar">
-                    <button
-                      type="button"
-                      className="btn-danger-subtle btn-sm"
-                      disabled={busy !== null}
-                      onClick={() => void handleDelete()}
-                    >
-                      {busy === "deleting" ? "Eliminando…" : "Sí, eliminar"}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-sm"
-                      disabled={busy !== null}
-                      onClick={() => setConfirmDelete(false)}
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {studioMode === "preview" ? (
-                <LetterSheetPreview draft={draft} />
-              ) : (
-                <section
-                  className="annex-card minimal-editor-panel"
-                  aria-label="Editor de ficha"
-                >
-                  <div className="annex-field">
-                    <label htmlFor="edit-title">Título</label>
-                    <input
-                      id="edit-title"
-                      value={draft.title}
-                      onChange={(e) =>
-                        updateDraft((cur) => ({ ...cur, title: e.target.value }))
-                      }
-                    />
-                  </div>
-
-                  <div className="annex-pair">
-                    <div className="annex-field">
-                      <label htmlFor="edit-subject">Asignatura</label>
-                      <input
-                        id="edit-subject"
-                        value={draft.subject}
-                        onChange={(e) =>
-                          updateDraft((cur) => ({
-                            ...cur,
-                            subject: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                    <div className="annex-field">
-                      <label htmlFor="edit-grade">Grado</label>
-                      <input
-                        id="edit-grade"
-                        value={draft.grade}
-                        onChange={(e) =>
-                          updateDraft((cur) => ({ ...cur, grade: e.target.value }))
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div className="annex-field">
-                    <label htmlFor="edit-instructions">Instrucciones</label>
-                    <textarea
-                      id="edit-instructions"
-                      rows={2}
-                      value={draft.instructions}
-                      onChange={(e) =>
-                        updateDraft((cur) => ({
-                          ...cur,
-                          instructions: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-
-                  {draft.content.sections.map((section, sIdx) => (
-                    <div key={sIdx} className="annex-section-box">
-                      <div className="annex-section-top">
-                        <span className="annex-section-label">
-                          Sección {sIdx + 1}
-                        </span>
-                        {draft.content.sections.length > 1 && (
-                          <button
-                            type="button"
-                            className="btn-sm btn-ghost"
-                            onClick={() =>
-                              updateDraft((cur) => ({
-                                ...cur,
-                                content: {
-                                  ...cur.content,
-                                  sections: cur.content.sections.filter(
-                                    (_, i) => i !== sIdx,
-                                  ),
-                                },
-                              }))
-                            }
-                          >
-                            Quitar sección
-                          </button>
-                        )}
-                      </div>
-                      <input
-                        aria-label={`Título sección ${sIdx + 1}`}
-                        value={section.heading}
-                        onChange={(e) =>
-                          updateSection(sIdx, (sec) => ({
-                            ...sec,
-                            heading: e.target.value,
-                          }))
-                        }
-                      />
-                      <input
-                        aria-label={`Indicación sección ${sIdx + 1}`}
-                        placeholder="Indicación breve (opcional)"
-                        value={section.prompt}
-                        onChange={(e) =>
-                          updateSection(sIdx, (sec) => ({
-                            ...sec,
-                            prompt: e.target.value,
-                          }))
-                        }
-                      />
-
-                      {section.items.map((item, iIdx) => {
-                        const showDrawingHint =
-                          (item.kind === "question" ||
-                            item.kind === "exercise") &&
-                          needsDrawingBox(item.text);
-
-                        return (
-                          <div key={iIdx} className="annex-item-row">
-                            <div className="annex-item-controls">
-                              <select
-                                aria-label="Tipo de elemento"
-                                value={item.kind}
-                                onChange={(e) =>
-                                  updateItem(sIdx, iIdx, {
-                                    kind: e.target.value as AnnexItemKind,
-                                  })
-                                }
-                              >
-                                <option value="question">Pregunta</option>
-                                <option value="exercise">Ejercicio</option>
-                                <option value="reading">Lectura</option>
-                                <option value="checklist">Lista de cotejo</option>
-                              </select>
-
-                              <div
-                                className="lines-stepper"
-                                role="group"
-                                aria-label="Líneas para responder"
-                              >
-                                <span>Líneas</span>
-                                <div className="lines-stepper-controls">
-                                  <button
-                                    type="button"
-                                    aria-label="Menos líneas"
-                                    disabled={item.answer_lines <= 0}
-                                    onClick={() =>
-                                      updateItem(sIdx, iIdx, {
-                                        answer_lines: Math.max(
-                                          0,
-                                          item.answer_lines - 1,
-                                        ),
-                                      })
-                                    }
-                                  >
-                                    <UiIcon name="minus" size={14} />
-                                  </button>
-                                  <span className="ac-num">
-                                    {item.answer_lines}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    aria-label="Más líneas"
-                                    disabled={item.answer_lines >= 10}
-                                    onClick={() =>
-                                      updateItem(sIdx, iIdx, {
-                                        answer_lines: Math.min(
-                                          10,
-                                          item.answer_lines + 1,
-                                        ),
-                                      })
-                                    }
-                                  >
-                                    <UiIcon name="plus" size={14} />
-                                  </button>
-                                </div>
-                              </div>
-
-                              {showDrawingHint && (
-                                <span className="drawing-hint-pill">
-                                  Incluye recuadro de dibujo
-                                </span>
-                              )}
-
-                              {section.items.length > 1 && (
-                                <button
-                                  type="button"
-                                  className="btn-sm btn-ghost"
-                                  onClick={() => removeItem(sIdx, iIdx)}
-                                >
-                                  Quitar
-                                </button>
-                              )}
-                            </div>
-                            <textarea
-                              aria-label={`Texto elemento ${iIdx + 1} sección ${sIdx + 1}`}
-                              rows={2}
-                              value={item.text}
-                              onChange={(e) =>
-                                updateItem(sIdx, iIdx, { text: e.target.value })
-                              }
-                            />
-                          </div>
-                        );
-                      })}
-
+                    <span>¿Eliminar esta ficha permanentemente?</span>
+                    <div className="annex-actions-bar">
+                      <button
+                        type="button"
+                        className="btn-danger-subtle btn-sm"
+                        disabled={busy !== null}
+                        onClick={() => void handleDelete()}
+                      >
+                        {busy === "deleting" ? "Eliminando…" : "Sí, eliminar"}
+                      </button>
                       <button
                         type="button"
                         className="btn-sm"
-                        onClick={() => addItem(sIdx)}
+                        disabled={busy !== null}
+                        onClick={() => setConfirmDelete(false)}
                       >
-                        + Agregar actividad
+                        Cancelar
                       </button>
                     </div>
-                  ))}
-
-                  <div className="annex-actions-bar">
-                    <button
-                      type="button"
-                      className="btn-sm"
-                      onClick={addSection}
-                    >
-                      + Agregar sección
-                    </button>
                   </div>
-                </section>
-              )}
+                )}
 
-              <footer
-                className="minimal-print-dock"
-                aria-label="Barra de impresión"
-              >
-                {!settings?.printer_email ? (
-                  <div className="minimal-print-unconfigured">
-                    <span>
-                      Configura el correo de tu impresora Epson para imprimir desde aquí.
-                    </span>
-                    <button
-                      type="button"
-                      className="primary btn-sm"
-                      onClick={() => controller.navigate("printer")}
-                    >
-                      Configurar impresora
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <div className="minimal-print-dock-row">
-                      <div
-                        className="minimal-copies-pill"
-                        role="group"
-                        aria-label="Copias"
+                <LetterSheetPreview
+                  draft={draft}
+                  editing={studioMode === "edit"}
+                  handlers={{
+                    onUpdateDraft: updateDraft,
+                    onUpdateSection: updateSection,
+                    onUpdateItem: updateItem,
+                    onAddItem: addItem,
+                    onRemoveItem: removeItem,
+                    onAddSection: addSection,
+                  }}
+                />
+
+                <footer
+                  className="minimal-print-dock"
+                  aria-label="Barra de impresión"
+                >
+                  {!settings?.printer_email ? (
+                    <div className="minimal-print-unconfigured">
+                      <span>
+                        Configura el correo de tu impresora Epson para imprimir desde aquí.
+                      </span>
+                      <button
+                        type="button"
+                        className="btn-accent-pill"
+                        onClick={() => controller.navigate("printer")}
                       >
+                        Configurar impresora
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="minimal-print-dock-row">
+                        <div
+                          className="minimal-copies-pill"
+                          role="group"
+                          aria-label="Copias"
+                        >
+                          <button
+                            type="button"
+                            aria-label="Menos copias"
+                            disabled={copies <= 1 || busy !== null}
+                            onClick={() => setCopies((c) => Math.max(1, c - 1))}
+                          >
+                            <UiIcon name="minus" size={14} />
+                          </button>
+                          <input
+                            id="print-copies"
+                            type="number"
+                            aria-label="Número de copias"
+                            min={1}
+                            max={50}
+                            value={copies}
+                            onChange={(e) =>
+                              setCopies(
+                                Math.max(
+                                  1,
+                                  Math.min(50, Number(e.target.value) || 1),
+                                ),
+                              )
+                            }
+                          />
+                          <button
+                            type="button"
+                            aria-label="Más copias"
+                            disabled={copies >= 50 || busy !== null}
+                            onClick={() => setCopies((c) => Math.min(50, c + 1))}
+                          >
+                            <UiIcon name="plus" size={14} />
+                          </button>
+                        </div>
+
+                        <span className="dock-sep" aria-hidden="true" />
+
                         <button
                           type="button"
-                          aria-label="Menos copias"
-                          disabled={copies <= 1 || busy !== null}
-                          onClick={() => setCopies((c) => Math.max(1, c - 1))}
+                          className={`minimal-schedule-toggle ${printMode === "scheduled" ? "is-scheduled" : ""}`}
+                          aria-pressed={printMode === "scheduled"}
+                          onClick={() => {
+                            if (printMode === "now") {
+                              setScheduledLocal(quickScheduleDate(1, 6, 30));
+                              setPrintMode("scheduled");
+                            } else {
+                              setPrintMode("now");
+                            }
+                          }}
                         >
-                          <UiIcon name="minus" size={14} />
+                          <span>
+                            {printMode === "now" ? "Ahora" : "Mañana 6:30"}
+                          </span>
+                          <UiIcon name="chevron-down" size={13} />
                         </button>
-                        <input
-                          id="print-copies"
-                          type="number"
-                          aria-label="Número de copias"
-                          min={1}
-                          max={50}
-                          value={copies}
-                          onChange={(e) =>
-                            setCopies(
-                              Math.max(
-                                1,
-                                Math.min(50, Number(e.target.value) || 1),
-                              ),
-                            )
-                          }
-                        />
+
+                        {printMode === "scheduled" && (
+                          <input
+                            id="print-schedule"
+                            type="datetime-local"
+                            className="minimal-schedule-input"
+                            aria-label="Fecha y hora de impresión"
+                            value={scheduledLocal}
+                            onChange={(e) => setScheduledLocal(e.target.value)}
+                          />
+                        )}
+
+                        <span className="dock-sep" aria-hidden="true" />
+
                         <button
                           type="button"
-                          aria-label="Más copias"
-                          disabled={copies >= 50 || busy !== null}
-                          onClick={() => setCopies((c) => Math.min(50, c + 1))}
+                          className="btn-accent-pill"
+                          disabled={busy !== null}
+                          onClick={() => void handlePrint()}
                         >
-                          <UiIcon name="plus" size={14} />
+                          <UiIcon name="printer" size={15} />
+                          <span>
+                            {busy === "printing"
+                              ? "Enviando…"
+                              : printMode === "now"
+                                ? "Imprimir"
+                                : "Programar"}
+                          </span>
                         </button>
                       </div>
-
-                      <button
-                        type="button"
-                        className={`minimal-schedule-toggle ${printMode === "scheduled" ? "is-scheduled" : ""}`}
-                        aria-pressed={printMode === "scheduled"}
-                        onClick={() => {
-                          if (printMode === "now") {
-                            setScheduledLocal(quickScheduleDate(1, 6, 30));
-                            setPrintMode("scheduled");
-                          } else {
-                            setPrintMode("now");
-                          }
-                        }}
-                      >
-                        <span>
-                          {printMode === "now" ? "Ahora" : "Mañana 6:30"}
-                        </span>
-                        <UiIcon name="chevron-down" size={13} />
-                      </button>
-
-                      {printMode === "scheduled" && (
-                        <input
-                          id="print-schedule"
-                          type="datetime-local"
-                          className="minimal-schedule-input"
-                          aria-label="Fecha y hora de impresión"
-                          value={scheduledLocal}
-                          onChange={(e) => setScheduledLocal(e.target.value)}
-                        />
+                      {!settings.smtp_configured && (
+                        <p className="minimal-print-whisper" role="status">
+                          SMTP sin configurar en el servidor ({settings.printer_email}).
+                        </p>
                       )}
-
-                      <button
-                        type="button"
-                        className="primary minimal-print-submit"
-                        disabled={busy !== null}
-                        onClick={() => void handlePrint()}
-                      >
-                        <UiIcon name="printer" size={16} />
-                        {busy === "printing"
-                          ? "Enviando…"
-                          : printMode === "now"
-                            ? "Imprimir"
-                            : "Programar"}
-                      </button>
-                    </div>
-                    {!settings.smtp_configured && (
-                      <p className="minimal-print-whisper" role="status">
-                        SMTP sin configurar en el servidor ({settings.printer_email}).
-                      </p>
-                    )}
-                  </>
-                )}
-              </footer>
-            </div>
-          )}
+                    </>
+                  )}
+                </footer>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </section>

@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type FormEvent,
+} from "react";
 import type { AcentaController } from "./controller";
 import {
   AnnexPrintClient,
@@ -7,15 +13,13 @@ import {
   type PrintJob,
   type PrintSettings,
 } from "./annex-api";
-import { Logo, UiIcon, type UiIconName } from "./ui";
+import { UiIcon, type UiIconName } from "./ui";
 import "./annexes.css";
 
 type QueueFilter = "all" | "pending" | "sent" | "errors";
 
-const COPY_PRESETS = [1, 15, 25, 30] as const;
-
 const statusLabel: Record<PrintJob["status"], string> = {
-  pending: "Pendiente",
+  pending: "Programado",
   sending: "Enviando…",
   sent: "Enviado",
   failed: "Error",
@@ -28,13 +32,13 @@ const EMPTY_QUEUE_STATE: Record<
 > = {
   all: {
     icon: "printer",
-    title: "Cola sin envíos todavía",
-    copy: "Todavía no has enviado hojas a imprimir. Prueba con «Enviar hoja de prueba» o aprueba un anexo.",
+    title: "Sin envíos todavía",
+    copy: "Cuando imprimas una ficha desde Anexos o envíes una hoja de prueba, aparecerá aquí.",
   },
   pending: {
     icon: "clock",
-    title: "Sin pendientes",
-    copy: "No hay trabajos pendientes en este momento.",
+    title: "Sin envíos programados",
+    copy: "No hay trabajos pendientes en cola.",
   },
   sent: {
     icon: "check",
@@ -43,8 +47,8 @@ const EMPTY_QUEUE_STATE: Record<
   },
   errors: {
     icon: "check",
-    title: "Cola sin errores",
-    copy: "No hay errores en la cola. ¡Todo está al día!",
+    title: "Sin errores",
+    copy: "Todo está al día.",
   },
 };
 
@@ -64,54 +68,74 @@ function formatDateTime(iso: string): string {
 
 function matchesFilter(job: PrintJob, filter: QueueFilter): boolean {
   if (filter === "all") return true;
-  if (filter === "pending") return job.status === "pending" || job.status === "sending";
+  if (filter === "pending")
+    return job.status === "pending" || job.status === "sending";
   if (filter === "sent") return job.status === "sent";
   return job.status === "failed" || job.status === "cancelled";
 }
 
-export function PrintSettingsView({ controller }: { controller: AcentaController }) {
-  const client = useMemo(() => new AnnexPrintClient(controller.api), [controller.api]);
-  const [settings, setSettings] = useState<PrintSettings | null>(null);
-  const [printerEmail, setPrinterEmail] = useState("");
-  const [defaultCopies, setDefaultCopies] = useState(25);
-  const [defaultTime, setDefaultTime] = useState("06:30");
-  const [timezone, setTimezone] = useState("America/Mexico_City");
-  const [jobs, setJobs] = useState<PrintJob[]>([]);
+export function PrintSettingsView({
+  controller,
+  initialSettings,
+  initialJobs,
+}: {
+  controller: AcentaController;
+  initialSettings?: PrintSettings | null;
+  initialJobs?: PrintJob[];
+}) {
+  const client = useMemo(
+    () => new AnnexPrintClient(controller.api),
+    [controller.api],
+  );
+  useSyncExternalStore(controller.schools.subscribe, controller.schools.snapshot);
+  const activeSchool = controller.schools.getActiveSchool();
+
+  const [settings, setSettings] = useState<PrintSettings | null>(
+    initialSettings ?? null,
+  );
+  const [printerEmail, setPrinterEmail] = useState(
+    initialSettings?.printer_email ?? "",
+  );
+  const [defaultCopies, setDefaultCopies] = useState(
+    initialSettings?.default_copies ?? 25,
+  );
+  const [defaultTime, setDefaultTime] = useState(
+    initialSettings?.default_print_time ?? "06:30",
+  );
+  const [timezone, setTimezone] = useState(
+    initialSettings?.timezone ?? "America/Mexico_City",
+  );
+  const [jobs, setJobs] = useState<PrintJob[]>(initialJobs ?? []);
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("all");
+  const [initialLoading, setInitialLoading] = useState(
+    initialSettings === undefined && initialJobs === undefined,
+  );
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
+  const syncDot = (list: PrintJob[]) => {
+    controller.schools.setHasScheduledPrint(
+      list.some((job) => job.status === "pending" || job.status === "sending"),
+    );
+  };
+
   const pendingCount = jobs.filter(
     (j) => j.status === "pending" || j.status === "sending",
   ).length;
-  const sentCount = jobs.filter((j) => j.status === "sent").length;
   const failedCount = jobs.filter((j) => j.status === "failed").length;
-  const errorTabCount = jobs.filter(
-    (j) => j.status === "failed" || j.status === "cancelled",
-  ).length;
   const deletableCount = jobs.filter((j) => j.status !== "sending").length;
   const filteredJobs = jobs.filter((j) => matchesFilter(j, queueFilter));
 
   const isReady = Boolean(settings?.printer_email && settings?.smtp_configured);
-  const readinessLabel = isReady
-    ? "Lista para imprimir"
-    : settings?.smtp_configured
-      ? "Falta correo de impresora"
-      : "SMTP pendiente en servidor";
-  const readinessDescription = isReady
-    ? "Tu Epson L3250 está vinculada y lista para recibir anexos PDF por correo."
-    : settings?.smtp_configured
-      ? "Guarda la dirección @print.epsonconnect.com de tu impresora y envía una hoja de prueba."
-      : "El servidor todavía necesita configurar el envío de correo (SMTP) para imprimir automáticamente.";
-
-  const queueSummary =
-    pendingCount > 0 || failedCount > 0
-      ? `${pendingCount} ${pendingCount === 1 ? "pendiente" : "pendientes"} · ${failedCount} ${failedCount === 1 ? "error" : "errores"}`
-      : sentCount > 0
-        ? `${sentCount} ${sentCount === 1 ? "enviado" : "enviados"}`
-        : "Sin envíos aún";
+  const readinessLabel = initialLoading
+    ? "Cargando estado…"
+    : isReady
+      ? "Epson conectada"
+      : settings?.smtp_configured
+        ? "Falta correo Epson"
+        : "SMTP pendiente en servidor";
 
   const load = async () => {
     try {
@@ -125,15 +149,17 @@ export function PrintSettingsView({ controller }: { controller: AcentaController
       setDefaultTime(s.default_print_time);
       setTimezone(s.timezone);
       setJobs(list);
-      controller.schools.setHasScheduledPrint(
-        list.some((job) => job.status === "pending" || job.status === "sending"),
-      );
+      syncDot(list);
+      setError("");
     } catch (err) {
       setError(annexErrorMessage(err));
+    } finally {
+      setInitialLoading(false);
     }
   };
 
   useEffect(() => {
+    if (initialSettings !== undefined || initialJobs !== undefined) return;
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client]);
@@ -165,7 +191,7 @@ export function PrintSettingsView({ controller }: { controller: AcentaController
       setDefaultCopies(saved.default_copies);
       setDefaultTime(saved.default_print_time);
       setTimezone(saved.timezone);
-      setNotice("Configuración de impresora guardada.");
+      setNotice("Configuración guardada.");
     } catch (err) {
       setError(annexErrorMessage(err));
     } finally {
@@ -179,9 +205,13 @@ export function PrintSettingsView({ controller }: { controller: AcentaController
     setNotice("");
     try {
       const job = await client.sendTestPage(printerEmail.trim() || null);
-      setJobs((prev) => [job, ...prev]);
+      setJobs((prev) => {
+        const next = [job, ...prev];
+        syncDot(next);
+        return next;
+      });
       if (job.status === "sent") {
-        setNotice(`Hoja de prueba enviada a ${job.printer_email}. Revisa tu Epson L3250.`);
+        setNotice(`Hoja de prueba enviada a ${job.printer_email}.`);
       } else {
         setError(humanizePrintError(job.last_error));
       }
@@ -198,7 +228,11 @@ export function PrintSettingsView({ controller }: { controller: AcentaController
     setNotice("");
     try {
       const updated = await client.cancelPrintJob(jobId);
-      setJobs((prev) => prev.map((j) => (j.id === jobId ? updated : j)));
+      setJobs((prev) => {
+        const next = prev.map((j) => (j.id === jobId ? updated : j));
+        syncDot(next);
+        return next;
+      });
       setNotice("Envío programado cancelado.");
     } catch (err) {
       setError(annexErrorMessage(err));
@@ -213,7 +247,11 @@ export function PrintSettingsView({ controller }: { controller: AcentaController
     setNotice("");
     try {
       const updated = await client.retryPrintJob(jobId);
-      setJobs((prev) => prev.map((j) => (j.id === jobId ? updated : j)));
+      setJobs((prev) => {
+        const next = prev.map((j) => (j.id === jobId ? updated : j));
+        syncDot(next);
+        return next;
+      });
       if (updated.status === "sent") {
         setNotice(`Trabajo reenviado a ${updated.printer_email}.`);
       } else {
@@ -232,8 +270,12 @@ export function PrintSettingsView({ controller }: { controller: AcentaController
     setNotice("");
     try {
       await client.deletePrintJob(jobId);
-      setJobs((prev) => prev.filter((j) => j.id !== jobId));
-      setNotice("Trabajo eliminado de la cola.");
+      setJobs((prev) => {
+        const next = prev.filter((j) => j.id !== jobId);
+        syncDot(next);
+        return next;
+      });
+      setNotice("Trabajo eliminado.");
     } catch (err) {
       setError(annexErrorMessage(err));
     } finally {
@@ -258,8 +300,8 @@ export function PrintSettingsView({ controller }: { controller: AcentaController
       } else {
         setNotice(
           status === "failed"
-            ? `Se limpiaron ${result.deleted} ${result.deleted === 1 ? "error" : "errores"} de la cola.`
-            : `Cola vaciada (${result.deleted} ${result.deleted === 1 ? "trabajo eliminado" : "trabajos eliminados"}).`,
+            ? `Se limpiaron ${result.deleted} ${result.deleted === 1 ? "error" : "errores"}.`
+            : `Cola vaciada (${result.deleted} ${result.deleted === 1 ? "trabajo" : "trabajos"}).`,
         );
       }
     } catch (err) {
@@ -269,120 +311,127 @@ export function PrintSettingsView({ controller }: { controller: AcentaController
     }
   };
 
-  const filterTabs: { id: QueueFilter; label: string; count: number }[] = [
-    { id: "all", label: "Todos", count: jobs.length },
-    { id: "pending", label: "Pendientes", count: pendingCount },
-    { id: "sent", label: "Enviados", count: sentCount },
-    { id: "errors", label: "Errores", count: errorTabCount },
+  const filterTabs: { id: QueueFilter; label: string }[] = [
+    { id: "all", label: "Todos" },
+    { id: "pending", label: "Programados" },
+    { id: "sent", label: "Enviados" },
+    { id: "errors", label: "Errores" },
   ];
 
   return (
-    <section className="printer-page">
-      <header className="studio-header">
-        <div className="studio-header-title">
-          <Logo />
-          <h1>Impresora Epson (Email Print)</h1>
-          <p className="field-hint">
-            Vincula tu Epson L3250, envía una hoja de prueba y supervisa tus envíos a impresión.
-          </p>
-        </div>
-        <div className="studio-header-actions">
-          <button
-            type="button"
-            className="primary"
-            onClick={() => controller.navigate("annexes")}
-          >
-            <UiIcon name="worksheet" size={18} />
-            <span>Ir a Anexos</span>
-          </button>
-          <button type="button" onClick={() => controller.navigate("home")}>
-            Volver al inicio
-          </button>
-        </div>
-      </header>
-
-      {error && (
-        <div role="alert" className="ac-banner is-error">
-          <UiIcon name="alert" size={18} />
-          <span>{error}</span>
-        </div>
-      )}
-      {notice && (
-        <div role="status" className="ac-banner is-success">
-          <UiIcon name="check" size={18} />
-          <span>{notice}</span>
-        </div>
-      )}
-
-      <section
-        className={`printer-hero ${isReady ? "is-ready" : "is-warning"}`}
-        aria-label="Estado de la impresora"
-      >
-        <div className="printer-hero-head">
-          <span className={`ac-badge ${isReady ? "ready" : "pending"}`}>
-            {readinessLabel}
-          </span>
-          <p className="printer-hero-copy">{readinessDescription}</p>
-        </div>
-        <div className="printer-metrics">
-          <div className="printer-metric">
-            <span className="printer-metric-label">CORREO EPSON</span>
-            <strong className="printer-metric-value">
-              {settings?.printer_email || "Sin configurar"}
-            </strong>
+    <section className="printer-view minimal-printer-page">
+      <div className="printer-inner">
+        <header className="page-header">
+          <div>
+            <p className="minimal-studio-kicker minimal-printer-kicker">
+              <span>
+                {activeSchool.shortName} · {activeSchool.grade}
+              </span>
+              <span className="minimal-kicker-sep" aria-hidden="true">
+                ·
+              </span>
+              <span
+                className={`minimal-status-dot ${isReady ? "is-ready" : "is-pending"}`}
+                aria-hidden="true"
+              />
+              <span>{readinessLabel}</span>
+            </p>
+            <h1>Impresora</h1>
           </div>
-          <div className="printer-metric">
-            <span className="printer-metric-label">AJUSTES POR DEFECTO</span>
-            <strong className="printer-metric-value ac-num">
-              {defaultCopies} {defaultCopies === 1 ? "copia" : "copias"} · {defaultTime}
-            </strong>
+          <div className="topbar-right">
+            <button
+              type="button"
+              className="glass-btn-sm"
+              onClick={() => controller.navigate("annexes")}
+            >
+              <UiIcon name="worksheet" size={14} />
+              <span>Anexos</span>
+            </button>
+            <button
+              type="button"
+              className="minimal-ghost-btn"
+              onClick={() => controller.navigate("home")}
+            >
+              Volver al chat
+            </button>
           </div>
-          <div className="printer-metric">
-            <span className="printer-metric-label">COLA DE IMPRESIÓN</span>
-            <strong className="printer-metric-value ac-num">{queueSummary}</strong>
-          </div>
-        </div>
-      </section>
+        </header>
 
-      <div className="printer-grid">
-        <form className="annex-card" onSubmit={(e) => void handleSave(e)}>
-          <div className="annex-card-header">
-            <h2 className="annex-card-title">
-              <UiIcon name="printer" size={18} />
-              <span>Configuración Epson L3250</span>
-            </h2>
-            <span className={`ac-badge ${settings?.smtp_configured ? "ready" : "pending"}`}>
-              {settings?.smtp_configured ? "SMTP activo" : "SMTP pendiente en servidor"}
-            </span>
+        {error && (
+          <div role="alert" className="ac-banner is-error">
+            <UiIcon name="alert" size={18} />
+            <span>{error}</span>
+            {!settings && !initialLoading && (
+              <button
+                type="button"
+                className="minimal-ghost-btn"
+                disabled={busy !== null}
+                onClick={() => void handleRefresh()}
+              >
+                Reintentar
+              </button>
+            )}
+          </div>
+        )}
+        {notice && (
+          <div role="status" className="ac-banner is-success">
+            <UiIcon name="check" size={18} />
+            <span>{notice}</span>
+          </div>
+        )}
+
+        <form
+          className="glass-card minimal-printer-card"
+          onSubmit={(e) => void handleSave(e)}
+        >
+          <div className="printer-summary-row">
+            <div className="printer-id">
+              <div className="printer-icon-badge" aria-hidden="true">
+                <UiIcon name="printer" size={20} />
+              </div>
+              <div>
+                <h2>Epson Email Print</h2>
+                <p className="minimal-save-whisper">
+                  {settings?.smtp_configured ? "SMTP listo" : "SMTP pendiente"}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="glass-btn-sm"
+              disabled={busy !== null || !printerEmail.trim()}
+              onClick={() => void handleTestPage()}
+            >
+              <UiIcon name="printer" size={14} />
+              <span>{busy === "test" ? "Enviando…" : "Hoja de prueba"}</span>
+            </button>
           </div>
 
           <div className="annex-field">
-            <label htmlFor="printer-email">Correo de Epson Email Print</label>
+            <label htmlFor="printer-email">Correo de tu impresora</label>
             <input
               id="printer-email"
               type="email"
               value={printerEmail}
               onChange={(e) => setPrinterEmail(e.target.value)}
-              placeholder="ej. mi-impresora@print.epsonconnect.com"
+              placeholder="mi-impresora@print.epsonconnect.com"
               autoComplete="email"
             />
-            <p className="field-hint">
-              Los anexos aprobados se enviarán como PDF adjunto a esta dirección.
-            </p>
           </div>
 
-          <div className="annex-field">
-            <label htmlFor="default-copies">Copias por defecto (alumnos)</label>
-            <div className="copy-control-row">
-              <div className="copy-stepper">
+          <div className="minimal-printer-defaults">
+            <div className="annex-field">
+              <label htmlFor="default-copies">Copias por defecto</label>
+              <div className="minimal-copies-pill">
                 <button
                   type="button"
-                  className="btn-icon"
                   aria-label="Menos copias"
                   disabled={defaultCopies <= 1}
-                  onClick={() => setDefaultCopies((prev) => clampCopies(prev - 1))}
+                  onClick={() =>
+                    setDefaultCopies((prev) => clampCopies(prev - 1))
+                  }
                 >
-                  <UiIcon name="minus" size={16} />
+                  <UiIcon name="minus" size={14} />
                 </button>
                 <input
                   id="default-copies"
@@ -390,37 +439,25 @@ export function PrintSettingsView({ controller }: { controller: AcentaController
                   min={1}
                   max={50}
                   value={defaultCopies}
-                  onChange={(e) => setDefaultCopies(clampCopies(Number(e.target.value)))}
+                  onChange={(e) =>
+                    setDefaultCopies(clampCopies(Number(e.target.value)))
+                  }
                 />
                 <button
                   type="button"
-                  className="btn-icon"
                   aria-label="Más copias"
                   disabled={defaultCopies >= 50}
-                  onClick={() => setDefaultCopies((prev) => clampCopies(prev + 1))}
+                  onClick={() =>
+                    setDefaultCopies((prev) => clampCopies(prev + 1))
+                  }
                 >
-                  <UiIcon name="plus" size={16} />
+                  <UiIcon name="plus" size={14} />
                 </button>
               </div>
-              <div className="copy-presets" role="group" aria-label="Copias rápidas por grupo">
-                {COPY_PRESETS.map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    className={`copy-preset-btn ac-num${defaultCopies === preset ? " is-active" : ""}`}
-                    aria-pressed={defaultCopies === preset}
-                    onClick={() => setDefaultCopies(preset)}
-                  >
-                    {preset}
-                  </button>
-                ))}
-              </div>
             </div>
-          </div>
 
-          <div className="annex-pair">
             <div className="annex-field">
-              <label htmlFor="default-time">Hora sugerida de impresión</label>
+              <label htmlFor="default-time">Hora programada</label>
               <input
                 id="default-time"
                 type="time"
@@ -428,6 +465,7 @@ export function PrintSettingsView({ controller }: { controller: AcentaController
                 onChange={(e) => setDefaultTime(e.target.value)}
               />
             </div>
+
             <div className="annex-field">
               <label htmlFor="printer-tz">Zona horaria</label>
               <select
@@ -435,7 +473,9 @@ export function PrintSettingsView({ controller }: { controller: AcentaController
                 value={timezone}
                 onChange={(e) => setTimezone(e.target.value)}
               >
-                <option value="America/Mexico_City">Ciudad de México / Centro</option>
+                <option value="America/Mexico_City">
+                  Ciudad de México / Centro
+                </option>
                 <option value="America/Cancun">Cancún / Sureste</option>
                 <option value="America/Monterrey">Monterrey</option>
                 <option value="America/Hermosillo">Sonora / Pacífico</option>
@@ -444,77 +484,83 @@ export function PrintSettingsView({ controller }: { controller: AcentaController
             </div>
           </div>
 
-          <details className="printer-guide">
+          <details className="printer-guide minimal-printer-guide">
             <summary>
-              <UiIcon name="chevron-down" size={16} />
-              <span>¿Cómo encuentro el correo de mi Epson L3250?</span>
+              <UiIcon name="chevron-down" size={15} />
+              <span>Cómo encontrar el correo Epson</span>
             </summary>
             <ol className="printer-guide-steps">
               <li>
-                En <strong>Epson Connect</strong>, activa <strong>Email Print</strong> y copia la
-                dirección <code>@print.epsonconnect.com</code>.
+                En <strong>Epson Connect</strong>, activa{" "}
+                <strong>Email Print</strong> y copia tu dirección{" "}
+                <code>@print.epsonconnect.com</code>.
               </li>
               <li>
-                En <strong>Lista de remitentes aprobados</strong>, agrega tu correo remitente SMTP
-                (el mismo configurado en el servidor).
+                Agrega tu remitente SMTP en la lista de remitentes aprobados.
               </li>
               <li>
-                Desactiva <strong>Imprimir el cuerpo del correo</strong> para que solo salga el
-                anexo PDF limpio.
+                Desactiva <strong>Imprimir el cuerpo del correo</strong> para
+                que salga solo la ficha PDF.
               </li>
             </ol>
           </details>
 
-          <div className="annex-actions-bar">
-            <button type="submit" className="primary" disabled={busy !== null}>
-              {busy === "saving" ? "Guardando…" : "Guardar configuración"}
-            </button>
+          <div className="minimal-printer-actions">
             <button
-              type="button"
-              disabled={busy !== null || !printerEmail.trim()}
-              onClick={() => void handleTestPage()}
+              type="submit"
+              className="btn-accent-pill"
+              disabled={busy !== null}
             >
-              <UiIcon name="printer" size={18} />
-              <span>{busy === "test" ? "Enviando prueba…" : "Enviar hoja de prueba"}</span>
+              {busy === "saving" ? "Guardando…" : "Guardar"}
             </button>
           </div>
         </form>
 
-        <section className="annex-card" aria-label="Cola de impresión">
-          <div className="annex-card-header">
-            <h2 className="annex-card-title">
-              <span>Cola de impresión</span>
-              <span className="ac-num">({jobs.length})</span>
-            </h2>
-            <div className="annex-actions-bar">
+        <section
+          className="glass-card minimal-queue-panel"
+          aria-label="Cola de impresión"
+        >
+          <div className="minimal-queue-header">
+            <div className="minimal-queue-title">
+              <h2>Cola de impresión</h2>
+              {pendingCount > 0 && (
+                <span className="minimal-save-whisper">
+                  {pendingCount}{" "}
+                  {pendingCount === 1 ? "programado" : "programados"}
+                </span>
+              )}
+            </div>
+            <div className="minimal-canvas-icons">
               <button
                 type="button"
-                className="btn-sm"
+                className="minimal-icon-btn"
+                aria-label="Actualizar cola"
+                title="Actualizar cola"
                 disabled={busy !== null}
                 onClick={() => void handleRefresh()}
               >
                 <UiIcon name="refresh" size={16} />
-                <span>{busy === "refresh" ? "Actualizando…" : "Actualizar"}</span>
               </button>
               {failedCount > 0 && (
                 <button
                   type="button"
-                  className="btn-sm"
+                  className="minimal-ghost-btn"
                   disabled={busy !== null}
                   onClick={() => void handleClearQueue("failed")}
                 >
-                  {busy === "clear-failed" ? "Limpiando…" : `Limpiar errores (${failedCount})`}
+                  {busy === "clear-failed" ? "Limpiando…" : "Limpiar errores"}
                 </button>
               )}
               {deletableCount > 0 && !confirmClear && (
                 <button
                   type="button"
-                  className="btn-danger-subtle btn-sm"
+                  className="minimal-icon-btn is-danger"
+                  aria-label="Vaciar cola"
+                  title="Vaciar cola"
                   disabled={busy !== null}
                   onClick={() => setConfirmClear(true)}
                 >
-                  <UiIcon name="trash" size={15} />
-                  <span>Vaciar cola</span>
+                  <UiIcon name="trash" size={16} />
                 </button>
               )}
             </div>
@@ -526,25 +572,21 @@ export function PrintSettingsView({ controller }: { controller: AcentaController
               role="region"
               aria-label="Confirmar vaciado de cola"
             >
-              <p>
-                <strong>
-                  ¿Eliminar{" "}
-                  {deletableCount === 1
-                    ? "el trabajo"
-                    : `los ${deletableCount} trabajos`}{" "}
-                  de la cola?
-                </strong>{" "}
-                Se borrarán el historial y los envíos pendientes (los envíos en curso no se
-                interrumpen).
-              </p>
+              <span>
+                ¿Vaciar{" "}
+                {deletableCount === 1
+                  ? "el trabajo"
+                  : `los ${deletableCount} trabajos`}{" "}
+                de la cola?
+              </span>
               <div className="annex-actions-bar">
                 <button
                   type="button"
-                  className="primary btn-sm"
+                  className="btn-danger-subtle btn-sm"
                   disabled={busy !== null}
                   onClick={() => void handleClearQueue("all")}
                 >
-                  {busy === "clear-all" ? "Vaciando…" : "Sí, vaciar cola"}
+                  {busy === "clear-all" ? "Vaciando…" : "Sí, vaciar"}
                 </button>
                 <button
                   type="button"
@@ -559,7 +601,7 @@ export function PrintSettingsView({ controller }: { controller: AcentaController
           )}
 
           <div
-            className="filter-pills"
+            className="segmented-glass minimal-queue-tabs"
             role="tablist"
             aria-label="Filtrar cola de impresión"
           >
@@ -569,71 +611,61 @@ export function PrintSettingsView({ controller }: { controller: AcentaController
                 type="button"
                 role="tab"
                 aria-selected={queueFilter === tab.id}
-                className={`filter-pill${queueFilter === tab.id ? " is-active" : ""}`}
+                className={queueFilter === tab.id ? "active" : ""}
                 onClick={() => setQueueFilter(tab.id)}
               >
-                <span>{tab.label}</span>
-                <span className="filter-pill-count ac-num">{tab.count}</span>
+                {tab.label}
               </button>
             ))}
           </div>
 
-          {!filteredJobs.length ? (
-            <div className="empty-state-card">
-              <UiIcon name={EMPTY_QUEUE_STATE[queueFilter].icon} size={28} />
+          {initialLoading ? (
+            <div className="minimal-queue-empty" role="status" aria-live="polite">
+              <UiIcon name="printer" size={22} />
+              <h3>Cargando cola de impresión…</h3>
+              <p>Recuperando la configuración de Epson y los envíos recientes.</p>
+            </div>
+          ) : !filteredJobs.length ? (
+            <div className="minimal-queue-empty">
+              <UiIcon name={EMPTY_QUEUE_STATE[queueFilter].icon} size={22} />
               <h3>{EMPTY_QUEUE_STATE[queueFilter].title}</h3>
               <p>{EMPTY_QUEUE_STATE[queueFilter].copy}</p>
             </div>
           ) : (
-            <div className="print-jobs-list">
+            <ul className="minimal-queue-list">
               {filteredJobs.map((job) => (
-                <article key={job.id} className="print-job-row">
-                  <div className="print-job-top">
-                    <div className="print-job-title-row">
+                <li key={job.id} className="minimal-queue-row">
+                  <div className="minimal-queue-row-main">
+                    <div className="minimal-queue-row-title">
+                      <span
+                        className={`minimal-job-dot is-${job.status}`}
+                        aria-hidden="true"
+                      />
                       <strong>{job.annex_title}</strong>
-                      <span className="print-job-copies ac-num">
+                    </div>
+                    <p className="minimal-queue-row-meta">
+                      <span>
                         {job.copies} {job.copies === 1 ? "copia" : "copias"}
                       </span>
-                    </div>
-                    <span className={`ac-badge ${job.status}`}>
-                      {statusLabel[job.status]}
-                    </span>
-                  </div>
-
-                  <div className="print-job-meta">
-                    <span>Destino: {job.printer_email}</span>
-                    <span>
-                      Programado:{" "}
-                      <time dateTime={job.scheduled_for}>
-                        {formatDateTime(job.scheduled_for)}
+                      <span aria-hidden="true">·</span>
+                      <span>{statusLabel[job.status]}</span>
+                      <span aria-hidden="true">·</span>
+                      <time dateTime={job.sent_at ?? job.scheduled_for}>
+                        {formatDateTime(job.sent_at ?? job.scheduled_for)}
                       </time>
-                    </span>
-                    {job.sent_at && (
-                      <span>
-                        Enviado:{" "}
-                        <time dateTime={job.sent_at}>
-                          {formatDateTime(job.sent_at)}
-                        </time>
-                      </span>
-                    )}
-                    {job.attempts > 1 && (
-                      <span className="ac-num">Intentos: {job.attempts}</span>
+                    </p>
+                    {(job.status === "failed" ||
+                      (job.status !== "sent" && Boolean(job.last_error))) && (
+                      <p className="minimal-queue-row-error" role="alert">
+                        {humanizePrintError(job.last_error)}
+                      </p>
                     )}
                   </div>
-
-                  {(job.status === "failed" ||
-                    (job.status !== "sent" && Boolean(job.last_error))) && (
-                    <div className="print-job-error">
-                      <UiIcon name="alert" size={16} />
-                      <span>{humanizePrintError(job.last_error)}</span>
-                    </div>
-                  )}
-
-                  <div className="print-job-actions">
+                  <div className="minimal-queue-row-actions">
                     {job.status === "pending" && (
                       <button
                         type="button"
-                        className="btn-sm"
+                        className="minimal-ghost-btn"
                         disabled={busy !== null}
                         onClick={() => void handleCancel(job.id)}
                       >
@@ -643,30 +675,29 @@ export function PrintSettingsView({ controller }: { controller: AcentaController
                     {job.status === "failed" && (
                       <button
                         type="button"
-                        className="btn-sm"
+                        className="minimal-ghost-btn"
                         disabled={busy !== null}
                         onClick={() => void handleRetry(job.id)}
                       >
-                        <UiIcon name="refresh" size={15} />
-                        <span>Reintentar</span>
+                        Reintentar
                       </button>
                     )}
                     {job.status !== "sending" && (
                       <button
                         type="button"
-                        className="btn-danger-subtle btn-sm"
+                        className="minimal-icon-btn is-danger"
                         aria-label={`Eliminar trabajo ${job.annex_title}`}
+                        title="Eliminar"
                         disabled={busy !== null}
                         onClick={() => void handleDeleteJob(job.id)}
                       >
                         <UiIcon name="trash" size={15} />
-                        <span>Eliminar</span>
                       </button>
                     )}
                   </div>
-                </article>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
         </section>
       </div>
