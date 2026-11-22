@@ -7,6 +7,23 @@ import {
   type CitedWebResult,
   type TeacherDocumentItem,
 } from "./documents-api";
+import {
+  ArrowRightIcon,
+  BookOpenIcon,
+  CalendarPlanIcon,
+  CameraBookIcon,
+  ClipboardGuideIcon,
+  CompassNemIcon,
+  DocumentToWorksheetIllustration,
+  EmptyLibraryIllustration,
+  FolderStackIcon,
+  GlobeVerifiedIcon,
+  PlaneacionDropIllustration,
+  ScanDocIcon,
+  ShieldLockIcon,
+  SparklesIcon,
+  UploadArrowIcon,
+} from "./StudioVisuals";
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -364,25 +381,11 @@ export function DocumentsView({
           onChange={(e) => void handleFileChange(e)}
         />
 
-        <div className="docs-dropzone-icon" aria-hidden="true">
-          <svg
-            width="30"
-            height="30"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.9"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M12 16V4" />
-            <path d="m7 9 5-5 5 5" />
-            <path d="M20 16.5v2a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-2" />
-          </svg>
-        </div>
+        <PlaneacionDropIllustration />
 
         <div className="docs-dropzone-copy">
           <span className="docs-dropzone-kicker">
+            <SparklesIcon size={13} />
             {dragging
               ? "Suelta para subir ahora"
               : "Arrastra y suelta aquí tus archivos"}
@@ -401,11 +404,26 @@ export function DocumentsView({
           </p>
 
           <div className="docs-examples-row" aria-label="Ejemplos de archivos recomendados">
-            <span className="docs-example-chip">Planeación semanal</span>
-            <span className="docs-example-chip">Programa analítico (NEM)</span>
-            <span className="docs-example-chip">Dosificación / Guía docente</span>
-            <span className="docs-example-chip">Lecturas y cuadernillos</span>
-            <span className="docs-example-chip">Fotos del libro de texto</span>
+            <span className="docs-example-chip">
+              <CalendarPlanIcon size={14} className="docs-chip-icon is-sage" />
+              Planeación semanal
+            </span>
+            <span className="docs-example-chip">
+              <CompassNemIcon size={14} className="docs-chip-icon is-clay" />
+              Programa analítico (NEM)
+            </span>
+            <span className="docs-example-chip">
+              <ClipboardGuideIcon size={14} className="docs-chip-icon is-sage" />
+              Dosificación / Guía docente
+            </span>
+            <span className="docs-example-chip">
+              <BookOpenIcon size={14} className="docs-chip-icon is-ochre" />
+              Lecturas y cuadernillos
+            </span>
+            <span className="docs-example-chip">
+              <CameraBookIcon size={14} className="docs-chip-icon is-clay" />
+              Fotos del libro de texto
+            </span>
           </div>
         </div>
 
@@ -419,24 +437,76 @@ export function DocumentsView({
               fileInputRef.current?.click();
             }}
           >
-            {busy === "uploading" ? "Procesando archivo…" : "Elegir planeación o archivo"}
+            <UploadArrowIcon size={16} />
+            <span>
+              {busy === "uploading" ? "Procesando archivo…" : "Elegir planeación o archivo"}
+            </span>
           </button>
           <div className="docs-format-pills" aria-label="Formatos permitidos">
             <span className="docs-format-pill">PDF</span>
             <span className="docs-format-pill">Word (DOCX)</span>
             <span className="docs-format-pill">PNG / JPG</span>
-            <span className="docs-format-meta">Máx. 10 MB · Purga irreversible</span>
+            <span className="docs-format-meta docs-privacy-note">
+              <ShieldLockIcon size={13} />
+              Máx. 10 MB · Purga irreversible
+            </span>
           </div>
         </div>
       </div>
+
+      {/* 3-step visual flow guide */}
+      <ol className="docs-steps-strip" aria-label="Cómo funciona en tres pasos">
+        <li className="docs-step-card">
+          <span className="docs-step-medallion is-clay">
+            <UploadArrowIcon size={17} />
+          </span>
+          <div className="docs-step-copy">
+            <span className="docs-step-num">Paso 1</span>
+            <strong>Sube tu planeación</strong>
+            <span>PDF, Word o foto nítida de tu libro</span>
+          </div>
+        </li>
+        <li className="docs-step-arrow" aria-hidden="true">
+          <ArrowRightIcon size={16} />
+        </li>
+        <li className="docs-step-card">
+          <span className="docs-step-medallion is-sage">
+            <ScanDocIcon size={17} />
+          </span>
+          <div className="docs-step-copy">
+            <span className="docs-step-num">Paso 2</span>
+            <strong>Extraemos el texto</strong>
+            <span>OCR seguro en proceso aislado</span>
+          </div>
+        </li>
+        <li className="docs-step-arrow" aria-hidden="true">
+          <ArrowRightIcon size={16} />
+        </li>
+        <li className="docs-step-card">
+          <span className="docs-step-medallion is-ochre">
+            <SparklesIcon size={17} />
+          </span>
+          <div className="docs-step-copy">
+            <span className="docs-step-num">Paso 3</span>
+            <strong>Crea fichas listas</strong>
+            <span>Actividades editables para {subject.name}</span>
+          </div>
+        </li>
+      </ol>
 
       {/* Main 2-column studio workspace */}
       <div className="docs-workspace">
         <article className="docs-card docs-list-panel">
           <div className="docs-card-head">
-            <h2>
-              Tus planeaciones y archivos <span className="docs-count-badge">{activeCount}</span>
-            </h2>
+            <div className="docs-card-title-row">
+              <span className="docs-section-medallion is-clay">
+                <FolderStackIcon size={16} />
+              </span>
+              <h2>
+                Tus planeaciones y archivos{" "}
+                <span className="docs-count-badge">{activeCount}</span>
+              </h2>
+            </div>
             {revokedCount > 0 && (
               <label className="docs-toggle-revoked">
                 <input
@@ -464,11 +534,28 @@ export function DocumentsView({
             <p className="support-muted">Cargando documentos…</p>
           ) : visibleDocs.length === 0 ? (
             <div className="docs-empty-state">
+              <EmptyLibraryIllustration />
+              <strong className="docs-empty-title">
+                {docs.length === 0
+                  ? "Tu biblioteca está lista"
+                  : "Sin coincidencias"}
+              </strong>
               <p className="support-muted">
                 {docs.length === 0
-                  ? "Aún no has subido ninguna planeación o lectura. Arrastra un archivo al recuadro grande de arriba para empezar."
+                  ? "Arrastra una planeación, dosificación o lectura al recuadro de arriba para empezar."
                   : "No hay documentos que coincidan con tu filtro."}
               </p>
+              {docs.length === 0 && (
+                <button
+                  type="button"
+                  className="support-btn-secondary docs-inline-upload-btn"
+                  disabled={busy !== null}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <UploadArrowIcon size={14} />
+                  Subir mi primera planeación
+                </button>
+              )}
             </div>
           ) : (
             <ul className="docs-list">
@@ -506,12 +593,19 @@ export function DocumentsView({
         <article className="docs-card docs-detail-panel">
           {!selected ? (
             <div className="docs-empty-detail">
+              <DocumentToWorksheetIllustration />
               <h2>Texto extraído y creación de fichas</h2>
               <p className="support-muted">
-                Selecciona un documento de tu biblioteca (o sube uno nuevo) para
-                revisar su texto extraído, copiarlo o convertirlo en una actividad
+                Selecciona una planeación de tu biblioteca (o sube una nueva) para
+                revisar su texto extraído, copiarlo o transformarlo en una actividad
                 editable para <strong>{subject.name}</strong> ({school.grade}).
               </p>
+              <div className="docs-preview-outputs" aria-label="Materiales que puedes generar">
+                <span className="docs-output-pill">Comprensión lectora</span>
+                <span className="docs-output-pill">Lectura fácil</span>
+                <span className="docs-output-pill">Sopa de letras</span>
+                <span className="docs-output-pill">Rúbrica y cotejo</span>
+              </div>
             </div>
           ) : selected.status === "revoked" ? (
             <div className="docs-empty-detail">
@@ -604,7 +698,10 @@ export function DocumentsView({
 
                   <div className="docs-derive-box">
                     <div className="docs-derive-head">
-                      <strong>Convertir en material editable</strong>
+                      <strong>
+                        <SparklesIcon size={15} className="docs-inline-icon" />
+                        Convertir en material editable
+                      </strong>
                       <span className="docs-context-pill">
                         {school.shortName} · {school.grade} · {subject.name}
                       </span>
@@ -638,13 +735,16 @@ export function DocumentsView({
                     </div>
                     <button
                       type="button"
-                      className="support-btn-primary"
+                      className="support-btn-primary docs-dropzone-btn"
                       disabled={busy !== null}
                       onClick={() => void handleGenerateAnnex()}
                     >
-                      {busy === "generating"
-                        ? "Creando ficha en Anexos…"
-                        : "Crear ficha editable en Anexos"}
+                      <SparklesIcon size={15} />
+                      <span>
+                        {busy === "generating"
+                          ? "Creando ficha en Anexos…"
+                          : "Crear ficha editable en Anexos"}
+                      </span>
                     </button>
                   </div>
                 </>
@@ -662,13 +762,22 @@ export function DocumentsView({
       {/* Cited web search */}
       <article className="docs-card docs-search-card">
         <div className="docs-card-head">
-          <div>
-            <h2>Búsqueda web con citas verificables</h2>
-            <p className="support-muted" style={{ margin: "2px 0 0", fontSize: 12.5 }}>
-              Devuelve únicamente enlaces HTTPS verificables con fecha de consulta para
-              respaldar tus planeaciones.
-            </p>
+          <div className="docs-card-title-row">
+            <span className="docs-section-medallion is-sage">
+              <GlobeVerifiedIcon size={17} />
+            </span>
+            <div>
+              <h2>Búsqueda web con citas verificables</h2>
+              <p className="support-muted" style={{ margin: "2px 0 0", fontSize: 12.5 }}>
+                Devuelve únicamente enlaces HTTPS verificables con fecha de consulta para
+                respaldar tus planeaciones.
+              </p>
+            </div>
           </div>
+          <span className="docs-verified-pill">
+            <ShieldLockIcon size={13} />
+            Solo fuentes HTTPS
+          </span>
         </div>
         <form
           className="docs-search-form"
@@ -689,6 +798,23 @@ export function DocumentsView({
             {busy === "searching" ? "Buscando…" : "Buscar citas"}
           </button>
         </form>
+        <div className="docs-search-suggestions" aria-label="Ejemplos rápidos de búsqueda">
+          <span className="docs-suggestions-label">Prueba con:</span>
+          {[
+            "Ciclo del agua primaria SEP",
+            "Fracciones equivalentes 4° primaria NEM",
+            "Revolución Mexicana lectura primaria",
+          ].map((suggestion) => (
+            <button
+              key={suggestion}
+              type="button"
+              className="docs-suggestion-chip"
+              onClick={() => setQuery(suggestion)}
+            >
+              {suggestion}
+            </button>
+          ))}
+        </div>
         {searchError && (
           <p className="support-muted" style={{ margin: "8px 0 0", fontSize: 12.5 }}>
             {searchError}
