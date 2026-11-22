@@ -290,13 +290,13 @@ export function DocumentsView({
     : 0;
 
   return (
-    <section className="account-studio-view docs-studio" aria-label="Documentos y OCR">
+    <section className="account-studio-view docs-studio" aria-label="Planeaciones y documentos">
       <header className="account-studio-header">
         <div>
-          <h1>Documentos y lecturas</h1>
+          <h1>Planeaciones y documentos</h1>
           <p className="support-muted">
-            Sube guías en PDF, Word o imágenes para extraer texto de forma segura y
-            convertirlas en fichas listas para tu clase.
+            Sube tus planeaciones, programas analíticos, lecturas o fotos de libro para
+            que Acenta trabaje con tu material real y genere fichas listas para tu grupo.
           </p>
         </div>
         <div className="docs-header-actions">
@@ -329,50 +329,104 @@ export function DocumentsView({
         </p>
       )}
 
-      {/* Drag & drop upload zone */}
+      {/* Large, obvious hero drag & drop upload zone */}
       <div
+        role="button"
+        tabIndex={0}
+        aria-label="Arrastra aquí tus planeaciones o haz clic para elegir un archivo"
         className={`docs-dropzone${dragging ? " is-dragging" : ""}${busy === "uploading" ? " is-busy" : ""}`}
+        onClick={() => {
+          if (busy === null) fileInputRef.current?.click();
+        }}
+        onKeyDown={(e) => {
+          if ((e.key === "Enter" || e.key === " ") && busy === null) {
+            e.preventDefault();
+            fileInputRef.current?.click();
+          }
+        }}
         onDragOver={(e) => {
           e.preventDefault();
           if (!dragging) setDragging(true);
         }}
-        onDragLeave={() => setDragging(false)}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+            setDragging(false);
+          }
+        }}
         onDrop={handleDrop}
       >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf,.docx,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+          style={{ display: "none" }}
+          disabled={busy !== null}
+          onChange={(e) => void handleFileChange(e)}
+        />
+
+        <div className="docs-dropzone-icon" aria-hidden="true">
+          <svg
+            width="30"
+            height="30"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.9"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M12 16V4" />
+            <path d="m7 9 5-5 5 5" />
+            <path d="M20 16.5v2a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-2" />
+          </svg>
+        </div>
+
         <div className="docs-dropzone-copy">
+          <span className="docs-dropzone-kicker">
+            {dragging
+              ? "Suelta para subir ahora"
+              : "Arrastra y suelta aquí tus archivos"}
+          </span>
           <strong>
             {busy === "uploading"
-              ? "Validando y extrayendo texto…"
-              : "Arrastra tu archivo aquí o selecciónalo desde tu equipo"}
+              ? "Validando y extrayendo texto de tu documento…"
+              : dragging
+                ? "¡Suelta aquí tu planeación o documento!"
+                : "Arrastra aquí tus planeaciones, programas analíticos o lecturas"}
           </strong>
-          <span className="support-muted">
-            Validación binaria estricta, extracción en proceso aislado y purga irreversible cuando lo decidas.
-          </span>
-          <div className="docs-format-pills" aria-label="Formatos permitidos">
-            <span className="docs-format-pill">PDF</span>
-            <span className="docs-format-pill">DOCX</span>
-            <span className="docs-format-pill">PNG</span>
-            <span className="docs-format-pill">JPG</span>
-            <span className="docs-format-meta">Máx. 10 MB</span>
+          <p className="docs-dropzone-sub">
+            También puedes hacer clic en cualquier parte de este recuadro para buscarlos
+            en tu computadora. Extraemos el texto en un proceso aislado y puedes purgarlos
+            cuando quieras.
+          </p>
+
+          <div className="docs-examples-row" aria-label="Ejemplos de archivos recomendados">
+            <span className="docs-example-chip">Planeación semanal</span>
+            <span className="docs-example-chip">Programa analítico (NEM)</span>
+            <span className="docs-example-chip">Dosificación / Guía docente</span>
+            <span className="docs-example-chip">Lecturas y cuadernillos</span>
+            <span className="docs-example-chip">Fotos del libro de texto</span>
           </div>
         </div>
-        <div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf,.docx,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
-            style={{ display: "none" }}
-            disabled={busy !== null}
-            onChange={(e) => void handleFileChange(e)}
-          />
+
+        <div className="docs-dropzone-cta">
           <button
             type="button"
-            className="support-btn-primary"
+            className="support-btn-primary docs-dropzone-btn"
             disabled={busy !== null}
-            onClick={() => fileInputRef.current?.click()}
+            onClick={(e) => {
+              e.stopPropagation();
+              fileInputRef.current?.click();
+            }}
           >
-            {busy === "uploading" ? "Procesando…" : "Elegir PDF, DOCX o imagen"}
+            {busy === "uploading" ? "Procesando archivo…" : "Elegir planeación o archivo"}
           </button>
+          <div className="docs-format-pills" aria-label="Formatos permitidos">
+            <span className="docs-format-pill">PDF</span>
+            <span className="docs-format-pill">Word (DOCX)</span>
+            <span className="docs-format-pill">PNG / JPG</span>
+            <span className="docs-format-meta">Máx. 10 MB · Purga irreversible</span>
+          </div>
         </div>
       </div>
 
@@ -381,7 +435,7 @@ export function DocumentsView({
         <article className="docs-card docs-list-panel">
           <div className="docs-card-head">
             <h2>
-              Tus documentos <span className="docs-count-badge">{activeCount}</span>
+              Tus planeaciones y archivos <span className="docs-count-badge">{activeCount}</span>
             </h2>
             {revokedCount > 0 && (
               <label className="docs-toggle-revoked">
@@ -400,7 +454,7 @@ export function DocumentsView({
               type="search"
               className="docs-filter-input"
               aria-label="Filtrar documentos"
-              placeholder="Buscar por nombre de archivo…"
+              placeholder="Buscar por nombre de planeación o archivo…"
               value={filterText}
               onChange={(e) => setFilterText(e.target.value)}
             />
@@ -412,7 +466,7 @@ export function DocumentsView({
             <div className="docs-empty-state">
               <p className="support-muted">
                 {docs.length === 0
-                  ? "Todavía no has subido documentos reales. Sube un PDF, Word o fotografía de libro de texto arriba."
+                  ? "Aún no has subido ninguna planeación o lectura. Arrastra un archivo al recuadro grande de arriba para empezar."
                   : "No hay documentos que coincidan con tu filtro."}
               </p>
             </div>
