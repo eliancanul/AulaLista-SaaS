@@ -82,6 +82,16 @@ def test_empty_database_migrates_and_upgrade_is_repeatable(empty_database):
         "agent_chat_channel",
         "agent_chat_turn",
         "print_job",
+        "principal_account_preferences",
+        "account_link_challenge",
+        "support_ticket",
+        "curricular_profile",
+        "annex_revision",
+        "teacher_document",
+        "document_blob",
+        "document_revocation_tombstone",
+        "scope_subscription",
+        "usage_ledger_event",
     }
     command.check(Config("alembic.ini"))
 

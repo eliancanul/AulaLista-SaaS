@@ -131,7 +131,7 @@ class SupportTicket(Base):
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    scope_id: Mapped[UUID] = mapped_column(ForeignKey("personal_scope.id"), index=True)
+    scope_id: Mapped[UUID] = mapped_column(ForeignKey("personal_scope.id"))
     actor_id: Mapped[UUID] = mapped_column(ForeignKey("principal.id"))
     category: Mapped[str] = mapped_column(String(32))
     severity: Mapped[str] = mapped_column(String(16))
