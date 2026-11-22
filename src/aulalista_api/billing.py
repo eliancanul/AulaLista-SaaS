@@ -32,7 +32,8 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from aulalista_api.agent_chat import AgentChatTurn
 from aulalista_api.annexes import Annex
-from aulalista_api.database import Base
+from aulalista_api.auth_models import Identity
+from aulalista_api.database import Base, PersonalScope
 from aulalista_api.documents import TeacherDocument
 from aulalista_api.materials import MaterialError, authorize
 from aulalista_api.print_jobs import PrintJob
@@ -43,20 +44,20 @@ PLANS_CATALOG: list[dict[str, Any]] = [
     {
         "id": "free",
         "name": "Gratis · Beta Docente",
-        "tagline": "Ideal para empezar a planear, generar anexos e imprimir cada semana.",
+        "tagline": "Ideal para empezar a planear, generar anexos e imprimir sin límite cada semana.",
         "price_mxn_monthly": 0,
         "currency": "MXN",
         "limits": {
             "ai_turns": 60,
             "annexes": 25,
-            "print_jobs": 20,
+            "print_jobs": None,
             "documents": 10,
             "ai_budget_usd": 2.0,
         },
         "features": [
+            "Impresión ilimitada a tu impresora Epson sin costo extra",
             "Orquestador + agentes por materia",
-            "11 herramientas didácticas imprimibles y proyector",
-            "Exportación PDF con clave docente y cola de impresión",
+            "11 herramientas didácticas imprimibles y proyector de aula",
             "Documentos seguros (PDF, DOCX, imágenes) con purga real",
         ],
     },
@@ -69,14 +70,14 @@ PLANS_CATALOG: list[dict[str, Any]] = [
         "limits": {
             "ai_turns": 600,
             "annexes": 200,
-            "print_jobs": 200,
+            "print_jobs": None,
             "documents": 80,
             "ai_budget_usd": 15.0,
         },
         "features": [
             "10× más turnos de IA y anexos por mes",
+            "Impresión ilimitada y programada para todos tus grupos",
             "Hasta 80 documentos con extracción OCR y derivación directa",
-            "Impresión programada prioritaria para tus grupos",
             "Historial completo de revisiones y soporte prioritario",
         ],
     },
@@ -89,13 +90,13 @@ PLANS_CATALOG: list[dict[str, Any]] = [
         "limits": {
             "ai_turns": 3000,
             "annexes": 1000,
-            "print_jobs": 1000,
+            "print_jobs": None,
             "documents": 400,
             "ai_budget_usd": 75.0,
         },
         "features": [
             "Cuotas amplias para planteles y academia completa",
-            "Gestión multi-escuela y contexto curricular SEP/NEM",
+            "Impresión ilimitada y gestión multi-escuela SEP/NEM",
             "Búsqueda web citada y respaldo de evidencias",
             "Facturación centralizada lista para Stripe",
         ],
@@ -231,8 +232,109 @@ def verify_stripe_signature(
     return any(hmac.compare_digest(expected, sig) for sig in signatures)
 
 
-def _ensure_subscription(session: Session, scope_id: UUID) -> ScopeSubscription:
+def _courtesy_grant_config() -> tuple[set[str], set[str], PlanId]:
+    raw_emails = os.environ.get("AULALISTA_PRO_GRANT_EMAILS", "")
+    emails = {
+        e.strip().lower() for e in raw_emails.split(",") if e.strip() and "@" in e
+    }
+    raw_scopes = os.environ.get("AULALISTA_PRO_GRANT_SCOPE_IDS", "")
+    scope_ids = {s.strip().lower() for s in raw_scopes.split(",") if s.strip()}
+    raw_plan = os.environ.get("AULALISTA_PRO_GRANT_PLAN", "docente").strip().lower()
+    plan_id: PlanId = raw_plan if raw_plan in ("docente", "escuela") else "docente"
+    return emails, scope_ids, plan_id
+
+
+def _scope_matches_courtesy_grant(
+    session: Session, scope_id: UUID
+) -> tuple[bool, PlanId, str]:
+    emails, scope_ids, plan_id = _courtesy_grant_config()
+    if not emails and not scope_ids:
+        return False, plan_id, ""
+    if str(scope_id).lower() in scope_ids:
+        return True, plan_id, f"scope:{scope_id}"
+    if emails:
+        scope = session.get(PersonalScope, scope_id)
+        if scope is not None:
+            identities = session.scalars(
+                select(Identity).where(
+                    Identity.principal_id == scope.owner_principal_id,
+                    Identity.email_verified.is_(True),
+                )
+            ).all()
+            for ident in identities:
+                norm = (ident.email or "").strip().lower()
+                if norm in emails:
+                    return True, plan_id, f"email:{norm}"
+    return False, plan_id, ""
+
+
+def grant_courtesy_plan(
+    session: Session,
+    scope_id: UUID,
+    *,
+    plan_id: PlanId = "docente",
+    reason: str = "manual_courtesy",
+) -> ScopeSubscription:
+    """Grant a complimentary Pro/Escuela subscription that requires no payment."""
+    now = datetime.now(UTC)
     sub = session.get(ScopeSubscription, scope_id)
+    if sub is None:
+        sub = ScopeSubscription(
+            scope_id=scope_id,
+            plan_id=plan_id,
+            status="active",
+            billing_provider="courtesy_pro",
+            current_period_start=now,
+            current_period_end=None,
+            cancel_at_period_end=False,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(sub)
+    else:
+        sub.plan_id = plan_id
+        sub.status = "active"
+        sub.billing_provider = "courtesy_pro"
+        sub.cancel_at_period_end = False
+        sub.current_period_end = None
+        sub.updated_at = now
+    idem_key = f"courtesy:{scope_id}:{plan_id}"
+    existing_ev = session.scalar(
+        select(UsageLedgerEvent).where(UsageLedgerEvent.idempotency_key == idem_key)
+    )
+    if existing_ev is None:
+        session.add(
+            UsageLedgerEvent(
+                scope_id=scope_id,
+                actor_id=None,
+                event_type="courtesy_pro_granted",
+                metric="plan",
+                quantity=1,
+                idempotency_key=idem_key,
+                metadata_json={"plan_id": plan_id, "reason": reason},
+                created_at=now,
+            )
+        )
+    session.flush()
+    return sub
+
+
+def _ensure_subscription(session: Session, scope_id: UUID) -> ScopeSubscription:
+    matched, courtesy_plan, match_reason = _scope_matches_courtesy_grant(
+        session, scope_id
+    )
+    sub = session.get(ScopeSubscription, scope_id)
+    if matched:
+        if (
+            sub is None
+            or sub.billing_provider != "courtesy_pro"
+            or sub.plan_id != courtesy_plan
+            or sub.status != "active"
+        ):
+            return grant_courtesy_plan(
+                session, scope_id, plan_id=courtesy_plan, reason=match_reason
+            )
+        return sub
     if sub is not None:
         return sub
     period_start, period_end = _month_bounds_utc()
@@ -253,14 +355,27 @@ def _ensure_subscription(session: Session, scope_id: UUID) -> ScopeSubscription:
     return sub
 
 
-def _meter_entry(used: int | float, limit: int | float) -> dict[str, Any]:
+def _meter_entry(used: int | float, limit: int | float | None) -> dict[str, Any]:
+    if limit is None:
+        return {
+            "used": used,
+            "limit": None,
+            "remaining": None,
+            "percent": 0.0,
+            "unlimited": True,
+            "at_limit": False,
+            "near_limit": False,
+        }
     pct = 0.0 if limit <= 0 else round(min(100.0, (used / limit) * 100.0), 1)
-    remaining = max(0, round(limit - used, 4) if isinstance(limit, float) else int(limit - used))
+    remaining = max(
+        0, round(limit - used, 4) if isinstance(limit, float) else int(limit - used)
+    )
     return {
         "used": used,
         "limit": limit,
         "remaining": remaining,
         "percent": pct,
+        "unlimited": False,
         "at_limit": used >= limit,
         "near_limit": pct >= 80.0,
     }
@@ -373,15 +488,17 @@ class BillingService:
         any_at_limit = any(item["at_limit"] for item in usage.values())
         any_near_limit = any(item["near_limit"] for item in usage.values())
 
+        is_courtesy = sub.billing_provider == "courtesy_pro"
         return {
             "scope_id": str(scope_id),
             "subscription": {
                 "plan_id": sub.plan_id,
                 "plan_name": plan["name"],
-                "price_mxn_monthly": plan["price_mxn_monthly"],
+                "price_mxn_monthly": 0 if is_courtesy else plan["price_mxn_monthly"],
                 "currency": plan["currency"],
                 "status": sub.status,
                 "billing_provider": sub.billing_provider,
+                "is_courtesy": is_courtesy,
                 "cancel_at_period_end": sub.cancel_at_period_end,
                 "current_period_start": sub.current_period_start.astimezone(
                     UTC
@@ -389,6 +506,8 @@ class BillingService:
                 "current_period_end": (
                     sub.current_period_end.astimezone(UTC).isoformat()
                     if sub.current_period_end
+                    else None
+                    if is_courtesy
                     else month_end.isoformat()
                 ),
             },
@@ -609,11 +728,12 @@ class BillingService:
                 sub.cancel_at_period_end = bool(obj.get("cancel_at_period_end", False))
                 sub.updated_at = now
             elif event_type == "customer.subscription.deleted":
-                sub.plan_id = "free"
-                sub.status = "canceled"
-                sub.billing_provider = "stripe"
-                sub.cancel_at_period_end = False
-                sub.updated_at = now
+                if sub.billing_provider != "courtesy_pro":
+                    sub.plan_id = "free"
+                    sub.status = "canceled"
+                    sub.billing_provider = "stripe"
+                    sub.cancel_at_period_end = False
+                    sub.updated_at = now
 
             session.add(
                 UsageLedgerEvent(

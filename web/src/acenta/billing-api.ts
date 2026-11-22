@@ -5,7 +5,7 @@ export type PlanId = "free" | "docente" | "escuela";
 export interface PlanLimits {
   ai_turns: number;
   annexes: number;
-  print_jobs: number;
+  print_jobs: number | null;
   documents: number;
   ai_budget_usd: number;
 }
@@ -22,9 +22,10 @@ export interface PlanCatalogItem {
 
 export interface UsageMeter {
   used: number;
-  limit: number;
-  remaining: number;
+  limit: number | null;
+  remaining: number | null;
   percent: number;
+  unlimited?: boolean;
   at_limit: boolean;
   near_limit: boolean;
 }
@@ -48,9 +49,10 @@ export interface BillingSummary {
     currency: string;
     status: string;
     billing_provider: string;
+    is_courtesy?: boolean;
     cancel_at_period_end: boolean;
     current_period_start: string;
-    current_period_end: string;
+    current_period_end: string | null;
   };
   period: {
     start: string;
