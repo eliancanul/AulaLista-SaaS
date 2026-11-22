@@ -146,6 +146,11 @@ def test_health_and_fail_closed_material_routes_are_registered(client):
         ("/scopes/{scope_id}/documents/{doc_id}/revoke", {"POST"}),
         ("/scopes/{scope_id}/documents/{doc_id}/generate-annex", {"POST"}),
         ("/scopes/{scope_id}/web-search", {"POST"}),
+        ("/scopes/{scope_id}/billing/plans", {"GET"}),
+        ("/scopes/{scope_id}/billing/summary", {"GET"}),
+        ("/scopes/{scope_id}/billing/checkout", {"POST"}),
+        ("/scopes/{scope_id}/billing/portal", {"POST"}),
+        ("/billing/stripe/webhook", {"POST"}),
     ]
 
 
@@ -158,7 +163,7 @@ def test_docs_can_be_enabled_explicitly(monkeypatch):
         assert set(schema.json()["paths"]) == {
             route.path
             for route in client.app.routes
-            if route.path.startswith(("/health/", "/scopes/", "/auth/"))
+            if route.path.startswith(("/health/", "/scopes/", "/auth/", "/billing/"))
         }
         assert client.get("/redoc").status_code == 404
 

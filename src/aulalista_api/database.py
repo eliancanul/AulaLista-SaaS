@@ -11,7 +11,7 @@ from sqlalchemy.pool import NullPool
 
 from aulalista_api.config import Settings
 
-SCHEMA_REVISION = "0018_secure_documents"
+SCHEMA_REVISION = "0019_plans_and_billing"
 
 
 class Base(DeclarativeBase):

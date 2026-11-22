@@ -36,6 +36,7 @@ import { PrintSettingsView } from "./PrintSettingsView";
 import { SupportPanel } from "./SupportPanel";
 import { AccountView } from "./AccountView";
 import { DocumentsView } from "./DocumentsView";
+import { BillingView } from "./BillingView";
 import {
   collectDebugBundle,
   installDebugTelemetry,
@@ -920,6 +921,16 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
           </button>
           <button
             type="button"
+            aria-label="Plan y uso"
+            title={expanded ? undefined : "Plan y uso"}
+            className={`sidebar-nav-item${s.view === "billing" ? " selected" : ""}`}
+            onClick={() => controller.navigate("billing")}
+          >
+            <UiIcon name="clock" size={17} />
+            {expanded && <span>Plan y uso</span>}
+          </button>
+          <button
+            type="button"
             aria-label="Mi cuenta"
             title={expanded ? undefined : "Mi cuenta"}
             className={`sidebar-nav-item${s.view === "account" ? " selected" : ""}`}
@@ -950,14 +961,14 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
         className={
           conversational
             ? "conversation-main"
-            : s.view === "annexes" || s.view === "documents" || s.view === "printer" || s.view === "account"
+            : s.view === "annexes" || s.view === "documents" || s.view === "printer" || s.view === "billing" || s.view === "account"
               ? "studio-main"
               : s.view === "example"
                 ? "home-main"
                 : "content-main"
         }
       >
-        {!conversational && s.view !== "planning" && s.view !== "analytic" && s.view !== "annexes" && s.view !== "documents" && s.view !== "printer" && s.view !== "account" && <AccountLinks />}
+        {!conversational && s.view !== "planning" && s.view !== "analytic" && s.view !== "annexes" && s.view !== "documents" && s.view !== "printer" && s.view !== "billing" && s.view !== "account" && <AccountLinks />}
         {conversational ? <Chat controller={controller} panelView={panelView}
           onContext={() => openPanel("chat-context")} onPlan={() => { setCategory("Planear"); openPanel("tools"); }}
           panel={panelView && <WorkspacePanel view={panelView} onClose={closePanel}>
@@ -986,7 +997,7 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
                 />
                 <button className="text-action" onClick={actionExample}>Ajustar planeación · ejemplo</button>
               </>}
-          </WorkspacePanel>} /> : s.view === "annexes" ? <AnnexesView controller={controller} /> : s.view === "documents" ? <DocumentsView controller={controller} /> : s.view === "printer" ? <PrintSettingsView controller={controller} /> : s.view === "account" ? <AccountView api={controller.api} onOpenSupport={openSupport} /> : s.view === "conversations" ? <Conversations controller={controller} /> : s.view === "analytic" ? <AnalyticForm controller={controller} /> : s.view === "planning" ? (derived.origin ? <AnalyticDerivedForm controller={controller} /> : <GuidedForm controller={controller} />) : s.view === "example" ? (
+          </WorkspacePanel>} /> : s.view === "annexes" ? <AnnexesView controller={controller} /> : s.view === "documents" ? <DocumentsView controller={controller} /> : s.view === "printer" ? <PrintSettingsView controller={controller} /> : s.view === "billing" ? <BillingView api={controller.api} onOpenSupport={openSupport} /> : s.view === "account" ? <AccountView api={controller.api} onOpenSupport={openSupport} onOpenBilling={() => controller.navigate("billing")} /> : s.view === "conversations" ? <Conversations controller={controller} /> : s.view === "analytic" ? <AnalyticForm controller={controller} /> : s.view === "planning" ? (derived.origin ? <AnalyticDerivedForm controller={controller} /> : <GuidedForm controller={controller} />) : s.view === "example" ? (
           <section className="home-panel">
             <header className="home-heading">
               <Logo />

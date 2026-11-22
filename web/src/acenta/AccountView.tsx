@@ -11,9 +11,11 @@ import {
 export function AccountView({
   api,
   onOpenSupport,
+  onOpenBilling,
 }: {
   api: AcentaApi;
   onOpenSupport: () => void;
+  onOpenBilling?: () => void;
 }) {
   const [account, setAccount] = useState<AccountDocument | null>(null);
   const [loading, setLoading] = useState(true);
@@ -113,9 +115,16 @@ export function AccountView({
             Administra tus métodos de inicio de sesión, consentimiento de avisos y canal de soporte.
           </p>
         </div>
-        <button type="button" className="support-btn-secondary" onClick={onOpenSupport}>
-          Abrir soporte y debug
-        </button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {onOpenBilling && (
+            <button type="button" className="support-btn-secondary" onClick={onOpenBilling}>
+              Mi plan y uso
+            </button>
+          )}
+          <button type="button" className="support-btn-secondary" onClick={onOpenSupport}>
+            Abrir soporte y debug
+          </button>
+        </div>
       </header>
 
       {loading && <p className="support-muted">Cargando configuración de cuenta…</p>}
