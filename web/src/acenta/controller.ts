@@ -33,6 +33,7 @@ import { AnalyticExplorerController } from "./analytic-explorer";
 import { AnalyticDerivationController } from "./analytic-derivation";
 import type { AnalyticSectionDocument } from "./analytic-sections";
 import { ChatController } from "./chat-controller";
+import { AgentChatController } from "./agent-chat-controller";
 import { SchoolContextStore } from "./school-context";
 
 export type SaveState =
@@ -178,6 +179,7 @@ export function editableResource(
 }
 export class AcentaController {
   readonly chat: ChatController;
+  readonly agentChat: AgentChatController;
   readonly schools: SchoolContextStore;
   readonly analytic: AnalyticSectionController;
   readonly analyticExplorer: AnalyticExplorerController;
@@ -212,6 +214,7 @@ export class AcentaController {
     this.chat = new ChatController(api, id => {
       if (this.state.view === "home" || this.state.view === "chat") this.emit({view: "chat", chatId: id});
     });
+    this.agentChat = new AgentChatController(api);
     this.schools = new SchoolContextStore(api);
     this.analytic = new AnalyticSectionController(api);
     this.analyticExplorer = new AnalyticExplorerController(api);
@@ -1350,6 +1353,7 @@ export class AcentaController {
   }
   closeSession() {
     this.chat.close();
+    this.agentChat.close();
     this.schools.close();
     this.analytic.close();
     this.analyticExplorer.dispose();

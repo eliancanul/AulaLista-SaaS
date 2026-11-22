@@ -1,13 +1,35 @@
 import { Fragment, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { AcentaController, PanelView } from "./controller";
 import type { ChatUsage } from "./chat-contracts";
+import type { ActiveAgentTarget, AgentChatTurn } from "./agent-chat-controller";
+import type { AgentMode, SchoolSpace, SubjectSpace } from "./school-context";
 import { UiIcon } from "./ui";
 import "./chat.css";
+
+function buildActiveAgentTarget(
+  school: SchoolSpace,
+  subject: SubjectSpace,
+  mode: AgentMode,
+): ActiveAgentTarget {
+  const isOrchestrator = mode === "orchestrator";
+  return {
+    channelKey: isOrchestrator
+      ? `orchestrator:${school.id}`
+      : `subject:${school.id}:${subject.id}`,
+    agentKind: isOrchestrator ? "orchestrator" : "subject",
+    schoolId: school.id,
+    schoolName: school.shortName,
+    grade: school.grade,
+    shift: school.shift,
+    subjectId: isOrchestrator ? null : subject.id,
+    subjectName: isOrchestrator ? null : subject.name,
+  };
+}
 
 export function ChatExitGuard({controller, onReview, onExit}: {
   controller: AcentaController; onReview: () => void; onExit: () => void;
 }) {
-  const pending = controller.chat.hasPending();
+  const pending = controller.chat.hasPending() || controller.agentChat.hasPending();
   return <section className="exit-guard">
     <h2>¿Salir con mensajes pendientes?</h2>
     <p>El mensaje y los cambios de contexto sin guardar sólo están en esta pestaña. El historial confirmado permanece en tu cuenta.</p>
@@ -16,7 +38,11 @@ export function ChatExitGuard({controller, onReview, onExit}: {
       <button autoFocus onClick={onReview}>Revisar mensajes pendientes</button>
       {pending
         ? <button onClick={onExit}>Continuar cierre de sesión sin confirmar el envío</button>
-        : <button onClick={() => { if (controller.chat.discardDrafts()) onExit(); }}>Descartar mensajes sin enviar y continuar salida</button>}
+        : <button onClick={() => {
+          const okLegacy = !controller.chat.hasUnsavedChanges() || controller.chat.discardDrafts();
+          const okAgent = !controller.agentChat.hasUnsavedChanges() || controller.agentChat.discardDrafts();
+          if (okLegacy && okAgent) onExit();
+        }}>Descartar mensajes sin enviar y continuar salida</button>}
     </div>
   </section>;
 }
@@ -33,8 +59,113 @@ export function ChatUsageDetails({usage}: {usage: ChatUsage}) {
     <p>La reserva limita el intento; no es consumo observado ni una factura. El saldo disponible no está informado.</p>
   </details>;
 }
+
+function AgentUsageDetails({turn}: {turn: AgentChatTurn}) {
+  const { usage } = turn;
+  if (usage.input_tokens === null && usage.output_tokens === null && usage.estimated_cost_usd === null) {
+    return null;
+  }
+  return <details className="chat-usage">
+    <summary>Consumo de este turno</summary>
+    <dl>
+      <dt>Tokens de entrada</dt><dd>{usage.input_tokens ?? "—"}</dd>
+      <dt>Tokens de salida</dt><dd>{usage.output_tokens ?? "—"}</dd>
+      <dt>Costo estimado</dt><dd>{usage.estimated_cost_usd === null ? "—" : `${usage.estimated_cost_usd} USD`}</dd>
+      {turn.model && <><dt>Modelo</dt><dd>{turn.model}</dd></>}
+    </dl>
+  </details>;
+}
+
 export function ChatContextEditor({controller}: {controller: AcentaController}) {
   useSyncExternalStore(controller.chat.subscribe, controller.chat.snapshot);
+  const agentState = useSyncExternalStore(controller.agentChat.subscribe, controller.agentChat.snapshot);
+  const schoolState = useSyncExternalStore(controller.schools.subscribe, controller.schools.snapshot);
+
+  if (agentState.availability === "available") {
+    const activeSchool = controller.schools.getActiveSchool();
+    const activeSubject = controller.schools.getActiveSubject();
+    const target = buildActiveAgentTarget(activeSchool, activeSubject, schoolState.activeAgentMode);
+    const agentThread = controller.agentChat.threadFor(target.channelKey);
+    const channel = agentThread.channel;
+    const savedNotes = channel?.context_notes ?? "";
+    const busy = agentThread.status === "sending" || agentThread.status === "loading";
+    const isOrchestrator = target.agentKind === "orchestrator";
+    const dirty = agentThread.contextDraft !== null && agentThread.contextDraft !== savedNotes;
+
+    return <div className="chat-context-editor">
+      <p className="agent-context-scope">
+        <strong>
+          {isOrchestrator
+            ? `Orquestador · ${activeSchool.shortName} · ${activeSchool.grade}`
+            : `Agente de ${activeSubject.name} · ${activeSchool.shortName}`}
+        </strong>
+      </p>
+      <p>
+        {isOrchestrator
+          ? "Este agente coordina la semana y mantiene contexto general de la escuela. Sólo recibe resúmenes compactos de cada materia para evitar ruido."
+          : "Este agente trabaja únicamente en esta materia y conserva su propio historial aislado, más el breve contexto general del orquestador."}
+      </p>
+      {!isOrchestrator && agentThread.orchestratorBrief && (
+        <div className="agent-context-brief">
+          <span className="agent-context-brief-label">Contexto del orquestador (solo lectura)</span>
+          <p>{agentThread.orchestratorBrief}</p>
+        </div>
+      )}
+      {isOrchestrator && agentThread.subjectDigests.length > 0 && (
+        <div className="agent-context-brief">
+          <span className="agent-context-brief-label">Resúmenes activos por materia</span>
+          <ul className="agent-digest-list">
+            {agentThread.subjectDigests.map((item) => (
+              <li key={item.subject_id}>
+                <strong>{item.subject_name}</strong>: {item.summary_topic || item.digest}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {channel && (
+        <p className="field-hint">
+          Revisión guardada {channel.context_revision} · Turnos anteriores al {channel.through_turn} archivados.
+        </p>
+      )}
+      <label htmlFor="chat-context-notes">
+        {isOrchestrator
+          ? `Notas generales del grupo (${activeSchool.grade})`
+          : `Notas específicas de ${activeSubject.name}`}
+      </label>
+      <textarea
+        id="chat-context-notes"
+        value={agentThread.contextDraft ?? savedNotes}
+        disabled={busy}
+        placeholder={isOrchestrator
+          ? "Ej.: Grupo de 28 alumnos, proyecto escolar de la semana, evaluaciones los viernes…"
+          : `Ej.: Nivel de avance en ${activeSubject.name}, libro SEP que usamos, adaptaciones…`}
+        onChange={event => controller.agentChat.setContextDraft(target.channelKey, event.target.value)}
+      />
+      <p className="field-hint">
+        Hasta 4096 caracteres. Al guardar o reiniciar, el historial anterior de este agente queda archivado sin borrar tus otras materias.
+      </p>
+      {dirty && <p role="status">Cambios de contexto sin guardar en esta pestaña.</p>}
+      {agentThread.error && <p role="alert">{agentThread.error}</p>}
+      {agentThread.contextNotice && <p role="status">{agentThread.contextNotice}</p>}
+      <div className="actions">
+        <button disabled={busy || !dirty} onClick={() => controller.agentChat.discardContextDraft(target.channelKey)}>
+          Descartar cambios
+        </button>
+        <button disabled={busy} onClick={() => void controller.agentChat.updateContext(target, true)}>
+          Reiniciar chat de este agente
+        </button>
+        <button
+          className="primary"
+          disabled={busy || agentThread.contextDraft === null || !agentThread.contextDraft.trim()}
+          onClick={() => void controller.agentChat.updateContext(target, false)}
+        >
+          Guardar notas
+        </button>
+      </div>
+    </div>;
+  }
+
   const thread = controller.chat.current(), doc = thread.document;
   if (!doc) return <p role="status">El contexto estará disponible después de recuperar o iniciar tu chat. Puedes seguir preparando tu mensaje.</p>;
   const busy = thread.status === "sending" || thread.status === "loading";
@@ -60,17 +191,26 @@ export function ChatContextEditor({controller}: {controller: AcentaController}) 
     </div>
   </div>;
 }
+
 export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
   controller: AcentaController; onPlan: () => void; onContext: () => void; panel?: ReactNode; panelView?: PanelView | null;
 }) {
   const state = useSyncExternalStore(controller.chat.subscribe, controller.chat.snapshot);
-  useSyncExternalStore(controller.schools.subscribe, controller.schools.snapshot);
+  const agentState = useSyncExternalStore(controller.agentChat.subscribe, controller.agentChat.snapshot);
+  const schoolState = useSyncExternalStore(controller.schools.subscribe, controller.schools.snapshot);
   const activeSchool = controller.schools.getActiveSchool();
   const activeSubject = controller.schools.getActiveSubject();
   const thread = controller.chat.current();
   const archive = controller.chat.isArchive();
+  const useAgentChat = !archive && agentState.availability === "available";
+  const activeTarget = buildActiveAgentTarget(activeSchool, activeSubject, schoolState.activeAgentMode);
+  const isOrchestrator = useAgentChat && activeTarget.agentKind === "orchestrator";
+  const agentThread = controller.agentChat.threadFor(activeTarget.channelKey);
+
   const input = useRef<HTMLTextAreaElement>(null);
-  const previous = useRef(thread.status);
+  const activeStatus = useAgentChat ? agentThread.status : thread.status;
+  const activeDraft = useAgentChat ? agentThread.draft : thread.draft;
+  const previous = useRef(activeStatus);
   const overflowRef = useRef<HTMLDivElement>(null);
   const overflowTriggerRef = useRef<HTMLButtonElement>(null);
   const plusRef = useRef<HTMLDivElement>(null);
@@ -79,20 +219,31 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
   const [plusOpen, setPlusOpen] = useState(false);
   const [isMultiline, setIsMultiline] = useState(false);
 
-  useEffect(() => { void controller.chat.loadAvailability(); if (!state.activeId) void controller.chat.openActive(); }, [controller]);
+  useEffect(() => {
+    void controller.chat.loadAvailability();
+    void controller.agentChat.loadAvailability();
+    if (!state.activeId) void controller.chat.openActive();
+  }, [controller]);
+
+  useEffect(() => {
+    if (useAgentChat) {
+      void controller.agentChat.openChannel(activeTarget.channelKey);
+    }
+  }, [controller, useAgentChat, activeTarget.channelKey]);
+
   useEffect(() => {
     // Completion may happen after the teacher moves to a panel or a modal.
     // Return focus only while it still belongs to this composer.
-    if (previous.current === "sending" && thread.status !== "sending" && !panelView &&
+    if (previous.current === "sending" && activeStatus !== "sending" && !panelView &&
       input.current?.closest("form")?.contains(document.activeElement) && !document.querySelector("dialog[open]")) input.current.focus();
-    previous.current = thread.status;
-  }, [thread.status, panelView]);
+    previous.current = activeStatus;
+  }, [activeStatus, panelView]);
 
   // Rock-solid prototype caret & pill-to-multiline auto-grow math (24px line-height, max 6 lines = 144px)
   useEffect(() => {
     const el = input.current;
     if (!el) return;
-    const raw = thread.draft;
+    const raw = activeDraft;
     if (!raw.length) {
       el.style.height = "24px";
       el.style.overflowY = "hidden";
@@ -106,7 +257,7 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
     const clamped = Math.max(24, Math.min(144, natural));
     el.style.height = `${clamped}px`;
     el.style.overflowY = natural > 144 ? "auto" : "hidden";
-  }, [thread.draft, isMultiline]);
+  }, [activeDraft, isMultiline]);
 
   useEffect(() => {
     if (!overflowOpen && !plusOpen) return;
@@ -139,16 +290,48 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
     };
   }, [overflowOpen, plusOpen]);
 
-  const busy = thread.status === "sending" || thread.status === "loading";
-  const canClearContext = !archive && !!thread.document && !busy && !thread.pending && !thread.needsRefresh;
-  const throughTurn = !archive && thread.document ? thread.document.context.through_turn : 0;
-  const turns = thread.document?.turns ?? [];
-  const hasMessages = turns.length > 0;
+  const busy = activeStatus === "sending" || activeStatus === "loading";
+  const canClearContext = useAgentChat
+    ? !busy && ((agentThread.channel?.version ?? 0) > 0 || Boolean(agentThread.channel?.context_notes))
+    : !archive && !!thread.document && !busy && !thread.pending && !thread.needsRefresh;
+
+  const throughTurn = useAgentChat
+    ? (agentThread.channel?.through_turn ?? 0)
+    : (!archive && thread.document ? thread.document.context.through_turn : 0);
+
+  const legacyTurns = thread.document?.turns ?? [];
+  const agentTurns = agentThread.turns;
+  const hasMessages = useAgentChat ? agentTurns.length > 0 : legacyTurns.length > 0;
+
   const lastArchivedIdx = throughTurn > 0
-    ? turns.reduce((acc, turn, idx) => (turn.number <= throughTurn ? idx : acc), -1)
+    ? (useAgentChat ? agentTurns : legacyTurns).reduce(
+        (acc, turn, idx) => (turn.number <= throughTurn ? idx : acc),
+        -1,
+      )
     : -1;
-  const canSubmit = !busy && !thread.pending && !thread.needsRefresh && state.activeLoaded && !!thread.draft.trim() && state.availability === "available";
-  const showContextRevision = !archive && !!thread.document && thread.document.context.revision > 0;
+
+  const canSubmit = useAgentChat
+    ? !busy && !!agentThread.draft.trim()
+    : !busy && !thread.pending && !thread.needsRefresh && state.activeLoaded && !!thread.draft.trim() && state.availability === "available";
+
+  const showLegacyContextRevision = !useAgentChat && !archive && !!thread.document && thread.document.context.revision > 0;
+  const showAgentContextRevision = useAgentChat && !!agentThread.channel && agentThread.channel.context_revision > 0;
+
+  const submitMessage = () => {
+    if (useAgentChat) {
+      void controller.agentChat.submit(activeTarget);
+    } else {
+      void controller.chat.submit();
+    }
+  };
+
+  const placeholderText = isOrchestrator
+    ? `Organiza la semana de ${activeSchool.grade} o coordina entre materias…`
+    : `Pide una ficha o planeación de ${activeSubject.name} para ${activeSchool.grade}…`;
+
+  const digestsBySubject = new Map(
+    agentThread.subjectDigests.map((d) => [d.subject_id, d]),
+  );
 
   return <section
     className={`chat-panel conversation-panel${panel ? " with-panel" : ""}${hasMessages ? " has-messages" : " is-empty"}${archive ? " is-archive" : ""}`}
@@ -169,7 +352,11 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
           ) : hasMessages ? (
             <h1 id="chat-title" className="chat-context-label">
               <span className="chat-school-dot" style={{ background: activeSchool.color }} aria-hidden="true" />
-              <span>{activeSchool.shortName} · {activeSubject.name}</span>
+              <span>
+                {isOrchestrator
+                  ? `${activeSchool.shortName} · Orquestador general`
+                  : `${activeSchool.shortName} · ${activeSubject.name}`}
+              </span>
             </h1>
           ) : (
             <span className="chat-topbar-spacer" aria-hidden="true" />
@@ -182,9 +369,21 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
             </button>
           ) : (
             <>
-              <button type="button" className="chat-ghost-btn" onClick={() => controller.navigate("conversations")}>
-                Consultar archivo anterior
-              </button>
+              {useAgentChat ? (
+                !isOrchestrator && (
+                  <button
+                    type="button"
+                    className="chat-ghost-btn"
+                    onClick={() => controller.schools.selectOrchestrator(activeSchool.id)}
+                  >
+                    Ir al orquestador
+                  </button>
+                )
+              ) : (
+                <button type="button" className="chat-ghost-btn" onClick={() => controller.navigate("conversations")}>
+                  Consultar archivo anterior
+                </button>
+              )}
               <div className="chat-overflow" ref={overflowRef}>
                 <button
                   ref={overflowTriggerRef}
@@ -205,20 +404,28 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
                       disabled={!canClearContext}
                       onClick={() => {
                         setOverflowOpen(false);
-                        void controller.chat.updateContext(true);
+                        if (useAgentChat) {
+                          void controller.agentChat.updateContext(activeTarget, true);
+                        } else {
+                          void controller.chat.updateContext(true);
+                        }
                       }}
                     >
                       <UiIcon name="trash" size={15} />
                       <span>Limpiar chat</span>
                     </button>
-                    {state.activeId && (
+                    {(useAgentChat || state.activeId) && (
                       <button
                         type="button"
                         role="menuitem"
                         disabled={busy}
                         onClick={() => {
                           setOverflowOpen(false);
-                          void controller.chat.refresh();
+                          if (useAgentChat) {
+                            void controller.agentChat.openChannel(activeTarget.channelKey, true);
+                          } else {
+                            void controller.chat.refresh();
+                          }
                         }}
                       >
                         <UiIcon name="refresh" size={15} />
@@ -236,67 +443,170 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
       {!archive && !hasMessages && (
         <div className="chat-greeting-block">
           <p className="chat-greeting-context">
-            {activeSchool.shortName} · {activeSchool.grade}
+            {isOrchestrator
+              ? `${activeSchool.shortName} · ${activeSchool.grade} · Orquestador`
+              : `${activeSchool.shortName} · ${activeSchool.grade}`}
           </p>
           <h1 id="chat-title" className="chat-greeting-title">
-            {activeSubject.name}, ¿qué preparamos hoy?
+            {isOrchestrator
+              ? "Coordinación general, ¿qué organizamos hoy?"
+              : `${activeSubject.name}, ¿qué preparamos hoy?`}
           </h1>
+          {useAgentChat && !isOrchestrator && agentThread.orchestratorBrief && (
+            <button
+              type="button"
+              className="agent-orchestrator-link"
+              onClick={onContext}
+            >
+              Enlazado al contexto del orquestador · Ver
+            </button>
+          )}
         </div>
       )}
 
-      {showContextRevision && thread.document && (
+      {useAgentChat && isOrchestrator && (
+        <div className="orchestrator-agents-strip" aria-label="Agentes de materia">
+          {activeSchool.subjects.map((sub) => {
+            const subKey = `subject:${activeSchool.id}:${sub.id}`;
+            const digest = digestsBySubject.get(sub.id);
+            const summary = controller.agentChat.summaryFor(subKey);
+            const activeCount = digest?.turn_count ?? summary?.version ?? 0;
+            const tooltip = digest?.summary_topic || summary?.summary_topic || `Abrir agente de ${sub.name}`;
+            return (
+              <button
+                key={sub.id}
+                type="button"
+                className={`orchestrator-agent-chip${activeCount > 0 ? " has-activity" : ""}`}
+                title={tooltip}
+                onClick={() => controller.schools.selectSubject(activeSchool.id, sub.id)}
+              >
+                <span
+                  className="orchestrator-agent-dot"
+                  style={activeCount > 0 ? { background: activeSchool.color } : undefined}
+                  aria-hidden="true"
+                />
+                <span>{sub.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {showAgentContextRevision && agentThread.channel && (
+        <p className="chat-note chat-context-meta">
+          Contexto de {isOrchestrator ? "orquestador" : activeSubject.name} · revisión {agentThread.channel.context_revision}.
+          {agentThread.channel.context_notes ? " Usa tus notas guardadas y " : " Usa "}
+          los turnos posteriores al {agentThread.channel.through_turn}.
+        </p>
+      )}
+      {showLegacyContextRevision && thread.document && (
         <p className="chat-note chat-context-meta">
           Contexto activo · revisión {thread.document.context.revision}. Usa {thread.document.context.notes ? "notas manuales y " : ""}los turnos confirmados posteriores al {thread.document.context.through_turn}. El historial anterior permanece guardado.
         </p>
       )}
-      {thread.status === "loading" && <p role="status" className="chat-whisper-status">Recuperando historial…</p>}
-      {thread.document?.next_cursor && (
+      {activeStatus === "loading" && <p role="status" className="chat-whisper-status">Recuperando historial…</p>}
+      {!useAgentChat && thread.document?.next_cursor && (
         <button type="button" className="chat-ghost-btn chat-load-more" disabled={busy} onClick={() => void controller.chat.refresh(state.activeId, true)}>
           Ver mensajes anteriores
         </button>
       )}
+
       <ol className="chat-turns" aria-label="Historial de la conversación">
-        {turns.map((turn, idx) => {
-          const isArchivedTurn = throughTurn > 0 && turn.number <= throughTurn;
-          return <Fragment key={turn.operation_id}>
-            <li className={`chat-turn${isArchivedTurn ? " is-archived" : ""}`}>
-              <article className="chat-message chat-user" aria-label={`Tu mensaje ${turn.number}`}>
-                <h2 className="sr-only">Tú</h2>
-                <p>{turn.user_text}</p>
-              </article>
-              <article className="chat-message chat-assistant" aria-label={`Respuesta ${turn.number}`}>
-                <h2 className="chat-assistant-head">
-                  <span className="luna-dot" aria-hidden="true" />
-                  <span>Luna</span>
-                </h2>
-                {turn.state === "succeeded" ? <p>{turn.assistant_text}</p> :
-                  <p>{turn.state === "failed" ? "Este intento falló. No hay respuesta confirmada." : turn.state === "generating" ? "Respuesta en proceso; consulta su estado." : "Resultado incierto; consulta su estado antes de enviar otro mensaje."}</p>}
-                <div className="chat-turn-meta">
-                  <p className="chat-note">Contexto usado · revisión {turn.context_revision}</p>
-                  <ChatUsageDetails usage={turn.usage} />
-                </div>
-              </article>
-            </li>
-            {idx === lastArchivedIdx && (
-              <li className="chat-archive-divider" role="separator" aria-label="Conversación anterior archivada">
-                <span>Conversación anterior · archivada</span>
-              </li>
-            )}
-          </Fragment>;
-        })}
+        {useAgentChat
+          ? agentTurns.map((turn, idx) => {
+              const isArchivedTurn = throughTurn > 0 && turn.number <= throughTurn;
+              const delegatedSubject = isOrchestrator && turn.delegated_subject_id
+                ? activeSchool.subjects.find((sub) => sub.id === turn.delegated_subject_id) ?? null
+                : null;
+              return <Fragment key={turn.operation_id}>
+                <li className={`chat-turn${isArchivedTurn ? " is-archived" : ""}`}>
+                  <article className="chat-message chat-user" aria-label={`Tu mensaje ${turn.number}`}>
+                    <h2 className="sr-only">Tú</h2>
+                    <p>{turn.user_text}</p>
+                  </article>
+                  <article className="chat-message chat-assistant" aria-label={`Respuesta ${turn.number}`}>
+                    <h2 className="chat-assistant-head">
+                      <span className="luna-dot" aria-hidden="true" />
+                      <span>{isOrchestrator ? "Luna · Orquestador" : `Luna · ${activeSubject.name}`}</span>
+                    </h2>
+                    {turn.state === "succeeded" ? (
+                      <p>{turn.assistant_text}</p>
+                    ) : (
+                      <p>Este intento no pudo completarse. Puedes volver a intentarlo.</p>
+                    )}
+                    {delegatedSubject && (
+                      <div className="agent-delegation-row">
+                        <button
+                          type="button"
+                          className="agent-delegation-btn"
+                          onClick={() => controller.schools.selectSubject(activeSchool.id, delegatedSubject.id)}
+                        >
+                          <span>Continuar en agente de {delegatedSubject.name}</span>
+                          <UiIcon name="chevron-right" size={14} />
+                        </button>
+                      </div>
+                    )}
+                    <div className="chat-turn-meta">
+                      <p className="chat-note">Contexto · revisión {turn.context_revision}</p>
+                      <AgentUsageDetails turn={turn} />
+                    </div>
+                  </article>
+                </li>
+                {idx === lastArchivedIdx && (
+                  <li className="chat-archive-divider" role="separator" aria-label="Conversación anterior archivada">
+                    <span>Conversación anterior · archivada</span>
+                  </li>
+                )}
+              </Fragment>;
+            })
+          : legacyTurns.map((turn, idx) => {
+              const isArchivedTurn = throughTurn > 0 && turn.number <= throughTurn;
+              return <Fragment key={turn.operation_id}>
+                <li className={`chat-turn${isArchivedTurn ? " is-archived" : ""}`}>
+                  <article className="chat-message chat-user" aria-label={`Tu mensaje ${turn.number}`}>
+                    <h2 className="sr-only">Tú</h2>
+                    <p>{turn.user_text}</p>
+                  </article>
+                  <article className="chat-message chat-assistant" aria-label={`Respuesta ${turn.number}`}>
+                    <h2 className="chat-assistant-head">
+                      <span className="luna-dot" aria-hidden="true" />
+                      <span>Luna</span>
+                    </h2>
+                    {turn.state === "succeeded" ? <p>{turn.assistant_text}</p> :
+                      <p>{turn.state === "failed" ? "Este intento falló. No hay respuesta confirmada." : turn.state === "generating" ? "Respuesta en proceso; consulta su estado." : "Resultado incierto; consulta su estado antes de enviar otro mensaje."}</p>}
+                    <div className="chat-turn-meta">
+                      <p className="chat-note">Contexto usado · revisión {turn.context_revision}</p>
+                      <ChatUsageDetails usage={turn.usage} />
+                    </div>
+                  </article>
+                </li>
+                {idx === lastArchivedIdx && (
+                  <li className="chat-archive-divider" role="separator" aria-label="Conversación anterior archivada">
+                    <span>Conversación anterior · archivada</span>
+                  </li>
+                )}
+              </Fragment>;
+            })}
       </ol>
+
       <div role="status" aria-live="polite" className="chat-status">
-        {thread.status === "sending" ? "Consultando el servidor…" : thread.contextNotice ||
-          (thread.document?.turns.at(-1)?.state === "succeeded" ? "Respuesta confirmada. Puedes continuar la conversación." : "")}
+        {activeStatus === "sending"
+          ? "Luna está respondiendo…"
+          : useAgentChat
+            ? agentThread.contextNotice
+            : (thread.contextNotice ||
+              (thread.document?.turns.at(-1)?.state === "succeeded" ? "Respuesta confirmada. Puedes continuar la conversación." : ""))}
       </div>
-      {thread.error && <p role="alert" className="chat-error">{thread.error}</p>}
-      {!state.activeLoaded && !busy && !archive && (
+      {(useAgentChat ? agentThread.error : thread.error) && (
+        <p role="alert" className="chat-error">{useAgentChat ? agentThread.error : thread.error}</p>
+      )}
+      {!useAgentChat && !state.activeLoaded && !busy && !archive && (
         <button type="button" className="chat-ghost-btn" onClick={() => void controller.chat.openActive()}>
           Recuperar chat activo
         </button>
       )}
-      {thread.needsRefresh && <p role="status" className="chat-whisper-status">Actualiza el historial y revisa el contexto antes de continuar.</p>}
-      {thread.pending && (
+      {!useAgentChat && thread.needsRefresh && <p role="status" className="chat-whisper-status">Actualiza el historial y revisa el contexto antes de continuar.</p>}
+      {!useAgentChat && thread.pending && (
         <button type="button" className="primary chat-recover-btn" disabled={busy} onClick={() => void controller.chat.recover()}>
           {thread.pending.kind === "context" ? "Consultar estado del cambio de contexto" : "Consultar estado del envío"}
         </button>
@@ -351,7 +661,7 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
         )}
         <form
           className={`chat-composer${isMultiline ? " is-multiline" : ""}`}
-          onSubmit={event => { event.preventDefault(); void controller.chat.submit(); }}
+          onSubmit={event => { event.preventDefault(); submitMessage(); }}
         >
           <label className="sr-only" htmlFor="chat-message">Mensaje para Luna</label>
           <textarea
@@ -359,15 +669,21 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
             className="chat-composer-input"
             ref={input}
             rows={1}
-            value={thread.draft}
-            disabled={!!thread.pending}
-            placeholder={`Pide una ficha o planeación de ${activeSubject.name} para ${activeSchool.grade}…`}
+            value={activeDraft}
+            disabled={useAgentChat ? agentThread.status === "sending" : !!thread.pending}
+            placeholder={placeholderText}
             aria-describedby="chat-input-hint"
-            onChange={event => controller.chat.setDraft(event.target.value)}
+            onChange={event => {
+              if (useAgentChat) {
+                controller.agentChat.setDraft(activeTarget.channelKey, event.target.value);
+              } else {
+                controller.chat.setDraft(event.target.value);
+              }
+            }}
             onKeyDown={event => {
               if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                 event.preventDefault();
-                if (canSubmit) void controller.chat.submit();
+                if (canSubmit) submitMessage();
               }
             }}
           />
@@ -402,11 +718,11 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
           </div>
         </form>
       </div>
-      {state.availability === "unavailable" && <div className="chat-availability">
+      {!useAgentChat && agentState.availability !== "loading" && state.availability === "unavailable" && <div className="chat-availability">
         <p role="status">El chat no está disponible en este momento. Tu texto permanece en esta pestaña.</p>
-        <button type="button" className="chat-ghost-btn" onClick={() => void controller.chat.loadAvailability()}>Comprobar disponibilidad</button>
+        <button type="button" className="chat-ghost-btn" onClick={() => { void controller.chat.loadAvailability(); void controller.agentChat.loadAvailability(); }}>Comprobar disponibilidad</button>
       </div>}
-      {state.availability === "loading" && <p role="status" className="chat-whisper-status">Comprobando disponibilidad del chat…</p>}
+      {!useAgentChat && (state.availability === "loading" || agentState.availability === "loading") && <p role="status" className="chat-whisper-status">Comprobando disponibilidad del chat…</p>}
       <nav className="chat-shortcuts" aria-label="Accesos del chat">
         <button
           type="button"
@@ -433,6 +749,7 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
     </div>}
   </section>;
 }
+
 export function Conversations({controller}: {controller: AcentaController}) {
   const state = useSyncExternalStore(controller.chat.subscribe, controller.chat.snapshot);
   useEffect(() => { void controller.chat.list(); }, [controller]);

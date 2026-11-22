@@ -32,9 +32,13 @@ services:
       # Optional: comma-separated Gmail accounts allowed to sign in (your 2 teachers)
       - key: AULALISTA_ALLOWED_EMAILS
         sync: false
-      # OpenAI (real annex generation)
+      # OpenAI (real annex generation + multi-agent chat with Luna)
       - key: AULALISTA_OPENAI_ANNEXES_ENABLED
         value: "true"
+      - key: AULALISTA_OPENAI_CHAT_ENABLED
+        value: "true"
+      - key: AULALISTA_CHAT_SCOPE_BUDGET_USD
+        value: "10"
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_MODEL

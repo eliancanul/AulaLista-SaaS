@@ -769,9 +769,11 @@ export class AcentaApi {
     method: "GET" | "POST" | "PUT" | "DELETE" = "GET",
     body?: unknown,
     timeoutMs = 50000,
+    idempotencyKey?: string,
   ): Promise<unknown> {
     const headers: Record<string, string> = {};
     if (body !== undefined) headers["Content-Type"] = "application/json";
+    if (idempotencyKey) headers["Idempotency-Key"] = this.id(idempotencyKey);
     let response: Response;
     try {
       response = await this.transport(

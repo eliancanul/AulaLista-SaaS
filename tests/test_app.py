@@ -110,6 +110,11 @@ def test_health_and_fail_closed_material_routes_are_registered(client):
         ("/scopes/{scope_id}/print-jobs/{job_id}", {"DELETE"}),
         ("/scopes/{scope_id}/school-spaces", {"GET"}),
         ("/scopes/{scope_id}/school-spaces", {"PUT"}),
+        ("/scopes/{scope_id}/agent-chat/capability", {"GET"}),
+        ("/scopes/{scope_id}/agent-chat/channels", {"GET"}),
+        ("/scopes/{scope_id}/agent-chat/channels/{channel_key}", {"GET"}),
+        ("/scopes/{scope_id}/agent-chat/channels/{channel_key}/turns", {"POST"}),
+        ("/scopes/{scope_id}/agent-chat/channels/{channel_key}/context", {"POST"}),
     ]
 
 

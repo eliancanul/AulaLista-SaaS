@@ -847,6 +847,27 @@ textarea {
   flex: none;
   opacity: 0.9;
 }
+.subject-activity-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  flex: none;
+  background: rgba(28, 28, 26, 0.24);
+}
+.subject-role-pill {
+  font-size: 10.5px;
+  font-weight: 550;
+  letter-spacing: 0.01em;
+  color: var(--ac-ink-muted);
+  background: rgba(28, 28, 26, 0.055);
+  border-radius: 999px;
+  padding: 2px 7px;
+  flex: none;
+}
+.sidebar .subject-row.is-orchestrator.active .subject-role-pill {
+  color: var(--ac-action-ink);
+  background: var(--ac-action-soft);
+}
 
 /* Option 2: Subtle hairline divider + clean muted gray "Agregar materia" */
 .subject-add-sep {
