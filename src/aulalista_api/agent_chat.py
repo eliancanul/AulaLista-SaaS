@@ -7,7 +7,7 @@ import re
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Literal
-from uuid import UUID, uuid4
+from uuid import UUID, uuid4, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
 from sqlalchemy import (
@@ -34,6 +34,7 @@ from aulalista_api.openai_agent_chat import (
     AgentPromptContext,
     SubjectDigest,
     build_compact_digest,
+    classify_message_subject,
     detect_delegated_subject,
     load_agent_chat_provider_from_env,
 )
@@ -515,12 +516,15 @@ class AgentChatService:
 
         turn_id: UUID | None = None
         channel_id: UUID | None = None
+        principal_id: UUID | None = None
         prompt_context: AgentPromptContext | None = None
         messages: list[dict[str, str]] = []
         subject_pairs: list[tuple[str, str]] = []
+        routed_subject: tuple[str, str] | None = None
 
         with Session(self.engine) as session, session.begin():
             principal = authorize(session, actor, scope_id)
+            principal_id = principal
             session.execute(
                 text("SELECT pg_advisory_xact_lock(:key)"), {"key": lock_key}
             )
@@ -568,54 +572,146 @@ class AgentChatService:
             if request.expected_version != channel.version:
                 raise MaterialError(409, "conflict")
 
-            # Build isolated prompt history for ONLY this channel after through_turn.
-            prior_turns = session.scalars(
-                select(AgentChatTurn)
-                .where(
-                    AgentChatTurn.channel_id == channel.id,
-                    AgentChatTurn.number > channel.through_turn,
-                    AgentChatTurn.state == "succeeded",
-                )
-                .order_by(AgentChatTurn.number.desc())
-                .limit(MAX_ACTIVE_TURNS_IN_PROMPT)
-            ).all()
-            prior_turns.reverse()
-            for prior in prior_turns:
-                if prior.assistant_text:
-                    messages.append({"role": "user", "content": prior.user_text})
-                    messages.append(
-                        {"role": "assistant", "content": prior.assistant_text}
-                    )
-            messages.append({"role": "user", "content": request.text})
-
             from aulalista_api.curriculum import resolve_curricular_context_text
-
-            curricular_summary = resolve_curricular_context_text(
-                session,
-                scope_id,
-                school_id,
-                channel.subject_id if agent_kind == "subject" else None,
-            )
-            combined_notes = "\n\n".join(
-                part
-                for part in (curricular_summary, channel.context_notes)
-                if part and part.strip()
-            )
 
             if agent_kind == "orchestrator":
                 digests, subject_pairs, other_schools = _school_subject_digests(
                     session, scope_id, school_id
                 )
-                prompt_context = AgentPromptContext(
-                    agent_kind="orchestrator",
-                    school_name=channel.school_name,
-                    grade=channel.grade,
-                    shift=channel.shift,
-                    context_notes=combined_notes,
-                    subject_digests=digests,
-                    other_schools=other_schools,
+                routed_subject = classify_message_subject(
+                    request.text, subject_pairs, school_id
                 )
+                if routed_subject is not None:
+                    routed_sub_id, routed_sub_name = routed_subject
+                    sub_key = f"subject:{school_id}:{routed_sub_id}"
+                    sub_channel = session.scalar(
+                        select(AgentChatChannel).where(
+                            AgentChatChannel.scope_id == scope_id,
+                            AgentChatChannel.channel_key == sub_key,
+                        )
+                    )
+                    if sub_channel is not None:
+                        prior_turns = session.scalars(
+                            select(AgentChatTurn)
+                            .where(
+                                AgentChatTurn.channel_id == sub_channel.id,
+                                AgentChatTurn.number > sub_channel.through_turn,
+                                AgentChatTurn.state == "succeeded",
+                            )
+                            .order_by(AgentChatTurn.number.desc())
+                            .limit(MAX_ACTIVE_TURNS_IN_PROMPT)
+                        ).all()
+                        prior_turns.reverse()
+                        for prior in prior_turns:
+                            if prior.assistant_text:
+                                messages.append(
+                                    {"role": "user", "content": prior.user_text}
+                                )
+                                messages.append(
+                                    {
+                                        "role": "assistant",
+                                        "content": prior.assistant_text,
+                                    }
+                                )
+                    messages.append({"role": "user", "content": request.text})
+
+                    curricular_summary = resolve_curricular_context_text(
+                        session, scope_id, school_id, routed_sub_id
+                    )
+                    sub_notes = sub_channel.context_notes if sub_channel else ""
+                    combined_notes = "\n\n".join(
+                        part
+                        for part in (curricular_summary, sub_notes)
+                        if part and part.strip()
+                    )
+                    prompt_context = AgentPromptContext(
+                        agent_kind="subject",
+                        school_name=channel.school_name,
+                        grade=channel.grade,
+                        shift=channel.shift,
+                        subject_name=routed_sub_name,
+                        context_notes=combined_notes,
+                        orchestrator_brief=_orchestrator_brief_for_subject(
+                            session, scope_id, school_id
+                        ),
+                        recent_subject_annexes=_recent_annex_titles(
+                            session, scope_id, routed_sub_name, limit=5
+                        ),
+                    )
+                else:
+                    # General coordination mode: use only general turns on the main channel
+                    # plus compact subject digests so individual subject chatter stays isolated.
+                    prior_turns = session.scalars(
+                        select(AgentChatTurn)
+                        .where(
+                            AgentChatTurn.channel_id == channel.id,
+                            AgentChatTurn.number > channel.through_turn,
+                            AgentChatTurn.state == "succeeded",
+                            AgentChatTurn.delegated_subject_id.is_(None),
+                        )
+                        .order_by(AgentChatTurn.number.desc())
+                        .limit(MAX_ACTIVE_TURNS_IN_PROMPT)
+                    ).all()
+                    prior_turns.reverse()
+                    for prior in prior_turns:
+                        if prior.assistant_text:
+                            messages.append(
+                                {"role": "user", "content": prior.user_text}
+                            )
+                            messages.append(
+                                {
+                                    "role": "assistant",
+                                    "content": prior.assistant_text,
+                                }
+                            )
+                    messages.append({"role": "user", "content": request.text})
+
+                    curricular_summary = resolve_curricular_context_text(
+                        session, scope_id, school_id, None
+                    )
+                    combined_notes = "\n\n".join(
+                        part
+                        for part in (curricular_summary, channel.context_notes)
+                        if part and part.strip()
+                    )
+                    prompt_context = AgentPromptContext(
+                        agent_kind="orchestrator",
+                        school_name=channel.school_name,
+                        grade=channel.grade,
+                        shift=channel.shift,
+                        context_notes=combined_notes,
+                        subject_digests=digests,
+                        other_schools=other_schools,
+                    )
             else:
+                # Direct subject channel call (kept for API compatibility & internal isolation).
+                prior_turns = session.scalars(
+                    select(AgentChatTurn)
+                    .where(
+                        AgentChatTurn.channel_id == channel.id,
+                        AgentChatTurn.number > channel.through_turn,
+                        AgentChatTurn.state == "succeeded",
+                    )
+                    .order_by(AgentChatTurn.number.desc())
+                    .limit(MAX_ACTIVE_TURNS_IN_PROMPT)
+                ).all()
+                prior_turns.reverse()
+                for prior in prior_turns:
+                    if prior.assistant_text:
+                        messages.append({"role": "user", "content": prior.user_text})
+                        messages.append(
+                            {"role": "assistant", "content": prior.assistant_text}
+                        )
+                messages.append({"role": "user", "content": request.text})
+
+                curricular_summary = resolve_curricular_context_text(
+                    session, scope_id, school_id, channel.subject_id
+                )
+                combined_notes = "\n\n".join(
+                    part
+                    for part in (curricular_summary, channel.context_notes)
+                    if part and part.strip()
+                )
                 prompt_context = AgentPromptContext(
                     agent_kind="subject",
                     school_name=channel.school_name,
@@ -651,7 +747,12 @@ class AgentChatService:
             channel_id = channel.id
 
         # Execute external OpenAI request outside any DB transaction/lock.
-        assert prompt_context is not None and turn_id is not None and channel_id is not None
+        assert (
+            prompt_context is not None
+            and turn_id is not None
+            and channel_id is not None
+            and principal_id is not None
+        )
         try:
             reply = provider.generate(context=prompt_context, messages=messages)
         except AgentChatProviderError as error:
@@ -664,9 +765,13 @@ class AgentChatService:
         finished = datetime.now(UTC)
         topic, digest = build_compact_digest(request.text, reply.text)
         delegated_subject_id = (
-            detect_delegated_subject(request.text, reply.text, subject_pairs)
-            if agent_kind == "orchestrator"
-            else None
+            routed_subject[0]
+            if routed_subject is not None
+            else (
+                detect_delegated_subject(request.text, reply.text, subject_pairs)
+                if agent_kind == "orchestrator"
+                else None
+            )
         )
 
         with Session(self.engine) as session, session.begin():
@@ -682,9 +787,62 @@ class AgentChatService:
             turn.estimated_cost_usd = reply.estimated_cost_usd
             turn.delegated_subject_id = delegated_subject_id
             turn.finished_at = finished
-            channel.summary_topic = topic
-            channel.digest = digest
-            channel.updated_at = finished
+            if routed_subject is not None:
+                # Persist the turn inside the isolated internal subject channel so future
+                # turns for this subject keep their own history and compact digest without
+                # polluting other subjects or double-counting token cost.
+                routed_sub_id, routed_sub_name = routed_subject
+                sub_channel = self._get_or_create_channel(
+                    session,
+                    principal=principal_id,
+                    scope_id=scope_id,
+                    channel_key=f"subject:{school_id}:{routed_sub_id}",
+                    agent_kind="subject",
+                    school_id=school_id,
+                    school_name=channel.school_name,
+                    grade=channel.grade,
+                    shift=channel.shift,
+                    subject_id=routed_sub_id,
+                    subject_name=routed_sub_name,
+                    now=finished,
+                )
+                sub_channel.version += 1
+                sub_channel.summary_topic = topic
+                sub_channel.digest = digest
+                sub_channel.updated_at = finished
+                mirror_op_id = uuid5(operation_id, f"mirror:{routed_sub_id}")
+                mirror_exists = session.scalar(
+                    select(AgentChatTurn.id).where(
+                        AgentChatTurn.scope_id == scope_id,
+                        AgentChatTurn.operation_id == mirror_op_id,
+                    )
+                )
+                if mirror_exists is None:
+                    session.add(
+                        AgentChatTurn(
+                            channel_id=sub_channel.id,
+                            scope_id=scope_id,
+                            actor_id=principal_id,
+                            operation_id=mirror_op_id,
+                            number=sub_channel.version,
+                            context_revision=sub_channel.context_revision,
+                            user_text=request.text,
+                            assistant_text=reply.text,
+                            state="succeeded",
+                            model=reply.model,
+                            input_tokens=None,
+                            output_tokens=None,
+                            estimated_cost_usd=None,
+                            delegated_subject_id=None,
+                            created_at=finished,
+                            finished_at=finished,
+                        )
+                    )
+                channel.updated_at = finished
+            else:
+                channel.summary_topic = topic
+                channel.digest = digest
+                channel.updated_at = finished
             session.flush()
             return {
                 "channel": _channel_summary(channel),

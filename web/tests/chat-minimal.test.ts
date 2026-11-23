@@ -21,15 +21,15 @@ const renderChat = (controller: AcentaController) =>
     createElement(Chat, { controller, onPlan() {}, onContext() {} }),
   );
 
-it("shows borderless school/subject context and contextual composer placeholder", () => {
+it("shows borderless school context and contextual composer placeholder", () => {
   const c = new AcentaController(
     new AcentaApi(session, new ChatServer().transport),
   );
   let html = renderChat(c);
   expect(html).toContain("Benito Juárez · 4.º A");
-  expect(html).toContain(">Matemáticas, ¿qué preparamos hoy?</h1>");
+  expect(html).toContain(">¿Qué preparamos hoy?</h1>");
   expect(html).toContain(
-    "Pide una ficha o planeación de Matemáticas para 4.º A…",
+    "Pide una planeación, actividad o material para 4.º A…",
   );
   expect(html).toContain('aria-label="Opciones del chat"');
   expect(html).toContain("Consultar archivo anterior");
@@ -37,12 +37,11 @@ it("shows borderless school/subject context and contextual composer placeholder"
   expect(html).toContain("Planear");
 
   c.schools.switchSchool("hidalgo");
-  c.schools.selectSubject("hidalgo", "hidalgo-con");
   html = renderChat(c);
   expect(html).toContain("Miguel Hidalgo · 3.º B");
-  expect(html).toContain(">Conocimiento del Medio, ¿qué preparamos hoy?</h1>");
+  expect(html).toContain(">¿Qué preparamos hoy?</h1>");
   expect(html).toContain(
-    "Pide una ficha o planeación de Conocimiento del Medio para 3.º B…",
+    "Pide una planeación, actividad o material para 3.º B…",
   );
 });
 

@@ -99,7 +99,7 @@ function freshSnapshot(): SchoolContextSnapshot {
     schools,
     activeSchoolId: schools[0].id,
     activeSubjectId: schools[0].subjects[0].id,
-    activeAgentMode: "subject",
+    activeAgentMode: "orchestrator",
     hasScheduledPrint: false,
     syncStatus: "idle",
   };
@@ -225,8 +225,7 @@ export class SchoolContextStore {
             (sub) => sub.id === activeSchool.lastSubjectId,
           ) ??
           activeSchool.subjects[0];
-        const activeAgentMode: AgentMode =
-          response.activeAgentMode === "orchestrator" ? "orchestrator" : "subject";
+        const activeAgentMode: AgentMode = "orchestrator";
         this.emit({
           ...this.state,
           schools,
@@ -399,7 +398,7 @@ export class SchoolContextStore {
       schools: [...this.state.schools, created],
       activeSchoolId: created.id,
       activeSubjectId: matId,
-      activeAgentMode: "subject",
+      activeAgentMode: "orchestrator",
     });
     this.persistCurrent();
     return created;

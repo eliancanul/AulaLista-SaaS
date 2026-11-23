@@ -419,17 +419,17 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
   const analytic = useSyncExternalStore(controller.analytic.subscribe, controller.analytic.snapshot);
   const derived = useSyncExternalStore(controller.analyticDerivation.subscribe, controller.analyticDerivation.snapshot);
   useSyncExternalStore(controller.chat.subscribe, controller.chat.snapshot);
-  const agentChatState = useSyncExternalStore(controller.agentChat.subscribe, controller.agentChat.snapshot);
+  useSyncExternalStore(controller.agentChat.subscribe, controller.agentChat.snapshot);
   const [schoolMenuOpen, setSchoolMenuOpen] = useState(false);
-  const [schoolModal, setSchoolModal] = useState<"school" | "subject" | null>(null);
+  const [schoolModal, setSchoolModal] = useState<"school" | null>(null);
   const [newSchoolName, setNewSchoolName] = useState("");
   const [newSchoolGrade, setNewSchoolGrade] = useState("4.º A");
   const [newSchoolShift, setNewSchoolShift] = useState("Matutino");
-  const [newSubjectName, setNewSubjectName] = useState("");
   const schoolMenuRef = useRef<HTMLDivElement>(null);
   const [chatExit, setChatExit] = useState(false);
   const [derivedExit, setDerivedExit] = useState(false);
   const [analyticExit, setAnalyticExit] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
   const [supportCapture, setSupportCapture] = useState<{
     screenshot: CapturedScreenshot | null;
     bundle: DebugBundle;
@@ -599,7 +599,7 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
     void (async () => {
       const captured = await captureForSupport();
       setSupportCapture(captured);
-      openPanel("support");
+      setSupportOpen(true);
     })();
   };
   const closePanel = () => {
@@ -748,84 +748,6 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
                 </div>
               )}
             </div>
-
-            <nav className="subjects-section" aria-label={`Materias de ${activeSchool.shortName}`}>
-              {(() => {
-                const orchActive =
-                  (s.view === "home" || s.view === "chat") &&
-                  schoolState.activeAgentMode === "orchestrator";
-                const orchSummary =
-                  agentChatState.summaries[`orchestrator:${activeSchool.id}`];
-                return (
-                  <button
-                    type="button"
-                    className={`subject-row is-orchestrator${orchActive ? " active" : ""}`}
-                    aria-current={orchActive ? "page" : undefined}
-                    title={orchSummary?.summary_topic || "Orquestador general de la escuela"}
-                    onClick={() => {
-                      controller.schools.selectOrchestrator(activeSchool.id);
-                      if (s.view !== "home" && s.view !== "chat") {
-                        controller.navigate("home");
-                      }
-                    }}
-                  >
-                    <span className="subject-label">General</span>
-                    <span className="subject-role-pill">Orquestador</span>
-                  </button>
-                );
-              })()}
-              <div className="subject-add-sep" role="separator" />
-              {activeSchool.subjects.map((sub) => {
-                const isActive =
-                  (s.view === "home" || s.view === "chat") &&
-                  schoolState.activeAgentMode === "subject" &&
-                  sub.id === schoolState.activeSubjectId;
-                const subSummary =
-                  agentChatState.summaries[`subject:${activeSchool.id}:${sub.id}`];
-                const hasActivity = Boolean(subSummary && subSummary.version > 0);
-                return (
-                  <button
-                    key={sub.id}
-                    type="button"
-                    className={`subject-row${isActive ? " active" : ""}`}
-                    aria-current={isActive ? "page" : undefined}
-                    title={subSummary?.summary_topic || undefined}
-                    onClick={() => {
-                      controller.schools.selectSubject(activeSchool.id, sub.id);
-                      if (s.view !== "home" && s.view !== "chat") {
-                        controller.navigate("home");
-                      }
-                    }}
-                  >
-                    <span className="subject-label">{sub.name}</span>
-                    {isActive ? (
-                      <span
-                        className="subject-live-dot"
-                        style={{ background: activeSchool.color }}
-                        aria-hidden="true"
-                      />
-                    ) : hasActivity ? (
-                      <span
-                        className="subject-activity-dot"
-                        aria-hidden="true"
-                      />
-                    ) : null}
-                  </button>
-                );
-              })}
-              <div className="subject-add-sep" role="separator" />
-              <button
-                type="button"
-                className="subject-add-row"
-                onClick={() => {
-                  setNewSubjectName("");
-                  setSchoolModal("subject");
-                }}
-              >
-                <UiIcon name="plus" size={13} />
-                <span>Agregar materia</span>
-              </button>
-            </nav>
           </>
         )}
         <div className="rail-divider" role="separator" />
@@ -910,9 +832,9 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
             type="button"
             aria-label="Soporte"
             title={expanded ? undefined : "Soporte"}
-            className={`sidebar-nav-item${panelView === "support" ? " selected" : ""}`}
-            aria-controls="workspace-panel"
-            aria-expanded={panelView === "support"}
+            className={`sidebar-nav-item${supportOpen || panelView === "support" ? " selected" : ""}`}
+            aria-haspopup="dialog"
+            aria-expanded={supportOpen || panelView === "support"}
             data-navigation-focus="panel-support"
             onClick={openSupport}
           >
@@ -982,7 +904,7 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
                   initialDebugBundle={
                     supportCapture?.bundle ?? collectDebugBundle({ view: s.view })
                   }
-                  onRecapture={captureForSupport}
+                  onClose={closePanel}
                 />
               ) : <>
                 <PendingPlanning controller={controller} />
@@ -1471,57 +1393,32 @@ function Workspace({ controller, onLogout }: { controller: AcentaController; onL
           </form>
         </Dialog>
       )}
-      {schoolModal === "subject" && (
+      {supportOpen && (
         <Dialog
-          title="Agregar materia"
-          className="school-modal-dialog"
-          onClose={() => setSchoolModal(null)}
+          title="Soporte"
+          className="support-modal-dialog"
+          onClose={() => setSupportOpen(false)}
         >
-          <form
-            className="school-modal-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (controller.schools.addSubject(activeSchool.id, newSubjectName)) {
-                setSchoolModal(null);
-                if (s.view !== "home" && s.view !== "chat") {
-                  controller.navigate("home");
-                }
-              }
-            }}
-          >
-            <h2>Nueva materia</h2>
-            <p className="field-hint small-text">
-              {activeSchool.shortName} · {activeSchool.grade}
-            </p>
-            <div className="school-modal-field">
-              <label htmlFor="new-subject-name">Nombre de la materia</label>
-              <input
-                id="new-subject-name"
-                autoFocus
-                required
-                maxLength={60}
-                placeholder="Ej. Formación Cívica y Ética"
-                value={newSubjectName}
-                onChange={(e) => setNewSubjectName(e.target.value)}
-              />
-            </div>
-            <div className="school-modal-actions">
-              <button
-                type="button"
-                className="btn-sm btn-ghost"
-                onClick={() => setSchoolModal(null)}
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="primary btn-sm"
-                disabled={!newSubjectName.trim()}
-              >
-                Agregar materia
-              </button>
-            </div>
-          </form>
+          <div className="support-modal-header">
+            <h2>Soporte</h2>
+            <button
+              type="button"
+              className="support-modal-close"
+              aria-label="Cerrar soporte"
+              onClick={() => setSupportOpen(false)}
+            >
+              ×
+            </button>
+          </div>
+          <SupportPanel
+            api={controller.api}
+            viewName={supportCapture?.viewName ?? s.view}
+            initialScreenshot={supportCapture?.screenshot ?? null}
+            initialDebugBundle={
+              supportCapture?.bundle ?? collectDebugBundle({ view: s.view })
+            }
+            onClose={() => setSupportOpen(false)}
+          />
         </Dialog>
       )}
     </div>

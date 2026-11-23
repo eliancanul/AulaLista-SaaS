@@ -87,36 +87,34 @@ def build_agent_instructions(context: AgentPromptContext) -> str:
     if context.agent_kind == "orchestrator":
         lines = [
             (
-                f"Eres Luna, la coordinadora general (orquestadora) del docente en Acenta "
-                f"para la escuela {context.school_name} ({context.grade}, turno {context.shift})."
+                f"Eres Luna, la asistente pedagógica de Acenta para el grupo "
+                f"{context.grade} de la escuela {context.school_name} (turno {context.shift})."
             ),
             (
-                "Tu función es mantener la visión panorámica del grupo: organizar la semana, "
-                "coordinar actividades entre asignaturas, priorizar pendientes y orientar al docente "
-                "sin mezclar conversaciones largas de cada materia en este hilo."
+                "Tu función es apoyar al docente con visión panorámica del grupo: organizar la semana, "
+                "coordinar actividades entre asignaturas, priorizar pendientes y responder cualquier duda "
+                "pedagógica de forma directa."
             ),
             (
-                "Sólo recibes resúmenes compactos de cada agente de materia (no sus conversaciones completas) "
-                "para mantener tu contexto limpio y ágil."
+                "Recibes resúmenes compactos de cada asignatura trabajada recientemente "
+                "para mantener el contexto limpio y ágil."
             ),
             "Reglas estrictas:",
             "1) Responde en español claro, cercano y práctico para docentes de educación básica en México.",
             "2) Usa únicamente el contexto proporcionado; nunca afirmes haber leído archivos que no fueron compartidos ni inventes citas oficiales.",
             (
-                "3) Si el docente pide trabajo profundo y específico de UNA sola materia "
-                "(por ejemplo, redactar muchos ejercicios, una lectura completa o una secuencia detallada), "
-                "da una orientación breve y clara y recomienda continuar en el agente especialista de esa materia "
-                "para mantener el historial organizado."
+                "3) Nunca menciones 'orquestador', 'agentes internos' ni pidas al docente cambiar de chat "
+                "o elegir otra materia manualmente; resuelve siempre desde esta misma conversación."
             ),
             (
                 "4) Si el docente pide planear la semana, cruzar dos o más materias, revisar el avance general "
-                "del grupo o tomar decisiones de organización, resuélvelo directamente aquí."
+                "del grupo o tomar decisiones de organización, apóyate en los resúmenes por asignatura."
             ),
         ]
         if context.subject_digests:
             lines.append("")
             lines.append(
-                f"Estado compacto de los agentes de materia en {context.school_name} ({context.grade}):"
+                f"Resumen compacto de materias trabajadas en {context.school_name} ({context.grade}):"
             )
             for item in context.subject_digests[:15]:
                 if item.turn_count > 0 and item.digest:
@@ -124,7 +122,7 @@ def build_agent_instructions(context: AgentPromptContext) -> str:
                 elif item.summary_topic:
                     summary_piece = f"Tema activo: {item.summary_topic}"
                 else:
-                    summary_piece = "Sin conversación reciente"
+                    summary_piece = "Sin actividad reciente"
                 annex_piece = (
                     f" · Anexos recientes: {', '.join(item.recent_annexes[:3])}"
                     if item.recent_annexes
@@ -142,25 +140,29 @@ def build_agent_instructions(context: AgentPromptContext) -> str:
     subject_label = context.subject_name or "la asignatura"
     lines = [
         (
-            f"Eres Luna, agente especialista en {subject_label} para {context.grade} "
+            f"Eres Luna, asistente pedagógica enfocada en {subject_label} para {context.grade} "
             f"en la escuela {context.school_name} (turno {context.shift})."
         ),
         (
-            f"Este hilo es exclusivo de {subject_label}: concéntrate únicamente en esta asignatura "
-            "y este grado, entregando propuestas concretas y listas para usar en clase."
+            f"Concéntrate en {subject_label} y este grado, entregando propuestas concretas, "
+            "alineadas a educación básica en México y listas para usar en clase."
         ),
         "Reglas estrictas:",
         "1) Responde en español claro, ordenado y práctico para docentes de educación básica en México.",
         "2) No inventes citas oficiales ni afirmes haber leído documentos o archivos ausentes.",
         (
-            "3) Cuando tenga sentido producir una hoja imprimible para el alumnado, puedes proponer "
+            "3) Nunca menciones 'orquestador', 'agentes internos' ni pidas al docente cambiar de chat "
+            "o seleccionar otra materia manualmente."
+        ),
+        (
+            "4) Cuando tenga sentido producir una hoja imprimible para el alumnado, puedes proponer "
             "el borrador aquí y recordar que se puede generar en formato Carta listo para imprimir en Anexos."
         ),
     ]
     if context.orchestrator_brief:
         lines.append("")
         lines.append(
-            f"Nota breve de coordinación general ({context.school_name}): {context.orchestrator_brief}"
+            f"Contexto general reciente del grupo ({context.school_name}): {context.orchestrator_brief}"
         )
     if context.recent_subject_annexes:
         lines.append("")
@@ -206,12 +208,247 @@ def _fold(text: str) -> str:
     return "".join(ch for ch in normalized if not unicodedata.combining(ch))
 
 
+_GENERAL_COORDINATION_RE = re.compile(
+    r"\b("
+    r"como vamos|organiza la semana|plan semanal|planeacion semanal|horario|"
+    r"todas las materias|varias materias|cruzar materias|coordinar|consejo tecnico|"
+    r"proyecto escolar|junta de padres|avances del grupo|resumen general|"
+    r"resumen de la semana|esta semana"
+    r")\b"
+)
+
+_CANONICAL_SUBJECTS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    (
+        "mat",
+        "Matemáticas",
+        (
+            "matematicas",
+            "matematica",
+            "fraccion",
+            "fracciones",
+            "multiplicacion",
+            "multiplicaciones",
+            "division",
+            "divisiones",
+            "sumas",
+            "restas",
+            "geometria",
+            "ecuacion",
+            "ecuaciones",
+            "decimales",
+            "porcentaje",
+            "porcentajes",
+            "perimetro",
+            "angulos",
+            "tablas de multiplicar",
+            "regletas",
+            "cuisenaire",
+            "calculo mental",
+            "numeros romanos",
+            "probabilidad",
+            "algebra",
+        ),
+    ),
+    (
+        "esp",
+        "Español",
+        (
+            "espanol",
+            "lenguajes",
+            "comprension lectora",
+            "lectura",
+            "ortografia",
+            "cuento",
+            "cuentos",
+            "fabula",
+            "fabulas",
+            "leyenda",
+            "leyendas",
+            "poema",
+            "poemas",
+            "verbo",
+            "verbos",
+            "sustantivo",
+            "sustantivos",
+            "adjetivo",
+            "adjetivos",
+            "sinonimos",
+            "antonimos",
+            "acentuacion",
+            "silabas",
+            "redaccion",
+            "ensayo",
+            "gramatica",
+            "puntuacion",
+            "dictado",
+        ),
+    ),
+    (
+        "cie",
+        "Ciencias Naturales",
+        (
+            "ciencias naturales",
+            "ciencias",
+            "saberes y pensamiento cientifico",
+            "fotosintesis",
+            "ecosistema",
+            "ecosistemas",
+            "cuerpo humano",
+            "sistema solar",
+            "ciclo del agua",
+            "celula",
+            "celulas",
+            "cadena alimenticia",
+            "electricidad",
+            "magnetismo",
+            "estados de la materia",
+            "experimento",
+            "aparato digestivo",
+            "sistema nervioso",
+            "biodiversidad",
+            "medio ambiente",
+            "planetas",
+            "nutricion",
+        ),
+    ),
+    (
+        "his",
+        "Historia",
+        (
+            "historia",
+            "independencia",
+            "revolucion mexicana",
+            "mesoamerica",
+            "mayas",
+            "aztecas",
+            "mexicas",
+            "olmecas",
+            "conquista",
+            "virreinato",
+            "porfiriato",
+            "linea del tiempo",
+            "prehistoria",
+            "civilizaciones",
+            "constitucion de 1917",
+        ),
+    ),
+    (
+        "geo",
+        "Geografía",
+        (
+            "geografia",
+            "continentes",
+            "relieve",
+            "latitud",
+            "longitud",
+            "coordenadas",
+            "mapa",
+            "mapas",
+            "atlas",
+            "estados de mexico",
+            "placas tectonicas",
+            "volcanes",
+            "regiones naturales",
+        ),
+    ),
+    (
+        "fce",
+        "Formación Cívica y Ética",
+        (
+            "formacion civica",
+            "civica y etica",
+            "etica naturaleza",
+            "derechos humanos",
+            "derechos de los ninos",
+            "democracia",
+            "convivencia escolar",
+            "bullying",
+            "acoso escolar",
+            "igualdad de genero",
+            "ciudadania",
+            "socioemocional",
+        ),
+    ),
+    (
+        "art",
+        "Artes",
+        (
+            "artes",
+            "pintura",
+            "dibujo",
+            "escultura",
+            "colores primarios",
+            "manualidad",
+            "manualidades",
+        ),
+    ),
+    (
+        "ing",
+        "Inglés",
+        (
+            "ingles",
+            "english",
+            "vocabulary",
+            "vocabulario en ingles",
+            "verbo to be",
+            "present simple",
+        ),
+    ),
+)
+
+
+def classify_message_subject(
+    user_text: str,
+    subjects: list[tuple[str, str]],
+    school_id: str,
+) -> tuple[str, str] | None:
+    """Automatically classify a teacher message to a single subject for isolated specialist routing.
+
+    Returns (subject_id, subject_name) when the message clearly focuses on a single
+    subject task (not a multi-subject or weekly coordination query), else None.
+    """
+    folded = _fold(user_text)
+    if not folded.strip() or _GENERAL_COORDINATION_RE.search(folded):
+        return None
+
+    matches: dict[str, tuple[str, str]] = {}
+
+    # 1. Explicit match against configured subjects for this school.
+    for subject_id, subject_name in subjects:
+        folded_name = _fold(subject_name).strip()
+        if len(folded_name) >= 3 and re.search(rf"\b{re.escape(folded_name)}\b", folded):
+            matches[subject_id] = (subject_id, subject_name)
+
+    # 2. Match against canonical SEP/NEM subject vocabulary and map to configured subject if present.
+    by_folded_name = {
+        _fold(sname).strip(): (sid, sname) for sid, sname in subjects if sname.strip()
+    }
+    for slug, canonical_name, keywords in _CANONICAL_SUBJECTS:
+        if any(re.search(rf"\b{re.escape(kw)}\b", folded) for kw in keywords):
+            folded_canonical = _fold(canonical_name)
+            resolved = by_folded_name.get(folded_canonical)
+            if resolved is None:
+                # Also match partial configured names like "Ciencias" or "Conocimiento del Medio"
+                for sid, sname in subjects:
+                    fs = _fold(sname).strip()
+                    if fs and (fs in folded_canonical or folded_canonical in fs):
+                        resolved = (sid, sname)
+                        break
+            if resolved is None:
+                resolved = (f"{school_id}-{slug}", canonical_name)
+            matches[resolved[0]] = resolved
+
+    if len(matches) == 1:
+        return next(iter(matches.values()))
+    return None
+
+
 def detect_delegated_subject(
     user_text: str,
     assistant_text: str,
     subjects: list[tuple[str, str]],
 ) -> str | None:
-    """When the orchestrator focuses on a single subject, return its subject_id for 1-click handoff."""
+    """When a general reply focuses on a single subject, return its subject_id for tagging."""
     if not subjects:
         return None
     combined = _fold(f"{user_text}\n{assistant_text}")
@@ -481,15 +718,15 @@ class FakeAgentChatProvider:
             digest_note = (
                 f" Tengo el resumen compacto de: {', '.join(active)}."
                 if active
-                else " Aún no hay actividad en los agentes de materia."
+                else " Aún no hay actividad registrada por materia."
             )
             reply = (
-                f"[Orquestador · {context.school_name} {context.grade}] "
+                f"[Luna · {context.school_name} {context.grade}] "
                 f"Recibido: {last_user}.{digest_note}"
             )
         else:
             reply = (
-                f"[Agente {context.subject_name} · {context.school_name} {context.grade}] "
+                f"[Luna · {context.subject_name} · {context.school_name} {context.grade}] "
                 f"Propuesta enfocada en {context.subject_name} para: {last_user}."
             )
         return AgentChatReply(
