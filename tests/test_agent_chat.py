@@ -350,3 +350,90 @@ def test_openai_agent_chat_provider_payload_and_response_parsing():
         )
     assert err.value.code == "chat_refusal"
     assert err.value.status == 422
+
+
+def test_unified_chat_auto_routes_subjects_and_keeps_contexts_isolated(
+    runtime_database, actors
+):
+    actor_a, scope_a = actors[0]
+    # Budget allows exactly 3 calls (0.000044 * 3 = 0.000132) — mirroring must NOT double-count!
+    fake = FakeAgentChatProvider(scope_budget_usd=Decimal("0.000132"))
+    service = AgentChatService(runtime_database, provider=fake)
+
+    # 1. Message about fractions on unified school chat auto-routes to Matemáticas
+    t1 = service.send_turn(
+        actor_a,
+        scope_a,
+        "orchestrator:benito",
+        uuid4(),
+        AgentTurnRequest(
+            text="Dame ejercicios de fracciones equivalentes con regletas Cuisenaire",
+            expected_version=0,
+            agent_kind="orchestrator",
+            school_id="benito",
+            school_name="Benito Juárez",
+            grade="4.º A",
+            shift="Matutino",
+        ),
+    )
+    assert t1["turn"]["state"] == "succeeded"
+    assert t1["turn"]["delegated_subject_id"] == "benito-mat"
+    ctx1, msgs1 = fake.calls[-1]
+    assert ctx1.agent_kind == "subject"
+    assert ctx1.subject_name == "Matemáticas"
+    assert len(msgs1) == 1
+
+    # 2. Message about cuento/ortografía auto-routes to Español with ZERO Matemáticas clutter
+    t2 = service.send_turn(
+        actor_a,
+        scope_a,
+        "orchestrator:benito",
+        uuid4(),
+        AgentTurnRequest(
+            text="Prepara una actividad de ortografía con un cuento breve",
+            expected_version=1,
+            agent_kind="orchestrator",
+            school_id="benito",
+            school_name="Benito Juárez",
+            grade="4.º A",
+            shift="Matutino",
+        ),
+    )
+    assert t2["turn"]["delegated_subject_id"] == "benito-esp"
+    ctx2, msgs2 = fake.calls[-1]
+    assert ctx2.agent_kind == "subject"
+    assert ctx2.subject_name == "Español"
+    assert len(msgs2) == 1
+    assert "Cuisenaire" not in json.dumps(msgs2)
+
+    # 3. Weekly coordination message stays general and gets compact digests of both subjects
+    t3 = service.send_turn(
+        actor_a,
+        scope_a,
+        "orchestrator:benito",
+        uuid4(),
+        AgentTurnRequest(
+            text="Organiza la semana del grupo considerando lo que ya trabajamos",
+            expected_version=2,
+            agent_kind="orchestrator",
+            school_id="benito",
+            school_name="Benito Juárez",
+            grade="4.º A",
+            shift="Matutino",
+        ),
+    )
+    assert t3["turn"]["delegated_subject_id"] is None
+    ctx3, msgs3 = fake.calls[-1]
+    assert ctx3.agent_kind == "orchestrator"
+    assert "Cuisenaire" not in json.dumps(msgs3)
+    by_name = {d.subject_name: d for d in ctx3.subject_digests}
+    assert by_name["Matemáticas"].turn_count == 1
+    assert "fracciones" in by_name["Matemáticas"].digest.lower()
+    assert by_name["Español"].turn_count == 1
+    assert "ortografía" in by_name["Español"].digest.lower()
+
+    # Instructions must never tell Luna to talk about "orquestador" as a role
+    general_instructions = build_agent_instructions(ctx3).lower()
+    assert "la coordinadora general (orquestadora)" not in general_instructions
+    assert "nunca menciones 'orquestador'" in general_instructions
+

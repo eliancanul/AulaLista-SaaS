@@ -2,28 +2,44 @@ import { Fragment, useEffect, useRef, useState, useSyncExternalStore, type React
 import type { AcentaController, PanelView } from "./controller";
 import type { ChatUsage } from "./chat-contracts";
 import type { ActiveAgentTarget, AgentChatTurn } from "./agent-chat-controller";
-import type { AgentMode, SchoolSpace, SubjectSpace } from "./school-context";
+import type { SchoolSpace } from "./school-context";
 import { UiIcon } from "./ui";
 import { CurricularContextPanel } from "./CurricularContextPanel";
 import "./chat.css";
 
-function buildActiveAgentTarget(
+const STANDARD_SUBJECT_SLUGS: Record<string, string> = {
+  mat: "Matemáticas",
+  esp: "Español",
+  cie: "Ciencias Naturales",
+  his: "Historia",
+  geo: "Geografía",
+  fce: "Formación Cívica y Ética",
+  art: "Artes",
+  ing: "Inglés",
+  con: "Conocimiento del Medio",
+};
+
+function resolveDetectedSubjectLabel(
+  subjectId: string | null,
   school: SchoolSpace,
-  subject: SubjectSpace,
-  mode: AgentMode,
-): ActiveAgentTarget {
-  const isOrchestrator = mode === "orchestrator";
+): string | null {
+  if (!subjectId) return null;
+  const configured = school.subjects.find((sub) => sub.id === subjectId);
+  if (configured) return configured.name;
+  const slug = subjectId.split("-").pop()?.toLowerCase() ?? "";
+  return STANDARD_SUBJECT_SLUGS[slug] ?? null;
+}
+
+function buildSchoolChatTarget(school: SchoolSpace): ActiveAgentTarget {
   return {
-    channelKey: isOrchestrator
-      ? `orchestrator:${school.id}`
-      : `subject:${school.id}:${subject.id}`,
-    agentKind: isOrchestrator ? "orchestrator" : "subject",
+    channelKey: `orchestrator:${school.id}`,
+    agentKind: "orchestrator",
     schoolId: school.id,
     schoolName: school.shortName,
     grade: school.grade,
     shift: school.shift,
-    subjectId: isOrchestrator ? null : subject.id,
-    subjectName: isOrchestrator ? null : subject.name,
+    subjectId: null,
+    subjectName: null,
   };
 }
 
@@ -80,43 +96,32 @@ function AgentUsageDetails({turn}: {turn: AgentChatTurn}) {
 export function ChatContextEditor({controller}: {controller: AcentaController}) {
   useSyncExternalStore(controller.chat.subscribe, controller.chat.snapshot);
   const agentState = useSyncExternalStore(controller.agentChat.subscribe, controller.agentChat.snapshot);
-  const schoolState = useSyncExternalStore(controller.schools.subscribe, controller.schools.snapshot);
+  useSyncExternalStore(controller.schools.subscribe, controller.schools.snapshot);
 
   if (agentState.availability === "available") {
     const activeSchool = controller.schools.getActiveSchool();
-    const activeSubject = controller.schools.getActiveSubject();
-    const target = buildActiveAgentTarget(activeSchool, activeSubject, schoolState.activeAgentMode);
+    const target = buildSchoolChatTarget(activeSchool);
     const agentThread = controller.agentChat.threadFor(target.channelKey);
     const channel = agentThread.channel;
     const savedNotes = channel?.context_notes ?? "";
     const busy = agentThread.status === "sending" || agentThread.status === "loading";
-    const isOrchestrator = target.agentKind === "orchestrator";
     const dirty = agentThread.contextDraft !== null && agentThread.contextDraft !== savedNotes;
+    const activeDigests = agentThread.subjectDigests.filter(
+      (item) => item.turn_count > 0 || Boolean(item.summary_topic || item.digest),
+    );
 
     return <div className="chat-context-editor">
       <p className="agent-context-scope">
-        <strong>
-          {isOrchestrator
-            ? `Orquestador · ${activeSchool.shortName} · ${activeSchool.grade}`
-            : `Agente de ${activeSubject.name} · ${activeSchool.shortName}`}
-        </strong>
+        <strong>{activeSchool.shortName} · {activeSchool.grade}</strong>
       </p>
       <p>
-        {isOrchestrator
-          ? "Este agente coordina la semana y mantiene contexto general de la escuela. Sólo recibe resúmenes compactos de cada materia para evitar ruido."
-          : "Este agente trabaja únicamente en esta materia y conserva su propio historial aislado, más el breve contexto general del orquestador."}
+        Luna adapta sus respuestas a tu grupo y separa automáticamente el contexto de cada materia conforme conversan.
       </p>
-      {!isOrchestrator && agentThread.orchestratorBrief && (
+      {activeDigests.length > 0 && (
         <div className="agent-context-brief">
-          <span className="agent-context-brief-label">Contexto del orquestador (solo lectura)</span>
-          <p>{agentThread.orchestratorBrief}</p>
-        </div>
-      )}
-      {isOrchestrator && agentThread.subjectDigests.length > 0 && (
-        <div className="agent-context-brief">
-          <span className="agent-context-brief-label">Resúmenes activos por materia</span>
+          <span className="agent-context-brief-label">Materias con contexto activo</span>
           <ul className="agent-digest-list">
-            {agentThread.subjectDigests.map((item) => (
+            {activeDigests.map((item) => (
               <li key={item.subject_id}>
                 <strong>{item.subject_name}</strong>: {item.summary_topic || item.digest}
               </li>
@@ -130,21 +135,17 @@ export function ChatContextEditor({controller}: {controller: AcentaController}) 
         </p>
       )}
       <label htmlFor="chat-context-notes">
-        {isOrchestrator
-          ? `Notas generales del grupo (${activeSchool.grade})`
-          : `Notas específicas de ${activeSubject.name}`}
+        Notas generales del grupo ({activeSchool.grade})
       </label>
       <textarea
         id="chat-context-notes"
         value={agentThread.contextDraft ?? savedNotes}
         disabled={busy}
-        placeholder={isOrchestrator
-          ? "Ej.: Grupo de 28 alumnos, proyecto escolar de la semana, evaluaciones los viernes…"
-          : `Ej.: Nivel de avance en ${activeSubject.name}, libro SEP que usamos, adaptaciones…`}
+        placeholder="Ej.: Grupo de 28 alumnos, proyecto escolar de la semana, evaluaciones los viernes…"
         onChange={event => controller.agentChat.setContextDraft(target.channelKey, event.target.value)}
       />
       <p className="field-hint">
-        Hasta 4096 caracteres. Al guardar o reiniciar, el historial anterior de este agente queda archivado sin borrar tus otras materias.
+        Hasta 4096 caracteres. Al guardar o reiniciar, los mensajes anteriores quedan archivados sin borrar tus documentos ni anexos.
       </p>
       {dirty && <p role="status">Cambios de contexto sin guardar en esta pestaña.</p>}
       {agentThread.error && <p role="alert">{agentThread.error}</p>}
@@ -154,7 +155,7 @@ export function ChatContextEditor({controller}: {controller: AcentaController}) 
           Descartar cambios
         </button>
         <button disabled={busy} onClick={() => void controller.agentChat.updateContext(target, true)}>
-          Reiniciar chat de este agente
+          Reiniciar chat
         </button>
         <button
           className="primary"
@@ -169,8 +170,8 @@ export function ChatContextEditor({controller}: {controller: AcentaController}) 
         schoolId={activeSchool.id}
         schoolName={activeSchool.shortName}
         grade={activeSchool.gradeLong}
-        subjectId={isOrchestrator ? "__school__" : activeSubject.id}
-        subjectName={isOrchestrator ? "Toda la escuela" : activeSubject.name}
+        subjectId="__school__"
+        subjectName="Toda la escuela"
       />
     </div>;
   }
@@ -206,14 +207,12 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
 }) {
   const state = useSyncExternalStore(controller.chat.subscribe, controller.chat.snapshot);
   const agentState = useSyncExternalStore(controller.agentChat.subscribe, controller.agentChat.snapshot);
-  const schoolState = useSyncExternalStore(controller.schools.subscribe, controller.schools.snapshot);
+  useSyncExternalStore(controller.schools.subscribe, controller.schools.snapshot);
   const activeSchool = controller.schools.getActiveSchool();
-  const activeSubject = controller.schools.getActiveSubject();
   const thread = controller.chat.current();
   const archive = controller.chat.isArchive();
   const useAgentChat = !archive && agentState.availability === "available";
-  const activeTarget = buildActiveAgentTarget(activeSchool, activeSubject, schoolState.activeAgentMode);
-  const isOrchestrator = useAgentChat && activeTarget.agentKind === "orchestrator";
+  const activeTarget = buildSchoolChatTarget(activeSchool);
   const agentThread = controller.agentChat.threadFor(activeTarget.channelKey);
 
   const input = useRef<HTMLTextAreaElement>(null);
@@ -334,13 +333,7 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
     }
   };
 
-  const placeholderText = isOrchestrator
-    ? `Organiza la semana de ${activeSchool.grade} o coordina entre materias…`
-    : `Pide una ficha o planeación de ${activeSubject.name} para ${activeSchool.grade}…`;
-
-  const digestsBySubject = new Map(
-    agentThread.subjectDigests.map((d) => [d.subject_id, d]),
-  );
+  const placeholderText = `Pide una planeación, actividad o material para ${activeSchool.grade}…`;
 
   return <section
     className={`chat-panel conversation-panel${panel ? " with-panel" : ""}${hasMessages ? " has-messages" : " is-empty"}${archive ? " is-archive" : ""}`}
@@ -361,11 +354,7 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
           ) : hasMessages ? (
             <h1 id="chat-title" className="chat-context-label">
               <span className="chat-school-dot" style={{ background: activeSchool.color }} aria-hidden="true" />
-              <span>
-                {isOrchestrator
-                  ? `${activeSchool.shortName} · Orquestador general`
-                  : `${activeSchool.shortName} · ${activeSubject.name}`}
-              </span>
+              <span>{activeSchool.shortName} · {activeSchool.grade}</span>
             </h1>
           ) : (
             <span className="chat-topbar-spacer" aria-hidden="true" />
@@ -378,17 +367,7 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
             </button>
           ) : (
             <>
-              {useAgentChat ? (
-                !isOrchestrator && (
-                  <button
-                    type="button"
-                    className="chat-ghost-btn"
-                    onClick={() => controller.schools.selectOrchestrator(activeSchool.id)}
-                  >
-                    Ir al orquestador
-                  </button>
-                )
-              ) : (
+              {!useAgentChat && (
                 <button type="button" className="chat-ghost-btn" onClick={() => controller.navigate("conversations")}>
                   Consultar archivo anterior
                 </button>
@@ -452,58 +431,17 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
       {!archive && !hasMessages && (
         <div className="chat-greeting-block">
           <p className="chat-greeting-context">
-            {isOrchestrator
-              ? `${activeSchool.shortName} · ${activeSchool.grade} · Orquestador`
-              : `${activeSchool.shortName} · ${activeSchool.grade}`}
+            {activeSchool.shortName} · {activeSchool.grade}
           </p>
           <h1 id="chat-title" className="chat-greeting-title">
-            {isOrchestrator
-              ? "Coordinación general, ¿qué organizamos hoy?"
-              : `${activeSubject.name}, ¿qué preparamos hoy?`}
+            ¿Qué preparamos hoy?
           </h1>
-          {useAgentChat && !isOrchestrator && agentThread.orchestratorBrief && (
-            <button
-              type="button"
-              className="agent-orchestrator-link"
-              onClick={onContext}
-            >
-              Enlazado al contexto del orquestador · Ver
-            </button>
-          )}
-        </div>
-      )}
-
-      {useAgentChat && isOrchestrator && (
-        <div className="orchestrator-agents-strip" aria-label="Agentes de materia">
-          {activeSchool.subjects.map((sub) => {
-            const subKey = `subject:${activeSchool.id}:${sub.id}`;
-            const digest = digestsBySubject.get(sub.id);
-            const summary = controller.agentChat.summaryFor(subKey);
-            const activeCount = digest?.turn_count ?? summary?.version ?? 0;
-            const tooltip = digest?.summary_topic || summary?.summary_topic || `Abrir agente de ${sub.name}`;
-            return (
-              <button
-                key={sub.id}
-                type="button"
-                className={`orchestrator-agent-chip${activeCount > 0 ? " has-activity" : ""}`}
-                title={tooltip}
-                onClick={() => controller.schools.selectSubject(activeSchool.id, sub.id)}
-              >
-                <span
-                  className="orchestrator-agent-dot"
-                  style={activeCount > 0 ? { background: activeSchool.color } : undefined}
-                  aria-hidden="true"
-                />
-                <span>{sub.name}</span>
-              </button>
-            );
-          })}
         </div>
       )}
 
       {showAgentContextRevision && agentThread.channel && (
         <p className="chat-note chat-context-meta">
-          Contexto de {isOrchestrator ? "orquestador" : activeSubject.name} · revisión {agentThread.channel.context_revision}.
+          Contexto de {activeSchool.shortName} · revisión {agentThread.channel.context_revision}.
           {agentThread.channel.context_notes ? " Usa tus notas guardadas y " : " Usa "}
           los turnos posteriores al {agentThread.channel.through_turn}.
         </p>
@@ -524,9 +462,10 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
         {useAgentChat
           ? agentTurns.map((turn, idx) => {
               const isArchivedTurn = throughTurn > 0 && turn.number <= throughTurn;
-              const delegatedSubject = isOrchestrator && turn.delegated_subject_id
-                ? activeSchool.subjects.find((sub) => sub.id === turn.delegated_subject_id) ?? null
-                : null;
+              const detectedSubjectLabel = resolveDetectedSubjectLabel(
+                turn.delegated_subject_id,
+                activeSchool,
+              );
               return <Fragment key={turn.operation_id}>
                 <li className={`chat-turn${isArchivedTurn ? " is-archived" : ""}`}>
                   <article className="chat-message chat-user" aria-label={`Tu mensaje ${turn.number}`}>
@@ -536,24 +475,15 @@ export function Chat({controller, onPlan, onContext, panel, panelView = null}: {
                   <article className="chat-message chat-assistant" aria-label={`Respuesta ${turn.number}`}>
                     <h2 className="chat-assistant-head">
                       <span className="luna-dot" aria-hidden="true" />
-                      <span>{isOrchestrator ? "Luna · Orquestador" : `Luna · ${activeSubject.name}`}</span>
+                      <span>Luna</span>
+                      {detectedSubjectLabel && (
+                        <span className="chat-subject-pill">{detectedSubjectLabel}</span>
+                      )}
                     </h2>
                     {turn.state === "succeeded" ? (
                       <p>{turn.assistant_text}</p>
                     ) : (
                       <p>Este intento no pudo completarse. Puedes volver a intentarlo.</p>
-                    )}
-                    {delegatedSubject && (
-                      <div className="agent-delegation-row">
-                        <button
-                          type="button"
-                          className="agent-delegation-btn"
-                          onClick={() => controller.schools.selectSubject(activeSchool.id, delegatedSubject.id)}
-                        >
-                          <span>Continuar en agente de {delegatedSubject.name}</span>
-                          <UiIcon name="chevron-right" size={14} />
-                        </button>
-                      </div>
                     )}
                     <div className="chat-turn-meta">
                       <p className="chat-note">Contexto · revisión {turn.context_revision}</p>

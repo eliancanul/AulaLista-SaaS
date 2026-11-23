@@ -56,7 +56,7 @@ PLANS_CATALOG: list[dict[str, Any]] = [
         },
         "features": [
             "Hasta 5 impresiones remotas al mes en tu Epson (ilimitadas en Pro)",
-            "Orquestador + agentes por materia",
+            "Asistente Luna con organización automática por materia",
             "11 herramientas didácticas imprimibles y proyector de aula",
             "Planeaciones y documentos seguros (PDF, DOCX, imágenes) con purga real",
         ],

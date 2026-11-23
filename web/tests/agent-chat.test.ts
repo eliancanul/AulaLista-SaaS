@@ -205,45 +205,23 @@ const renderChat = (controller: AcentaController) =>
 const renderContextEditor = (controller: AcentaController) =>
   renderToStaticMarkup(createElement(ChatContextEditor, { controller }));
 
-it("isolates threads between Orchestrator and Subject Agents and renders delegation CTA", async () => {
+it("renders unified school chat without 'Orquestador' labels and displays auto-detected subject pills", async () => {
   const server = new FakeAgentChatServer();
   const c = new AcentaController(new AcentaApi(session, server.transport));
 
   expect(await c.agentChat.loadAvailability()).toBe(true);
-  expect(c.schools.getActiveChannelKey()).toBe("subject:benito:benito-mat");
-
-  // 1. Send turn in Mathematics subject agent
-  const matTarget = {
-    channelKey: "subject:benito:benito-mat",
-    agentKind: "subject" as const,
-    schoolId: "benito",
-    schoolName: "Benito Juárez",
-    grade: "4.º A",
-    shift: "Matutino",
-    subjectId: "benito-mat",
-    subjectName: "Matemáticas",
-  };
-  c.agentChat.setDraft(matTarget.channelKey, "Ficha de fracciones equivalentes");
-  expect(await c.agentChat.submit(matTarget)).toBe(true);
-
-  let html = renderChat(c);
-  expect(html).toContain("Benito Juárez · Matemáticas");
-  expect(html).toContain("Luna · Matemáticas");
-  expect(html).toContain("Ficha de fracciones equivalentes");
-  expect(html).toContain("Ir al orquestador");
-
-  // 2. Switch to Spanish subject agent -> completely clean isolated thread
-  c.schools.selectSubject("benito", "benito-esp");
-  await c.agentChat.openChannel("subject:benito:benito-esp");
-  html = renderChat(c);
-  expect(html).toContain("Español, ¿qué preparamos hoy?");
-  expect(html).not.toContain("Ficha de fracciones equivalentes");
-
-  // 3. Switch to School Orchestrator -> sees compact digest, delegates to Matemáticas
-  c.schools.selectOrchestrator("benito");
   expect(c.schools.getActiveChannelKey()).toBe("orchestrator:benito");
+
+  // 1. Empty state shows clean school greeting without "Orquestador" or manual subject switches
   await c.agentChat.openChannel("orchestrator:benito");
-  const orchTarget = {
+  let html = renderChat(c);
+  expect(html).toContain("Benito Juárez · 4.º A");
+  expect(html).toContain("¿Qué preparamos hoy?");
+  expect(html.toLowerCase()).not.toContain("orquestador");
+  expect(html).not.toContain("Agentes de materia");
+
+  // 2. Sending a message mentioning Matemáticas renders Luna + subtle subject pill, no manual switch CTA
+  const schoolTarget = {
     channelKey: "orchestrator:benito",
     agentKind: "orchestrator" as const,
     schoolId: "benito",
@@ -253,31 +231,38 @@ it("isolates threads between Orchestrator and Subject Agents and renders delegat
     subjectId: null,
     subjectName: null,
   };
-  c.agentChat.setDraft(orchTarget.channelKey, "Organiza mi semana y enfoca Matemáticas el martes");
-  expect(await c.agentChat.submit(orchTarget)).toBe(true);
+  c.agentChat.setDraft(
+    schoolTarget.channelKey,
+    "Necesito ejercicios de Matemáticas sobre fracciones",
+  );
+  expect(await c.agentChat.submit(schoolTarget)).toBe(true);
 
   html = renderChat(c);
-  expect(html).toContain("Benito Juárez · Orquestador general");
-  expect(html).toContain("Luna · Orquestador");
-  expect(html).toContain("Continuar en agente de Matemáticas");
-  expect(html).toContain("Agentes de materia");
-  expect(html).not.toContain("Propuesta especializada para Matemáticas");
+  expect(html).toContain("Benito Juárez · 4.º A");
+  expect(html).toContain("<span>Luna</span>");
+  expect(html).toContain("chat-subject-pill");
+  expect(html).toContain("Matemáticas");
+  expect(html.toLowerCase()).not.toContain("orquestador");
+  expect(html).not.toContain("Continuar en agente");
 
-  // Context editor in Orchestrator shows compact subject digests
+  // 3. Switching to another school isolates that school's thread cleanly
+  c.schools.switchSchool("hidalgo");
+  await c.agentChat.openChannel("orchestrator:hidalgo");
+  html = renderChat(c);
+  expect(html).toContain("Miguel Hidalgo · 3.º B");
+  expect(html).not.toContain("fracciones");
+
+  // 4. Context editor shows clean school heading and saves group notes without mentioning 'Orquestador'
+  c.schools.switchSchool("benito");
+  c.agentChat.setContextDraft(
+    "orchestrator:benito",
+    "Semana del agua y evaluación el viernes",
+  );
+  expect(await c.agentChat.updateContext(schoolTarget, false)).toBe(true);
   const ctxHtml = renderContextEditor(c);
-  expect(ctxHtml).toContain("Orquestador · Benito Juárez · 4.º A");
-  expect(ctxHtml).toContain("Resúmenes activos por materia");
-  expect(ctxHtml).toContain("Ficha de fracciones equivalentes");
-
-  // 4. Save orchestrator context -> Subject agent shows orchestrator brief
-  c.agentChat.setContextDraft("orchestrator:benito", "Semana del agua y evaluación el viernes");
-  expect(await c.agentChat.updateContext(orchTarget, false)).toBe(true);
-
-  c.schools.selectSubject("benito", "benito-esp");
-  await c.agentChat.openChannel("subject:benito:benito-esp", true);
-  const espCtxHtml = renderContextEditor(c);
-  expect(espCtxHtml).toContain("Contexto del orquestador (solo lectura)");
-  expect(espCtxHtml).toContain("Semana del agua y evaluación el viernes");
+  expect(ctxHtml).toContain("Benito Juárez · 4.º A");
+  expect(ctxHtml).toContain("Notas generales del grupo (4.º A)");
+  expect(ctxHtml.toLowerCase()).not.toContain("orquestador");
 
   // 5. Logout purges memory-only state
   c.closeSession();
