@@ -176,7 +176,9 @@ def _normalize_word(raw: str) -> str:
     return letters
 
 
-def _extract_terms(topic: str, subject: str, raw_terms: list[str], count: int) -> list[str]:
+def _extract_terms(
+    topic: str, subject: str, raw_terms: list[str], count: int
+) -> list[str]:
     cleaned: list[str] = []
     seen: set[str] = set()
     for item in raw_terms:
@@ -523,11 +525,31 @@ def generate_didactic_tool(
                             "Producto final sugerido: Cartel informativo, maqueta o presentación breve ante el grupo.",
                         ],
                         table=AnnexTableData(
-                            headers=["Fase NEM", "Actividad clave", "Responsables", "Evidencia"],
+                            headers=[
+                                "Fase NEM",
+                                "Actividad clave",
+                                "Responsables",
+                                "Evidencia",
+                            ],
                             rows=[
-                                ["1. Planeación", f"Definir preguntas sobre {topic}", "", "Mapa de ideas"],
-                                ["2. Acción", "Investigar, experimentar y producir", "", "Borrador / prototipo"],
-                                ["3. Intervención", "Presentar hallazgos y reflexionar", "", "Producto final"],
+                                [
+                                    "1. Planeación",
+                                    f"Definir preguntas sobre {topic}",
+                                    "",
+                                    "Mapa de ideas",
+                                ],
+                                [
+                                    "2. Acción",
+                                    "Investigar, experimentar y producir",
+                                    "",
+                                    "Borrador / prototipo",
+                                ],
+                                [
+                                    "3. Intervención",
+                                    "Presentar hallazgos y reflexionar",
+                                    "",
+                                    "Producto final",
+                                ],
                             ],
                         ),
                         items=[
@@ -580,7 +602,10 @@ def generate_didactic_tool(
                         heading="1. Banco de tarjetas (frente y reverso)",
                         prompt="Puedes editar cada concepto o definición antes de imprimir.",
                         table=AnnexTableData(
-                            headers=["Frente (Concepto)", "Reverso (Explicación / Ejemplo)"],
+                            headers=[
+                                "Frente (Concepto)",
+                                "Reverso (Explicación / Ejemplo)",
+                            ],
                             rows=[[c["front"], c["back"]] for c in cards],
                         ),
                         items=[
@@ -627,7 +652,10 @@ def generate_didactic_tool(
                         heading="1. Pares del memorama",
                         prompt="Imprime en cartulina o papel grueso para mayor duración.",
                         table=AnnexTableData(
-                            headers=["Tarjeta A (Concepto)", "Tarjeta B (Definición / Pista)"],
+                            headers=[
+                                "Tarjeta A (Concepto)",
+                                "Tarjeta B (Definición / Pista)",
+                            ],
                             rows=[
                                 [term, f"Elemento clave de {topic}: {term.lower()}"]
                                 for term in terms
@@ -762,7 +790,8 @@ def generate_didactic_tool(
                     )
                 ],
                 teacher_key=[
-                    f"Tarjeta #{idx}: {c['answer']}" for idx, c in enumerate(cards, start=1)
+                    f"Tarjeta #{idx}: {c['answer']}"
+                    for idx, c in enumerate(cards, start=1)
                 ],
                 metadata={"cut_cards": cards, "cut_mode": "clues", "seed": seed},
                 footer_note=footer,
@@ -774,7 +803,12 @@ def generate_didactic_tool(
         slides = [
             {
                 "question": f"¿Cuál de los siguientes conceptos se relaciona directamente con {topic}?",
-                "options": [terms[0], "Astronomía medieval", "Geología lunar", "Ninguno"],
+                "options": [
+                    terms[0],
+                    "Astronomía medieval",
+                    "Geología lunar",
+                    "Ninguno",
+                ],
                 "correct_index": 0,
                 "explanation": f"'{terms[0]}' es uno de los conceptos centrales al trabajar {topic}.",
                 "timer_seconds": 30,
@@ -887,9 +921,7 @@ def adapt_text_resource(
 ) -> GeneratedDidacticResource:
     mode_label = _ADAPTATION_LABELS.get(adaptation_mode, "Adaptación docente")
     sentences = [
-        s.strip()
-        for s in re.split(r"(?<=[.!?])\s+", source_text.strip())
-        if s.strip()
+        s.strip() for s in re.split(r"(?<=[.!?])\s+", source_text.strip()) if s.strip()
     ]
     if not sentences:
         sentences = [f"Idea principal sobre {topic}."]

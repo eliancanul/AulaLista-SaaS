@@ -42,9 +42,7 @@ def install_billing_routes(app: FastAPI, engine) -> None:
             payload = CheckoutRequest.model_validate_json(raw)
         except ValidationError:
             raise MaterialError(422, "invalid_request") from None
-        doc = await run_in_threadpool(
-            service.start_checkout, actor, scope_id, payload
-        )
+        doc = await run_in_threadpool(service.start_checkout, actor, scope_id, payload)
         return JSONResponse(doc, headers={"Cache-Control": "no-store"})
 
     @app.post("/scopes/{scope_id}/billing/portal", tags=["billing"])

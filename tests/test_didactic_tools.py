@@ -129,7 +129,10 @@ def test_wordsearch_and_bingo_are_seed_deterministic_with_unique_boards(
             f"/scopes/{scope_id}/annexes/tools/generate",
             json={**payload_base, "tool_id": "sopa-de-letras"},
         ).json()
-        assert ws1["content"]["metadata"]["wordsearch"] == ws2["content"]["metadata"]["wordsearch"]
+        assert (
+            ws1["content"]["metadata"]["wordsearch"]
+            == ws2["content"]["metadata"]["wordsearch"]
+        )
         assert len(ws1["content"]["metadata"]["wordsearch"]["placements"]) >= 5
 
         b1 = client.post(

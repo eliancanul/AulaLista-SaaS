@@ -34,7 +34,9 @@ def upgrade() -> None:
         sa.Column("status", sa.String(length=24), nullable=False),
         sa.Column("extracted_text", sa.Text(), nullable=True),
         sa.Column("page_count", sa.Integer(), nullable=False, server_default="0"),
-        sa.Column("ocr_engine", sa.String(length=64), nullable=False, server_default=""),
+        sa.Column(
+            "ocr_engine", sa.String(length=64), nullable=False, server_default=""
+        ),
         sa.Column("error_code", sa.String(length=120), nullable=True),
         sa.Column("revoked_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
@@ -93,7 +95,12 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("sha256", sa.String(length=64), nullable=False),
-        sa.Column("reason", sa.String(length=120), nullable=False, server_default="teacher_revoked"),
+        sa.Column(
+            "reason",
+            sa.String(length=120),
+            nullable=False,
+            server_default="teacher_revoked",
+        ),
         sa.Column(
             "revoked_at",
             sa.DateTime(timezone=True),

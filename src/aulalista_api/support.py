@@ -89,20 +89,24 @@ class ServerDiagnosticsRecorder:
             "flags": {
                 "openai_chat_enabled": os.environ.get(
                     "AULALISTA_OPENAI_CHAT_ENABLED", ""
-                ).strip().lower()
+                )
+                .strip()
+                .lower()
                 == "true",
                 "openai_annexes_enabled": os.environ.get(
                     "AULALISTA_OPENAI_ANNEXES_ENABLED", ""
-                ).strip().lower()
+                )
+                .strip()
+                .lower()
                 == "true",
-                "email_otp_enabled": os.environ.get(
-                    "AULALISTA_EMAIL_OTP_ENABLED", ""
-                ).strip().lower()
+                "email_otp_enabled": os.environ.get("AULALISTA_EMAIL_OTP_ENABLED", "")
+                .strip()
+                .lower()
                 == "true",
                 "smtp_configured": bool(os.environ.get("SMTP_HOST", "").strip()),
-                "local_insecure": os.environ.get(
-                    "AULALISTA_LOCAL_INSECURE", ""
-                ).strip().lower()
+                "local_insecure": os.environ.get("AULALISTA_LOCAL_INSECURE", "")
+                .strip()
+                .lower()
                 == "true",
             },
             "recent_server_errors": recent[-25:],
@@ -200,7 +204,9 @@ def sanitize_debug_value(value: Any, *, depth: int = 0) -> Any:
     return str(value)[:500]
 
 
-def decode_png_screenshot(data_url: str | None) -> tuple[bytes | None, str | None, str | None]:
+def decode_png_screenshot(
+    data_url: str | None,
+) -> tuple[bytes | None, str | None, str | None]:
     if not data_url:
         return None, None, None
     raw = data_url.strip()
@@ -242,13 +248,12 @@ def _ticket_summary(row: SupportTicket, *, include_bundles: bool = False) -> dic
             else None
         ),
         "triage_notes": row.triage_notes,
-        "console_error_count": len(
-            (row.debug_bundle or {}).get("consoleErrors", [])
-        ),
+        "console_error_count": len((row.debug_bundle or {}).get("consoleErrors", [])),
         "failed_request_count": sum(
             1
             for req in (row.debug_bundle or {}).get("networkLog", [])
-            if isinstance(req, dict) and (req.get("status", 0) == 0 or req.get("status", 200) >= 400)
+            if isinstance(req, dict)
+            and (req.get("status", 0) == 0 or req.get("status", 200) >= 400)
         ),
         "created_at": row.created_at.astimezone(UTC).isoformat(),
         "updated_at": row.updated_at.astimezone(UTC).isoformat(),
@@ -288,7 +293,9 @@ class SupportService:
                 summary=req.summary.strip(),
                 description=req.description.strip(),
                 view_name=req.view_name.strip() if req.view_name else None,
-                route_url=req.route_url.split("?", 1)[0][:512] if req.route_url else None,
+                route_url=req.route_url.split("?", 1)[0][:512]
+                if req.route_url
+                else None,
                 screenshot_png=png_bytes,
                 screenshot_mime=mime,
                 screenshot_sha256=sha256,
@@ -323,7 +330,12 @@ class SupportService:
                 .limit(200)
             ).all()
 
-            counts_by_status = {"open": 0, "investigating": 0, "resolved": 0, "wontfix": 0}
+            counts_by_status = {
+                "open": 0,
+                "investigating": 0,
+                "resolved": 0,
+                "wontfix": 0,
+            }
             counts_by_severity = {"low": 0, "medium": 0, "high": 0, "critical": 0}
             filtered: list[SupportTicket] = []
             for row in all_rows:

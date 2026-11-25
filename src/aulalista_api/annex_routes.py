@@ -175,9 +175,7 @@ def install_annex_routes(
         return Response(status_code=204, headers={"Cache-Control": "no-store"})
 
     @app.get("/scopes/{scope_id}/annexes/{annex_id}/revisions")
-    async def list_annex_revisions(
-        scope_id: UUID, annex_id: UUID, actor: Actor
-    ):
+    async def list_annex_revisions(scope_id: UUID, annex_id: UUID, actor: Actor):
         doc = await run_in_threadpool(service.list_revisions, actor, scope_id, annex_id)
         return JSONResponse(doc, headers={"Cache-Control": "no-store"})
 

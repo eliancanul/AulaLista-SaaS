@@ -137,9 +137,7 @@ def install_support_routes(app: FastAPI, engine) -> None:
         return JSONResponse(doc, headers={"Cache-Control": "no-store"})
 
     @app.get("/scopes/{scope_id}/support/backlog.json", tags=["support"])
-    async def export_support_backlog(
-        scope_id: UUID, actor=Depends(require_actor)
-    ):
+    async def export_support_backlog(scope_id: UUID, actor=Depends(require_actor)):
         doc = await run_in_threadpool(service.export_backlog, actor, scope_id)
         return JSONResponse(
             doc,

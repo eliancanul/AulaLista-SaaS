@@ -69,9 +69,7 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.func.now(),
         ),
-        sa.CheckConstraint(
-            "attempts BETWEEN 0 AND 5", name="ck_account_link_attempts"
-        ),
+        sa.CheckConstraint("attempts BETWEEN 0 AND 5", name="ck_account_link_attempts"),
     )
     op.create_index(
         "ix_account_link_principal",
@@ -106,9 +104,7 @@ def upgrade() -> None:
         sa.Column("screenshot_png", sa.LargeBinary(), nullable=True),
         sa.Column("screenshot_mime", sa.String(length=32), nullable=True),
         sa.Column("screenshot_sha256", sa.String(length=64), nullable=True),
-        sa.Column(
-            "screenshot_bytes", sa.Integer(), nullable=False, server_default="0"
-        ),
+        sa.Column("screenshot_bytes", sa.Integer(), nullable=False, server_default="0"),
         sa.Column(
             "debug_bundle",
             postgresql.JSONB(astext_type=sa.Text()),

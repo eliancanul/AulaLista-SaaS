@@ -326,9 +326,7 @@ class DocumentService:
             raise MaterialError(422, "invalid_base64") from None
 
         try:
-            validated = sniff_and_validate_document(
-                filename=payload.filename, raw=raw
-            )
+            validated = sniff_and_validate_document(filename=payload.filename, raw=raw)
         except DocumentValidationError as err:
             raise MaterialError(err.status, err.code) from None
 

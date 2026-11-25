@@ -224,7 +224,9 @@ def test_courtesy_pro_allowlist_manual_grant_and_webhook_protection(
         assert still_pro["subscription"]["is_courtesy"] is True
 
 
-def test_stripe_webhook_hmac_verification_and_idempotency(runtime_database, monkeypatch):
+def test_stripe_webhook_hmac_verification_and_idempotency(
+    runtime_database, monkeypatch
+):
     monkeypatch.delenv("AULALISTA_PRO_GRANT_EMAILS", raising=False)
     monkeypatch.delenv("AULALISTA_PRO_GRANT_SCOPE_IDS", raising=False)
     principal_id, scope_id = _seed_user(runtime_database)
