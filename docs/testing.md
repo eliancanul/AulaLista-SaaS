@@ -55,10 +55,18 @@ Size, for scale only, as collected at commit `85a21e1`: 870+ pytest tests, 670+ 
 Three GitHub Actions workflows run on pull requests and on pushes to `main`. All three pin actions by commit SHA and declare `permissions: contents: read`.
 
 - [`backend`](../.github/workflows/backend.yml): Ruff lint and format, migrations applied twice to a PostgreSQL service, then unit, PostgreSQL integration, chat and isolation tests as separate steps. Afterwards it inspects the PostgreSQL log and fails if private rows or statement parameters were written to it.
-- [`web`](../.github/workflows/web.yml): Vitest, typecheck and production build, Playwright journeys, the connected browser suites, and a check that the production wheel contains no test entry points. It only triggers for changes under the paths it depends on.
+- [`web`](../.github/workflows/web.yml): Vitest, typecheck and production build, Playwright journeys, the connected browser suites, and a check that the production wheel contains no test entry points. The workflow starts on every pull request; its first job compares the change with the paths the suite depends on and the suite runs only when one of them changed.
 - [`evaluation-offline`](../.github/workflows/evaluation.yml): manifest verification and the offline suites, with and without Python assertions enabled.
 
 Tests import the installed, non-editable package, so a packaging mistake fails in CI.
+
+### Required checks
+
+Branch protection on `main` requires three checks before a pull request can be merged, with no bypass for administrators: `backend-tests`, `web-required` and `synthetic-instrument`. A direct push to `main` is rejected for the same reason.
+
+`web-required` is a small job at the end of the `web` workflow. It passes when the web suite passed, or when the change touched none of the paths the suite depends on; it fails when the suite failed, was cancelled, or was skipped for any other reason. Without it, a pull request that only edits documentation would wait forever for a check that never starts.
+
+Approving reviews are not required by GitHub, because the repository has a single maintainer who cannot approve their own pull requests. The review described in [docs/workflow.md](workflow.md) is recorded as a pull request comment and linked from the pull request description.
 
 ## Running the tests
 
@@ -131,7 +139,7 @@ When finished: `docker compose -f compose.test.yml down`. [docs/development.md](
 
 ## How the work is done
 
-AI coding agents write the code in this repository, each change starting from a written spec and a small issue. [docs/workflow.md](workflow.md) sets the gates before a change can be merged: tests that fail if the guarantee breaks, an adversarial review by an agent or person other than the author, and CI on the exact commit, with any later commit invalidating the earlier evidence.
+AI coding agents write the code in this repository, each change starting from a written spec and a small issue. [docs/workflow.md](workflow.md) sets the gates before a change can be merged: tests that fail if the guarantee breaks, an adversarial review by an agent other than the one that wrote the change, recorded in the pull request, and CI on the exact commit, with any later commit invalidating the earlier evidence. Of these, CI is the one GitHub enforces (see [Required checks](#required-checks)); the reviewers are AI agents commenting from the maintainer's account, not a second person.
 
 Changes arrive through pull requests tied to issues: see the [merged pull requests](https://github.com/eliancanul/AulaLista-SaaS/pulls?q=is%3Apr+is%3Amerged) (60+) and the [issue tracker](https://github.com/eliancanul/AulaLista-SaaS/issues).
 

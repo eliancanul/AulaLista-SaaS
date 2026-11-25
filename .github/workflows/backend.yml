@@ -11,10 +11,12 @@ permissions:
 
 concurrency:
   group: backend-${{ github.ref }}
-  cancel-in-progress: true
+  # A newer commit replaces an unfinished pull request run; every push to main finishes its own run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  test:
+  # Required by branch protection on main under this exact name; keep it unique across workflows.
+  backend-tests:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     services:
