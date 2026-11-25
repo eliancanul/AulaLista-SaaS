@@ -10,13 +10,9 @@ The project is under development. Test data is synthetic and nothing here claims
 
 The badges show the live state of each workflow on `main`; this README does not restate it.
 
-## Why this exist
-I made this web app with my mother and father in mind, they are teachers and every new cicle they get really busy making the study plans and excersices for their clases, so I coded for them an easy to use (because they are definitely not "teach-friendly"), intuitive, platform with all they could need to create all the things they need, the last feature was a connection with our local printer via Email for an automated print schedule every day, they are definitely very happy with these piece of software, and I happy that something I build has impact in their lives. 
-<!-- STORY — Elian writes this section himself, in his own words (80–150 words).
-Heading to use: ## Why this exists
-Prompts: Who is it for and how do you know them? What were they doing by hand before?
-What did you decide NOT to build, and why? What surprised you once real people used it?
-Delete this comment when the section is written. -->
+## Why this exists
+
+I made this web app with my mother and father in mind. They are teachers, and every new school year they get really busy making the study plans and exercises for their classes. So I built them an easy-to-use, intuitive platform (because they are definitely not "tech-friendly") with everything they need to create those materials. The latest feature is a connection to our local printer over email, for an automated print schedule every day. They are very happy with this piece of software, and I am happy that something I built has an impact on their lives.
 
 ## What is tested, at which layer, and what is left out
 
