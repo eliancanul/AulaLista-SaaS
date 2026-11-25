@@ -10,80 +10,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: web-${{ github.ref }}
-  # A newer commit replaces an unfinished pull request run; every push to main finishes its own run.
+  group: web-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  # A newer commit replaces an unfinished pull request run; each push to main uses its own SHA group so no run is cancelled or dropped.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # The workflow starts on every pull request and push so that `web-required`
-  # always reports a result. The suite itself runs only when a path it depends
-  # on changed.
-  changes:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 3
-    outputs:
-      relevant: ${{ steps.diff.outputs.relevant }}
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-      - name: Decide whether the web suite depends on this change
-        id: diff
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          PUSH_BEFORE: ${{ github.event.before }}
-          WEB_PATHS: >-
-            web
-            src
-            scripts
-            tests/check_web_artifact.py
-            migrations
-            pyproject.toml
-            uv.lock
-            tests/browser_integration.py
-            tests/auth_browser_integration.py
-            tests/pilot_browser_integration.py
-            tests/chat_browser_integration.py
-            tests/test_chat.py
-            tests/test_chat_context.py
-            tests/test_chat_migration.py
-            tests/test_chat_routes.py
-            tests/test_openai_chat.py
-            tests/test_planning_generation.py
-            tests/test_openai_planning.py
-            tests/guided_accessibility_browser_integration.py
-            tests/test_auth_integration.py
-            tests/conftest.py
-            tests/test_materials.py
-            tests/postgres-init.sql
-            .github/workflows/web.yml
-        run: |
-          # A pull request is checked out as its merge commit: the first parent is the base.
-          case "$EVENT_NAME" in
-            pull_request) base="HEAD^1" ;;
-            push) base="$PUSH_BEFORE" ;;
-            *) base="" ;;
-          esac
-          # Manual runs, and any base that cannot be resolved, run the full suite.
-          if [ -z "$base" ] || ! git rev-parse --verify --quiet "$base^{commit}" > /dev/null; then
-            echo "No comparable base: running the web suite."
-            echo "relevant=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # WEB_PATHS is a space-separated list of git pathspecs.
-          # shellcheck disable=SC2086
-          changed="$(git diff --name-only "$base" HEAD -- $WEB_PATHS)"
-          printf 'Base: %s\nChanged paths the web suite depends on:\n%s\n' "$(git rev-parse "$base")" "${changed:-(none)}"
-          if [ -n "$changed" ]; then
-            echo "relevant=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "relevant=false" >> "$GITHUB_OUTPUT"
-          fi
-
+  # Required by branch protection on main under this exact name; keep it unique across workflows.
   web-tests:
-    needs: changes
-    if: ${{ needs.changes.outputs.relevant == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
@@ -196,32 +129,3 @@ jobs:
           uv build --no-sources
           uv pip install --reinstall --no-deps dist/*.whl
           .venv/bin/python tests/check_web_artifact.py
-
-  # Required by branch protection on main under this exact name. It passes when
-  # the suite passed, or when no path the suite depends on changed; a failed,
-  # cancelled or unexpectedly skipped suite fails it.
-  web-required:
-    needs: [changes, web-tests]
-    if: ${{ always() }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 2
-    steps:
-      - name: Report the web result
-        env:
-          CHANGES_RESULT: ${{ needs.changes.result }}
-          RELEVANT: ${{ needs.changes.outputs.relevant }}
-          TESTS_RESULT: ${{ needs.web-tests.result }}
-        run: |
-          printf 'changes: %s\nrelevant: %s\nweb-tests: %s\n' "$CHANGES_RESULT" "$RELEVANT" "$TESTS_RESULT"
-          if [ "$CHANGES_RESULT" != "success" ]; then
-            echo "The path check did not complete."
-            exit 1
-          fi
-          if [ "$RELEVANT" = "true" ] && [ "$TESTS_RESULT" = "success" ]; then
-            exit 0
-          fi
-          if [ "$RELEVANT" = "false" ] && [ "$TESTS_RESULT" = "skipped" ]; then
-            echo "No path the web suite depends on changed; the suite did not need to run."
-            exit 0
-          fi
-          exit 1
