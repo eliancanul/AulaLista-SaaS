@@ -10,10 +10,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: evaluation-${{ github.ref }}
-  cancel-in-progress: true
+  group: evaluation-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  # A newer commit replaces an unfinished pull request run; each push to main uses its own SHA group so no run is cancelled or dropped.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Required by branch protection on main under this exact name; keep it unique across workflows.
   synthetic-instrument:
     runs-on: ubuntu-24.04
     timeout-minutes: 5

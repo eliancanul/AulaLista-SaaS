@@ -38,6 +38,6 @@ The PostgreSQL and Playwright suites need Docker and Chromium; every command is 
 
 ## How it is built
 
-AI coding agents write most of the code. A change is merged only after tests that fail when its guarantee breaks, a review by someone other than its author, and CI on the exact commit: [docs/workflow.md](docs/workflow.md). The history is in the [merged pull requests](https://github.com/eliancanul/AulaLista-SaaS/pulls?q=is%3Apr+is%3Amerged).
+AI coding agents write most of the code. The process for a change is in [docs/workflow.md](docs/workflow.md): tests that fail when its guarantee breaks, an adversarial review by an agent other than the one that wrote it, recorded as a comment on the pull request, and CI on the exact commit against current `main`. Branch protection on `main` enforces the pull request and CI gates, with no bypass for administrators: direct pushes to `main` are blocked, and a pull request cannot be merged until it is up to date with `main` and the three required checks pass (see [docs/testing.md](docs/testing.md#required-checks) for what GitHub checks and its limits). The review is a rule of the process, not something GitHub enforces: this repository has one maintainer, and the reviewing agents comment from the same account. The history is in the [merged pull requests](https://github.com/eliancanul/AulaLista-SaaS/pulls?q=is%3Apr+is%3Amerged).
 
 For scale: about 870 pytest tests, 670 Vitest cases and 160 Playwright tests. Most documentation under `docs/` is in Spanish.
