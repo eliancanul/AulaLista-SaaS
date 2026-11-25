@@ -189,9 +189,10 @@ def _month_bounds_utc(now: datetime | None = None) -> tuple[datetime, datetime]:
 
 
 def _stripe_enabled() -> bool:
-    return (
-        os.environ.get("AULALISTA_STRIPE_ENABLED", "").strip().lower() == "true"
-        and bool(os.environ.get("STRIPE_SECRET_KEY", "").strip())
+    return os.environ.get(
+        "AULALISTA_STRIPE_ENABLED", ""
+    ).strip().lower() == "true" and bool(
+        os.environ.get("STRIPE_SECRET_KEY", "").strip()
     )
 
 
@@ -534,7 +535,11 @@ class BillingService:
         if payload.plan_id not in PLANS_BY_ID:
             raise MaterialError(422, "invalid_plan")
 
-        if _stripe_enabled() and not payload.preview_switch and payload.plan_id != "free":
+        if (
+            _stripe_enabled()
+            and not payload.preview_switch
+            and payload.plan_id != "free"
+        ):
             price_env = f"STRIPE_PRICE_{payload.plan_id.upper()}"
             price_id = os.environ.get(price_env, "").strip()
             secret_key = os.environ.get("STRIPE_SECRET_KEY", "").strip()
@@ -679,11 +684,7 @@ class BillingService:
             raise MaterialError(400, "invalid_stripe_event")
 
         metadata = obj.get("metadata") if isinstance(obj.get("metadata"), dict) else {}
-        scope_raw = (
-            metadata.get("scope_id")
-            or obj.get("client_reference_id")
-            or ""
-        )
+        scope_raw = metadata.get("scope_id") or obj.get("client_reference_id") or ""
         try:
             scope_id = UUID(str(scope_raw))
         except ValueError:
@@ -710,7 +711,9 @@ class BillingService:
                 sub.plan_id = target_plan
                 sub.status = "active"
                 sub.billing_provider = "stripe"
-                sub.provider_customer_id = str(obj.get("customer") or "") or sub.provider_customer_id
+                sub.provider_customer_id = (
+                    str(obj.get("customer") or "") or sub.provider_customer_id
+                )
                 sub.provider_subscription_id = (
                     str(obj.get("subscription") or "") or sub.provider_subscription_id
                 )

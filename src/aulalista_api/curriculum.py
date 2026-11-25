@@ -42,17 +42,33 @@ NEM_CAMPOS_FORMATIVOS: list[dict] = [
     {
         "id": "saberes",
         "name": "Saberes y Pensamiento Científico",
-        "subjects": ["Matemáticas", "Ciencias Naturales", "Física", "Biología", "Química"],
+        "subjects": [
+            "Matemáticas",
+            "Ciencias Naturales",
+            "Física",
+            "Biología",
+            "Química",
+        ],
     },
     {
         "id": "etica",
         "name": "Ética, Naturaleza y Sociedades",
-        "subjects": ["Historia", "Geografía", "Formación Cívica y Ética", "Conocimiento del Medio"],
+        "subjects": [
+            "Historia",
+            "Geografía",
+            "Formación Cívica y Ética",
+            "Conocimiento del Medio",
+        ],
     },
     {
         "id": "humano",
         "name": "De lo Humano y lo Comunitario",
-        "subjects": ["Educación Socioemocional", "Educación Física", "Vida Saludable", "Tecnología"],
+        "subjects": [
+            "Educación Socioemocional",
+            "Educación Física",
+            "Vida Saludable",
+            "Tecnología",
+        ],
     },
 ]
 
@@ -60,7 +76,10 @@ NEM_PHASES: list[dict] = [
     {"id": "Fase 3", "grades": ["1.º de primaria", "2.º de primaria"]},
     {"id": "Fase 4", "grades": ["3.º de primaria", "4.º de primaria"]},
     {"id": "Fase 5", "grades": ["5.º de primaria", "6.º de primaria"]},
-    {"id": "Fase 6", "grades": ["1.º de secundaria", "2.º de secundaria", "3.º de secundaria"]},
+    {
+        "id": "Fase 6",
+        "grades": ["1.º de secundaria", "2.º de secundaria", "3.º de secundaria"],
+    },
 ]
 
 NEM_PDA_CATALOG: list[dict] = [
@@ -276,7 +295,10 @@ class CurriculumService:
             rows = db.scalars(
                 select(CurricularProfile)
                 .where(CurricularProfile.scope_id == scope_id)
-                .order_by(CurricularProfile.school_id.asc(), CurricularProfile.subject_id.asc())
+                .order_by(
+                    CurricularProfile.school_id.asc(),
+                    CurricularProfile.subject_id.asc(),
+                )
             ).all()
             return {
                 "scope_id": str(scope_id),
@@ -294,9 +316,7 @@ class CurriculumService:
         now = datetime.now(UTC)
         cleaned_school = school_id.strip()[:80]
         cleaned_subject = subject_id.strip()[:80] or "__school__"
-        cleaned_ejes = [
-            e.strip()[:100] for e in req.ejes_articuladores if e.strip()
-        ]
+        cleaned_ejes = [e.strip()[:100] for e in req.ejes_articuladores if e.strip()]
         pdas_data = [p.model_dump() for p in req.pdas]
 
         with Session(self.engine) as db:

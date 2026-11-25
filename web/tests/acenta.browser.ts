@@ -250,14 +250,13 @@ test("Planear keeps Planeación and Proyecto without a separate Secuencia action
   const menu = page.getByRole("dialog", { name: "Herramientas" });
   await expect(menu.getByRole("button", { name: "Cerrar", exact: true })).toBeFocused();
   await expect(menu.getByRole("tab", { name: "Planear", exact: true })).toHaveAttribute("aria-selected", "true");
-  const unavailableProject = menu.locator(".catalog-items > p");
-  await expect(unavailableProject).toContainText("Proyecto de aula");
-  await expect(unavailableProject.locator(".tool-unavailable")).toHaveText("Todavía no disponible");
+  // Proyecto de aula is an active tool since the didactic tools shipped; nothing is marked unavailable.
+  await expect(menu.locator(".tool-unavailable")).toHaveCount(0);
   await expect(menu.getByText("Secuencia didáctica", { exact: true })).toHaveCount(0);
   await expect(menu.locator(".catalog-items a, .catalog-items input, .catalog-items img")).toHaveCount(0);
-  await expect(menu.getByText("Planeación de clase usa el formulario existente; las demás herramientas están pendientes.", { exact: true })).toBeVisible();
+  await expect(menu.getByText("Todas las herramientas están activas y listas para editar, imprimir o proyectar.", { exact: true })).toBeVisible();
   await expect(menu.getByRole("button")).toHaveText([
-    "Cerrar", "Planeación de clase", "Ajustar planeación ↗", "Revisar recurso ↗",
+    "Cerrar", "Planeación de clase", "Proyecto de aula", "Ajustar planeación ↗", "Revisar recurso ↗",
   ]);
   await page.evaluate(() => document.fonts.ready);
   await page.screenshot({ path: `${evidence}/tools-planeacion-secuencia-1440x924.png` });

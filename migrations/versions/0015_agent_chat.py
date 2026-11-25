@@ -30,18 +30,24 @@ def upgrade() -> None:
         sa.Column("school_id", sa.String(length=80), nullable=False),
         sa.Column("school_name", sa.String(length=80), nullable=False),
         sa.Column("grade", sa.String(length=40), nullable=False),
-        sa.Column("shift", sa.String(length=40), nullable=False, server_default="Matutino"),
+        sa.Column(
+            "shift", sa.String(length=40), nullable=False, server_default="Matutino"
+        ),
         sa.Column("subject_id", sa.String(length=80), nullable=True),
         sa.Column("subject_name", sa.String(length=80), nullable=True),
         sa.Column("context_notes", sa.Text(), nullable=False, server_default=""),
         sa.Column("through_turn", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("context_revision", sa.Integer(), nullable=False, server_default="0"),
-        sa.Column("summary_topic", sa.String(length=160), nullable=False, server_default=""),
+        sa.Column(
+            "summary_topic", sa.String(length=160), nullable=False, server_default=""
+        ),
         sa.Column("digest", sa.String(length=400), nullable=False, server_default=""),
         sa.Column("version", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.UniqueConstraint("scope_id", "channel_key", name="uq_agent_chat_scope_channel"),
+        sa.UniqueConstraint(
+            "scope_id", "channel_key", name="uq_agent_chat_scope_channel"
+        ),
         sa.CheckConstraint(
             "agent_kind IN ('orchestrator', 'subject')",
             name="ck_agent_chat_kind",
@@ -92,7 +98,9 @@ def upgrade() -> None:
         sa.Column("delegated_subject_id", sa.String(length=80), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("finished_at", sa.DateTime(timezone=True), nullable=True),
-        sa.UniqueConstraint("scope_id", "operation_id", name="uq_agent_chat_turn_operation"),
+        sa.UniqueConstraint(
+            "scope_id", "operation_id", name="uq_agent_chat_turn_operation"
+        ),
         sa.UniqueConstraint("channel_id", "number", name="uq_agent_chat_turn_number"),
         sa.CheckConstraint(
             "state IN ('generating', 'succeeded', 'failed')",

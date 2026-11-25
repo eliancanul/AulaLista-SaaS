@@ -44,7 +44,9 @@ def _make_pdf_bytes(text: str) -> bytes:
     return buf.getvalue()
 
 
-def _make_docx_bytes(xml_content: str, *, extra_entry: tuple[str, bytes] | None = None) -> bytes:
+def _make_docx_bytes(
+    xml_content: str, *, extra_entry: tuple[str, bytes] | None = None
+) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("[Content_Types].xml", '<?xml version="1.0"?><Types/>')

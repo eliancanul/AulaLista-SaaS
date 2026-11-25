@@ -97,12 +97,16 @@ def _provider_label(issuer: str) -> str:
     return issuer
 
 
-def _link_mac(auth: Auth | None, principal_id: UUID, challenge_id: UUID, email: str, code: str) -> str:
+def _link_mac(
+    auth: Auth | None, principal_id: UUID, challenge_id: UUID, email: str, code: str
+) -> str:
     if auth is not None and auth.settings is not None:
         return auth.mac("account-link", principal_id, challenge_id, email, code)
     # Fallback deterministic HMAC when running local insecure dev server without auth_settings.
     key = b"acenta-local-account-link-fallback"
-    payload = "\0".join(("account-link", str(principal_id), str(challenge_id), email, code)).encode()
+    payload = "\0".join(
+        ("account-link", str(principal_id), str(challenge_id), email, code)
+    ).encode()
     return hmac.new(key, payload, hashlib.sha256).hexdigest()
 
 
@@ -132,15 +136,21 @@ class AccountService:
                     }
                     for row in identities
                 ],
-                "promotional_consent": bool(prefs.promotional_consent) if prefs else False,
+                "promotional_consent": bool(prefs.promotional_consent)
+                if prefs
+                else False,
                 "promotional_consent_updated_at": (
                     prefs.promotional_consent_updated_at.astimezone(UTC).isoformat()
                     if prefs and prefs.promotional_consent_updated_at
                     else None
                 ),
-                "consent_history": list(prefs.consent_history or [])[-20:] if prefs else [],
+                "consent_history": list(prefs.consent_history or [])[-20:]
+                if prefs
+                else [],
                 "capabilities": {
-                    "email_otp_available": bool(self.auth and self.auth.sender is not None),
+                    "email_otp_available": bool(
+                        self.auth and self.auth.sender is not None
+                    ),
                     "google_available": bool(
                         self.auth
                         and self.auth.google is not None
@@ -220,7 +230,9 @@ class AccountService:
                     id=challenge_id,
                     principal_id=principal_id,
                     email=email,
-                    code_mac=_link_mac(self.auth, principal_id, challenge_id, email, code),
+                    code_mac=_link_mac(
+                        self.auth, principal_id, challenge_id, email, code
+                    ),
                     expires_at=expires_at,
                     attempts=0,
                     consumed=False,

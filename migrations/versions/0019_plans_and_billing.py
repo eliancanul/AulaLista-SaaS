@@ -26,7 +26,9 @@ def upgrade() -> None:
             sa.ForeignKey("personal_scope.id", ondelete="CASCADE"),
             primary_key=True,
         ),
-        sa.Column("plan_id", sa.String(length=32), nullable=False, server_default="free"),
+        sa.Column(
+            "plan_id", sa.String(length=32), nullable=False, server_default="free"
+        ),
         sa.Column(
             "status", sa.String(length=32), nullable=False, server_default="active"
         ),

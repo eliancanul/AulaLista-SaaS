@@ -687,12 +687,20 @@ def render_annex_pdf(annex_doc: dict[str, Any], *, copies: int = 1) -> bytes:
             col_count = max(1, len(headers))
             col_width = usable_width / col_count
             matrix: list[list[Any]] = [
-                [Paragraph(f"<b>{_p_text(h)}</b>", styles["checklist_item"]) for h in headers]
+                [
+                    Paragraph(f"<b>{_p_text(h)}</b>", styles["checklist_item"])
+                    for h in headers
+                ]
             ]
             for raw_row in (table_data.get("rows") or [])[:24]:
-                padded = list(raw_row[:col_count]) + [""] * max(0, col_count - len(raw_row))
+                padded = list(raw_row[:col_count]) + [""] * max(
+                    0, col_count - len(raw_row)
+                )
                 matrix.append(
-                    [Paragraph(_p_text(str(cell)), styles["checklist_item"]) for cell in padded]
+                    [
+                        Paragraph(_p_text(str(cell)), styles["checklist_item"])
+                        for cell in padded
+                    ]
                 )
             tbl = Table(matrix, colWidths=[col_width] * col_count, repeatRows=1)
             tbl.setStyle(
@@ -700,7 +708,13 @@ def render_annex_pdf(annex_doc: dict[str, Any], *, copies: int = 1) -> bytes:
                     [
                         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EAEAEA")),
                         ("BOX", (0, 0), (-1, -1), 0.75, colors.HexColor("#222222")),
-                        ("INNERGRID", (0, 0), (-1, -1), 0.45, colors.HexColor("#666666")),
+                        (
+                            "INNERGRID",
+                            (0, 0),
+                            (-1, -1),
+                            0.45,
+                            colors.HexColor("#666666"),
+                        ),
                         ("VALIGN", (0, 0), (-1, -1), "TOP"),
                         ("TOPPADDING", (0, 0), (-1, -1), 5),
                         ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
@@ -713,10 +727,16 @@ def render_annex_pdf(annex_doc: dict[str, Any], *, copies: int = 1) -> bytes:
             story.append(tbl)
             story.append(Spacer(1, 0.08 * inch))
 
-    metadata = content.get("metadata") if isinstance(content.get("metadata"), dict) else {}
+    metadata = (
+        content.get("metadata") if isinstance(content.get("metadata"), dict) else {}
+    )
 
     # Word search printable letter grid
-    wordsearch = metadata.get("wordsearch") if isinstance(metadata.get("wordsearch"), dict) else None
+    wordsearch = (
+        metadata.get("wordsearch")
+        if isinstance(metadata.get("wordsearch"), dict)
+        else None
+    )
     if wordsearch and isinstance(wordsearch.get("grid"), list) and wordsearch["grid"]:
         grid = wordsearch["grid"]
         size = len(grid)
@@ -753,15 +773,26 @@ def render_annex_pdf(annex_doc: dict[str, Any], *, copies: int = 1) -> bytes:
             cols = max(1, len(cells[0]))
             col_w = usable_width / cols
             rows_p = [
-                [Paragraph(f"<b>{_p_text(str(c))}</b>", styles["checklist_item"]) for c in row]
+                [
+                    Paragraph(f"<b>{_p_text(str(c))}</b>", styles["checklist_item"])
+                    for c in row
+                ]
                 for row in cells
             ]
-            b_tbl = Table(rows_p, colWidths=[col_w] * cols, rowHeights=[0.65 * inch] * len(rows_p))
+            b_tbl = Table(
+                rows_p, colWidths=[col_w] * cols, rowHeights=[0.65 * inch] * len(rows_p)
+            )
             b_tbl.setStyle(
                 TableStyle(
                     [
                         ("BOX", (0, 0), (-1, -1), 1.2, colors.black),
-                        ("INNERGRID", (0, 0), (-1, -1), 0.6, colors.HexColor("#333333")),
+                        (
+                            "INNERGRID",
+                            (0, 0),
+                            (-1, -1),
+                            0.6,
+                            colors.HexColor("#333333"),
+                        ),
                         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                         ("BACKGROUND", (1, 1), (1, 1), colors.HexColor("#EAEAEA")),
@@ -780,10 +811,16 @@ def render_annex_pdf(annex_doc: dict[str, Any], *, copies: int = 1) -> bytes:
             )
 
     # Cuttable cards grid (flashcards, memorama, clue cards)
-    cut_cards = metadata.get("cut_cards") if isinstance(metadata.get("cut_cards"), list) else None
+    cut_cards = (
+        metadata.get("cut_cards")
+        if isinstance(metadata.get("cut_cards"), list)
+        else None
+    )
     if cut_cards:
         story.append(PageBreak())
-        story.append(Paragraph("TARJETAS RECORTABLES · RECORTAR POR LOS BORDES", styles["meta"]))
+        story.append(
+            Paragraph("TARJETAS RECORTABLES · RECORTAR POR LOS BORDES", styles["meta"])
+        )
         story.append(Spacer(1, 0.06 * inch))
         card_rows: list[list[Any]] = []
         pair_buf: list[Any] = []
@@ -806,7 +843,13 @@ def render_annex_pdf(annex_doc: dict[str, Any], *, copies: int = 1) -> bytes:
                 TableStyle(
                     [
                         ("BOX", (0, 0), (-1, -1), 0.8, colors.HexColor("#333333")),
-                        ("INNERGRID", (0, 0), (-1, -1), 0.6, colors.HexColor("#555555")),
+                        (
+                            "INNERGRID",
+                            (0, 0),
+                            (-1, -1),
+                            0.6,
+                            colors.HexColor("#555555"),
+                        ),
                         ("VALIGN", (0, 0), (-1, -1), "TOP"),
                         ("TOPPADDING", (0, 0), (-1, -1), 10),
                         ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
@@ -820,12 +863,20 @@ def render_annex_pdf(annex_doc: dict[str, Any], *, copies: int = 1) -> bytes:
     teacher_key = content.get("teacher_key")
     if isinstance(teacher_key, list) and any(str(x).strip() for x in teacher_key):
         story.append(PageBreak())
-        story.append(Paragraph("CLAVE DOCENTE · NO REPARTIR AL ALUMNADO", styles["meta"]))
         story.append(
-            Paragraph(_p_text(f"Clave: {annex_doc.get('title', 'Anexo')}"), styles["title"])
+            Paragraph("CLAVE DOCENTE · NO REPARTIR AL ALUMNADO", styles["meta"])
+        )
+        story.append(
+            Paragraph(
+                _p_text(f"Clave: {annex_doc.get('title', 'Anexo')}"), styles["title"]
+            )
         )
         story.extend(_editorial_double_rule(usable_width))
-        if wordsearch and isinstance(wordsearch.get("grid"), list) and wordsearch.get("placements"):
+        if (
+            wordsearch
+            and isinstance(wordsearch.get("grid"), list)
+            and wordsearch.get("placements")
+        ):
             highlighted: set[tuple[int, int]] = set()
             for p in wordsearch["placements"]:
                 r0, c0 = p["start"]
@@ -852,7 +903,9 @@ def render_annex_pdf(annex_doc: dict[str, Any], *, copies: int = 1) -> bytes:
                 ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#999999")),
             ]
             for r, c in highlighted:
-                sol_style.append(("BACKGROUND", (c, r), (c, r), colors.HexColor("#DCDCDC")))
+                sol_style.append(
+                    ("BACKGROUND", (c, r), (c, r), colors.HexColor("#DCDCDC"))
+                )
                 sol_style.append(("FONTNAME", (c, r), (c, r), "Courier-Bold"))
             sol_tbl.setStyle(TableStyle(sol_style))
             story.append(sol_tbl)
