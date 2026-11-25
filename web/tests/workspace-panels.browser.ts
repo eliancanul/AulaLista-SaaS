@@ -18,7 +18,7 @@ async function mount(page: Page) {
   return {chat, resources};
 }
 const panel = (page: Page, name: string) => page.getByRole("region", {name, exact: true});
-test("explicit panels preserve the same composer, drafts, navigation and honest unavailable states", async ({page}) => {
+test("explicit panels and the support dialog preserve the same composer, drafts and navigation", async ({page}) => {
   const {chat, resources} = await mount(page), input = page.getByLabel("Mensaje para Luna", {exact: true});
   await input.fill("Borrador que debe permanecer"); await input.evaluate(node => node.setAttribute("data-retained-composer", "yes"));
   await expect(page.locator(".workspace-panel")).toHaveCount(0);
@@ -28,15 +28,24 @@ test("explicit panels preserve the same composer, drafts, navigation and honest 
   await expect(panel(page, "Mis recursos")).toContainText("No hay recursos todavía");
   await page.getByRole("button", {name: "Herramientas", exact: true}).click();
   await panel(page, "Herramientas").getByRole("tab", {name: "Materiales", exact: true}).click();
-  await expect(panel(page, "Herramientas")).toContainText("Todavía no disponible");
+  await expect(panel(page, "Herramientas")).toContainText("Todas las herramientas están activas");
+  await expect(panel(page, "Herramientas").locator(".catalog-items > button")).toHaveText(["Hoja de actividades", "Preguntas sobre un texto", "Adaptar material", "Tarjetas de repaso"]);
+  await expect(panel(page, "Herramientas").locator(".tool-unavailable")).toHaveCount(0);
+  // Support is a modal dialog over the open panel; it never becomes a history entry.
   await page.getByRole("button", {name: "Soporte", exact: true}).click();
-  await expect(panel(page, "Soporte")).toContainText("Soporte todavía no está disponible en Acenta.");
-  await expect(panel(page, "Soporte").locator("form, input, textarea, a")).toHaveCount(0);
-  await expect(input).toHaveValue("Borrador que debe permanecer"); await expect(input).toHaveAttribute("data-retained-composer", "yes");
-  await page.goBack(); await expect(panel(page, "Herramientas")).toBeVisible();
-  await page.goForward(); await expect(panel(page, "Soporte")).toBeVisible();
-  await panel(page, "Soporte").getByRole("button", {name: "Cerrar panel", exact: true}).click();
+  const support = page.getByRole("dialog", {name: "Soporte", exact: true});
+  await expect(support.getByLabel("¿Qué pasó?")).toBeVisible();
+  expect(await support.evaluate(node => node.matches(":modal") && node.contains(document.activeElement))).toBe(true);
+  await expect(support.getByRole("button", {name: "Enviar", exact: true})).toBeDisabled();
+  await expect(panel(page, "Herramientas")).toBeVisible();
+  await support.getByRole("button", {name: "Cerrar soporte", exact: true}).click();
+  await expect(support).toHaveCount(0);
   await expect(page.getByRole("button", {name: "Soporte", exact: true})).toBeFocused();
+  await expect(input).toHaveValue("Borrador que debe permanecer"); await expect(input).toHaveAttribute("data-retained-composer", "yes");
+  await page.goBack(); await expect(panel(page, "Mis recursos")).toBeVisible();
+  await page.goForward(); await expect(panel(page, "Herramientas")).toBeVisible();
+  await panel(page, "Herramientas").getByRole("button", {name: "Cerrar panel", exact: true}).click();
+  await expect(page.getByRole("button", {name: "Herramientas", exact: true})).toBeFocused();
   await expect(page.locator(".workspace-panel")).toHaveCount(0);
   await page.getByRole("button", {name: "Revisar contexto", exact: true}).click();
   await expect(page.getByLabel("Notas para el próximo contexto")).toHaveValue("Notas aún sin guardar");
@@ -54,7 +63,8 @@ test("keyboard opens a nonmodal panel and Planear returns focus to its own short
   await expect(panel(page, "Herramientas").getByRole("heading", {name: "Herramientas", exact: true})).toBeFocused();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.keyboard.press("Escape"); await expect(shortcut).toBeFocused();
-  await page.getByRole("button", {name: "Soporte", exact: true}).click();
+  await page.getByRole("button", {name: "Mis recursos", exact: true}).click();
+  await expect(panel(page, "Mis recursos")).toBeVisible();
   await page.getByRole("button", {name: "Cerrar sesión", exact: true}).click();
   // The fixture can close without changes; another test covers the dirty guard.
   await expect(page.getByRole("button", {name: "Continuar con correo", exact: true})).toBeVisible();
@@ -63,9 +73,9 @@ test("back restores the original panel activator even after reopening it from an
   await mount(page);
   const shortcut = page.getByRole("button", {name: "Planear", exact: true});
   await shortcut.click();
-  await page.getByRole("button", {name: "Soporte", exact: true}).click();
+  await page.getByRole("button", {name: "Mis recursos", exact: true}).click();
   await page.getByRole("button", {name: "Herramientas", exact: true}).click();
-  await page.goBack(); await expect(panel(page, "Soporte")).toBeVisible();
+  await page.goBack(); await expect(panel(page, "Mis recursos")).toBeVisible();
   await page.goBack(); await expect(panel(page, "Herramientas")).toBeVisible();
   await page.keyboard.press("Escape"); await expect(shortcut).toBeFocused();
 });
@@ -83,10 +93,10 @@ test("late turn and context responses preserve panel selection and focused contr
   await page.getByRole("button", {name: "Revisar contexto", exact: true}).click();
   await page.getByLabel("Notas para el próximo contexto").fill("Contexto tardío");
   await page.getByRole("button", {name: "Guardar notas y comenzar contexto", exact: true}).click();
-  await page.getByRole("button", {name: "Soporte", exact: true}).click();
-  const close = panel(page, "Soporte").getByRole("button", {name: "Cerrar panel", exact: true}); await close.focus();
+  await page.getByRole("button", {name: "Mis recursos", exact: true}).click();
+  const close = panel(page, "Mis recursos").getByRole("button", {name: "Cerrar panel", exact: true}); await close.focus();
   context.resolve(confirmedContext!); await expect(page.getByText(/Contexto guardado: revisión 1/)).toBeVisible();
-  await expect(close).toBeFocused(); await expect(panel(page, "Soporte")).toBeVisible();
+  await expect(close).toBeFocused(); await expect(panel(page, "Mis recursos")).toBeVisible();
 });
 test("resource reader back restores panel scroll, focused item and the dirty editor", async ({page}) => {
   const {resources} = await mount(page);
@@ -143,12 +153,12 @@ test("a late resource read cannot reopen its panel or take focus", async ({page}
   resources.before = call => /^plannings(?:\?|$)/.test(call.path) ? gate.promise : Promise.resolve();
   await page.getByRole("button", {name: "Mis recursos", exact: true}).click();
   await expect(panel(page, "Mis recursos")).toContainText("Recuperando recursos");
-  await page.getByRole("button", {name: "Soporte", exact: true}).click();
-  const close = panel(page, "Soporte").getByRole("button", {name: "Cerrar panel", exact: true}); await close.focus();
+  await page.getByRole("button", {name: "Herramientas", exact: true}).click();
+  const close = panel(page, "Herramientas").getByRole("button", {name: "Cerrar panel", exact: true}); await close.focus();
   const arriving = page.waitForResponse(response => new URL(response.url()).pathname.endsWith("/plannings"));
   gate.resolve(new Response(JSON.stringify({items: [], next_cursor: null}), {headers: {"content-type": "application/json"}}));
   await (await arriving).finished(); await page.evaluate(() => new Promise<void>(done => requestAnimationFrame(() => done())));
-  await expect(close).toBeFocused(); await expect(panel(page, "Soporte")).toBeVisible();
+  await expect(close).toBeFocused(); await expect(panel(page, "Herramientas")).toBeVisible();
   await expect(panel(page, "Mis recursos")).toHaveCount(0);
 });
 test("Escape dismisses a logout guard before its underlying panel and retains context draft", async ({page}) => {
@@ -171,7 +181,7 @@ for (const [width, height] of [[1440, 900], [1024, 600], [390, 844], [360, 540],
         await page.getByRole("button", {name: "Expandir menú", exact: true}).click();
         await page.locator(".sidebar").evaluate(async node => { await Promise.all(node.getAnimations().map(animation => animation.finished)); });
       }
-      for (const [button, title] of [["Mis recursos", "Mis recursos"], ["Herramientas", "Herramientas"], ["Revisar contexto", "Contexto del chat"], ["Soporte", "Soporte"]]) {
+      for (const [button, title] of [["Mis recursos", "Mis recursos"], ["Herramientas", "Herramientas"], ["Revisar contexto", "Contexto del chat"]]) {
         const closedHeight = await page.evaluate(() => document.documentElement.scrollHeight);
         await page.getByRole("button", {name: button, exact: true}).click();
         const region = panel(page, title); await expect(region).toBeVisible();
@@ -201,7 +211,7 @@ for (const [width, height] of [[1440, 900], [1024, 600], [390, 844], [360, 540],
         }); expect(overlap).toBe(false);
         if (capture && !expanded) {
           await page.evaluate(() => window.scrollTo(0, 0));
-          await page.screenshot({path: info.outputPath(`workspace-${button === "Mis recursos" ? "resources" : button === "Herramientas" ? "tools" : button === "Soporte" ? "support" : "context"}-${width}.png`), fullPage: true});
+          await page.screenshot({path: info.outputPath(`workspace-${button === "Mis recursos" ? "resources" : button === "Herramientas" ? "tools" : "context"}-${width}.png`), fullPage: true});
         }
         expect(await region.evaluate(node => !!(node.compareDocumentPosition(document.querySelector(".chat-composer")!) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
         if (button === "Revisar contexto") await page.keyboard.press("Tab");
