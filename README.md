@@ -1,156 +1,152 @@
 # AulaLista SaaS
 
-Base de desarrollo de AulaLista SaaS para docentes individuales.
+AulaLista is a web application for individual school teachers in Mexico. A teacher signs in, builds lesson plans against the national curriculum context, generates printable annexes and classroom tools, keeps their own source documents, and can ask a private chat assistant for help; plans and usage quotas are tracked per account. The backend is FastAPI on PostgreSQL (`src/`), the frontend is React, TypeScript and Vite (`web/`), and the product UI is in Spanish.
 
-El proyecto está en desarrollo. Los incrementos de código y documentación se revisan mediante pull requests.
+The project is under development. Test data is synthetic and nothing here claims a production deployment.
 
-## Trabajo y documentación
+[![backend](https://github.com/eliancanul/AulaLista-SaaS/actions/workflows/backend.yml/badge.svg?branch=main)](https://github.com/eliancanul/AulaLista-SaaS/actions/workflows/backend.yml)
+[![web](https://github.com/eliancanul/AulaLista-SaaS/actions/workflows/web.yml/badge.svg?branch=main)](https://github.com/eliancanul/AulaLista-SaaS/actions/workflows/web.yml)
+[![evaluation-offline](https://github.com/eliancanul/AulaLista-SaaS/actions/workflows/evaluation.yml/badge.svg?branch=main)](https://github.com/eliancanul/AulaLista-SaaS/actions/workflows/evaluation.yml)
 
-- [GitHub Issues](https://github.com/eliancanul/AulaLista-SaaS/issues) concentra tareas, prioridades, dependencias y estado. El [plan Acenta #12](https://github.com/eliancanul/AulaLista-SaaS/issues/12) enlaza los cortes B1–B5 y la planificación posterior.
-- Specs y ADR conservan contratos y decisiones; PR y CI acreditan cada candidato. Sigue el [workflow](docs/workflow.md) para desarrollar y entregar un cambio.
-- [Referencias e historial de cortes](docs/tickets/README.md) conserva evidencia técnica, sin mantener un backlog paralelo.
+The badges show the live state of each workflow on `main`; this README does not restate it.
 
-## Acenta: capacidades verificadas y límites
+<!-- STORY — Elian writes this section himself, in his own words (80–150 words).
+Heading to use: ## Why this exists
+Prompts: Who is it for and how do you know them? What were they doing by hand before?
+What did you decide NOT to build, and why? What surprised you once real people used it?
+Delete this comment when the section is written. -->
 
-Reconciliación documental del 17 de octubre de 2026 sobre
-`1f9e7c23db7564049b68904db62f98b5730ee0b6`, árbol
-`694da902b3d34b01148d8dc238283094f7b88c11`. Es un registro de evidencia;
-el estado del trabajo permanece en [#12](https://github.com/eliancanul/AulaLista-SaaS/issues/12).
+## What is tested, at which layer, and what is left out
 
-- B2: petición admitida, resultado fixture durable y consumidor Acenta conectados
-  en [PR #21](https://github.com/eliancanul/AulaLista-SaaS/pull/21) y
-  [#22](https://github.com/eliancanul/AulaLista-SaaS/pull/22).
-- B3: edición, borrador y copia en
-  [#25](https://github.com/eliancanul/AulaLista-SaaS/pull/25), guardia antes de logout
-  en [#39](https://github.com/eliancanul/AulaLista-SaaS/pull/39) y respaldo de recarga
-  en la misma pestaña/sesión en [#41](https://github.com/eliancanul/AulaLista-SaaS/pull/41).
-  El respaldo usa `sessionStorage`, TTL fijo de hasta 24 h y sesión aún válida;
-  no cubre recuperación de edición no confirmada tras 401/reautenticación.
-  El usuario aceptó esta limitación para fase 1: tras login se recupera sólo lo
-  confirmado en la biblioteca y pueden perderse cambios nunca guardados.
-  La continuidad del texto no guardado se aplaza como mejora posterior trazable
-  en [#15](https://github.com/eliancanul/AulaLista-SaaS/issues/15); no se implementó.
-- B4: visor, original exacto y reemplazo de ejemplos en
-  [#26](https://github.com/eliancanul/AulaLista-SaaS/pull/26).
-- B5: biblioteca y navegación en [#27](https://github.com/eliancanul/AulaLista-SaaS/pull/27),
-  catálogo independiente de originales en [#38](https://github.com/eliancanul/AulaLista-SaaS/pull/38).
-- B1: Google tiene [aceptación manual registrada](https://github.com/eliancanul/AulaLista-SaaS/issues/13#issuecomment-6231320343)
-  sobre `355399b6f01ea6985ebdb8389691fc532c993e5f`; no certifica todos los criterios
-  de #13 ni un despliegue posterior. El usuario pospuso el envío real de OTP por
-  correo; permanece deshabilitado. Las pruebas OTP sustituyen sólo ese transporte.
+The suite is organised around four ways this product can hurt a teacher: someone else reads their material, a retried or interrupted save loses or duplicates their work, a model call is paid for twice, or the UI works against a stub and breaks against the real API.
 
-La [matriz de #12](docs/reviews/0001-matriz-fase1.md) distingue implementación,
-evidencia compartida y huecos de aceptación: 38 asignaciones contractuales,
-37 frames de diseño y una variante funcional inferida. No acredita 38 estados
-visuales aprobados ni cierra la fase 1. La CI del SHA documentado está en
-[backend](https://github.com/eliancanul/AulaLista-SaaS/actions/runs/39058555388),
-[web](https://github.com/eliancanul/AulaLista-SaaS/actions/runs/39058555523) y
-[evaluación](https://github.com/eliancanul/AulaLista-SaaS/actions/runs/39058555484);
-no sustituye revisión ni CI de un candidato nuevo.
+| Risk | Layer | Example in the repo |
+| --- | --- | --- |
+| A teacher reaches another teacher's data | API tests on real PostgreSQL | `test_owner_authority_covers_all_operations_and_manipulated_scope` and `test_new_app_never_accepts_client_identity` in [`tests/test_materials.py`](tests/test_materials.py). [`tests/test_runtime_isolation.py`](tests/test_runtime_isolation.py) forces two real sessions through one recycled database connection and then checks the first teacher's rows are unchanged. |
+| An edit is lost or applied twice | API tests on real PostgreSQL, then Vitest for the client side | [`tests/test_planning_edits.py`](tests/test_planning_edits.py): two connections race and only one compare-and-swap wins; a response lost after commit is recovered from its receipt without a second write; a draft survives an application restart. [`web/tests/editor-exit.test.ts`](web/tests/editor-exit.test.ts): the editor does not let the user leave until the draft is confirmed, and a duplicate click cannot start a second write. |
+| Malformed or hostile input is accepted | Unit and contract tests, no database | [`tests/test_config.py`](tests/test_config.py): invalid configuration prevents startup without echoing the value. `test_guided_request_rejects_invalid_and_untrusted_fields` in [`tests/test_guided_planning.py`](tests/test_guided_planning.py). Uploads with a spoofed type, path traversal or XXE are rejected in [`tests/test_documents_and_websearch.py`](tests/test_documents_and_websearch.py). |
+| Sessions outlive logout, or login can be forced | API tests on real PostgreSQL | [`tests/test_auth_integration.py`](tests/test_auth_integration.py): one-time codes are single use under concurrency, CSRF is required on writes, the per-IP limit cannot be bypassed with `X-Forwarded-For`, and a Google identity is never linked to an account by matching email. |
+| A model call is sent or charged twice | Unit tests on the adapter, API tests on the ledger | [`tests/test_planning_generation.py`](tests/test_planning_generation.py): an attempt with unknown outcome blocks new operations instead of retrying; a process crash expires to "uncertain" and cannot resend; overlapping admissions share one budget reservation. |
+| Quotas and billing state are wrong | API tests on real PostgreSQL | [`tests/test_billing_and_quotas.py`](tests/test_billing_and_quotas.py): plan limits and usage counters, webhook signature verification and idempotency. This area is thin: three long scenario tests. |
+| The UI and the API disagree | Playwright against the real API, sessions and PostgreSQL | [`web/tests/auth.integration.ts`](web/tests/auth.integration.ts) lets a real save commit, drops the response in the browser, and checks the UI recovers the saved state instead of writing again. These suites are started by pytest runners in `tests/*_browser_integration.py`. |
+| Layout, keyboard and focus regress | Playwright against a fixture server | [`web/tests/*.browser.ts`](web/tests): the same journeys at several viewport sizes, focus return after closing panels, print views. Chromium only. |
+| The evaluation instrument itself is wrong | Standard-library `unittest`, no network | [`evaluation/tests`](evaluation/tests) and [`document_checks/tests`](document_checks/tests) run on frozen synthetic inputs whose hashes are verified first. |
 
-[#18](https://github.com/eliancanul/AulaLista-SaaS/issues/18) y
-[#19](https://github.com/eliancanul/AulaLista-SaaS/issues/19) pertenecen a una fase
-posterior. Los controles offline de integridad, evidencia literal y anclas/anexos
-integrados en [#45](https://github.com/eliancanul/AulaLista-SaaS/pull/45),
-[#46](https://github.com/eliancanul/AulaLista-SaaS/pull/46) y
-[#47](https://github.com/eliancanul/AulaLista-SaaS/pull/47) no habilitan documentos
-reales, parsing o IA en el producto. No hay cobro ni piloto docente acreditados.
+### Real database, mocks only at third parties
 
-## Planeación guiada: corte manual de #52
+Integration tests run against PostgreSQL 17, the same major version in `compose.test.yml` and in CI. There is no SQLite or in-memory substitute and no skip when the database is absent, because the guarantees under test (composite foreign keys, triggers that keep history immutable, grants of the non-owner runtime role, transaction races) only exist in the real engine.
 
-El formulario de Planeación de clase admite una fixture de software explícita
-sin adjuntar fuente: Ciencias naturales, 3.º de primaria y cuidado del agua.
-Conserva contexto manual/hipotético y referencia opcional exacta; abre primero
-un lector de escritorio o móvil y permite correcciones básicas durables con B3.
-Otros valores reciben un rechazo claro y permanecen en el formulario. No es
-un generador general, una selección curricular oficial ni validación pedagógica.
-[Contrato, pruebas y límites](web/README.md#planeación-guiada-52) describen el corte;
-su PR y CI deben acreditar el candidato exacto, sin trasladar la evidencia anterior.
+Test doubles are reserved for systems this project does not own:
 
-El [adaptador de Planeación con OpenAI](docs/specs/0013-planeacion-openai.md)
-está preparado para comprobaciones offline: entrada manual v3, intento durable,
-reserva de presupuesto y recuperación sin reenvío. El factory normal lo mantiene
-deshabilitado y no lee una credencial. Su transporte simulado y pruebas de
-software no acreditan una llamada real, calidad docente ni activación del producto.
+- **OpenAI.** The adapters in `src/aulalista_api/openai_*.py` take a transport as a parameter. Tests inject one that returns success, rejection, timeout or an uncertain outcome on demand, which makes the budget and "never send twice" rules exactly testable.
+- **Outgoing email.** The connected auth suite replaces only the sender and reads the one-time code from it; sessions, cookies and CSRF are real.
 
-## Historial técnico del primer corte
+None of the three workflows defines a secret, so no test can reach a paid service.
 
-T0, T1 y T2 están integrados; [PR #3](https://github.com/eliancanul/AulaLista-SaaS/pull/3)
-integró T2 en `b4dd71e2bca607f6b6cce04d77bec92db2fc7dba`. T2 conserva fuentes
-sintéticas opacas de 1 a 65 536 bytes, versiones inmutables, recibos recuperables,
-propiedad personal y concurrencia transaccional. Revisión independiente/H1 y
-[CI premerge, 114 pruebas](https://github.com/eliancanul/AulaLista-SaaS/actions/runs/38690972072)
-constan en el cierre de [T2](docs/tickets/T2-fuentes-versionadas.md).
-[CI postmerge correcta](https://github.com/eliancanul/AulaLista-SaaS/actions/runs/38691499410)
-verifica ese commit, 114 pruebas y logs de PostgreSQL.
+### Left out on purpose
 
-[T3](docs/tickets/T3-prototipo-flujo-automatico.md) está integrado mediante
-[PR #5](https://github.com/eliancanul/AulaLista-SaaS/pull/5), commit
-`d58255bcaa71e874d69022e0e96a7a59adfd0a70`. La revisión independiente y CI
-postmerge verificaron 114 pruebas backend, 31 unitarias frontend y ocho recorridos
-Chromium. El prototipo usa ejemplos sintéticos y guardado local en el navegador.
+- **Quality of real model output.** The injected transport proves the plumbing around a model call, not that a generated lesson plan is good. That needs human judgement and is not automated here.
+- **Row-level security.** Isolation is enforced in the use case and verified at the HTTP boundary. The runtime database role can still read across owners with raw SQL; [docs/development.md](docs/development.md) states this limit.
+- **Live third parties.** No test signs in with a real Google account, delivers real email, or calls Stripe.
+- **Other browsers, load and performance.** Chromium only; no load tests.
+- **Visual snapshots.** Screenshots are kept as CI artifacts for people to look at; no test asserts on pixels.
+- **A coverage percentage.** None is measured or reported.
 
-T0–T3 preceden al recorrido conectado descrito arriba. Sus pruebas no acreditan
-interpretación real ni validación con docentes; H2 conserva sus criterios humanos.
-El [registro B2](docs/tickets/B2-resultado-simulado.md) conserva el contrato original
-de resultado fixture durable y recibo independiente. Docentes individuales,
-suscripción con precio pendiente e inicio limpio siguen como alcance de producto.
+### Known gaps
 
-## Arranque y pruebas
+- The backend workflow names the test files for each step instead of running bare `pytest`. That keeps the database steps separate and mandatory, but a new test file only gates merges once it is added to the list, and some recent files have not been yet.
+- A few tests wait on real time: three `waitForTimeout` calls in `web/tests/auth.integration.ts` sit out the real resend cooldown, and some concurrency tests poll with short `time.sleep` loops.
 
-La [preparación Pydantic y Promptfoo](evaluation/promptfoo/README.md) valida el
-contrato de resultado existente y prueba adaptadores Python locales. La ejecución
-de Promptfoo queda bloqueada por solicitudes de red incluso con telemetría
-desactivada; este corte no instala ni ejecuta su CLI.
+Size, for scale only, as collected at commit `85a21e1`: 870+ pytest tests, 670+ Vitest cases, 160+ Playwright tests (25+ of them against the real API and database), 120+ offline `unittest` tests.
 
-Sigue [desarrollo y PostgreSQL desechable](docs/development.md) para instalar,
-provisionar la DB de prueba, migrar explícitamente, arrancar, ejecutar tests y
-retirar sólo ese recurso. La configuración ahora **requiere un DSN PostgreSQL**:
-el comando de arranque de T0 sin DSN ya no es suficiente.
+### Two examples from the history
 
-`GET /health/live` acredita vida del proceso. `GET /health/ready` sólo responde 200
-con conexión y revisión de esquema esperada; fallos devuelven 503 dentro del plazo
-configurado. La documentación HTTP está deshabilitada salvo
-`AULALISTA_DOCS_ENABLED=true`; `.env.example` no se carga automáticamente.
+- [#111](https://github.com/eliancanul/AulaLista-SaaS/pull/111) (for issue [#98](https://github.com/eliancanul/AulaLista-SaaS/issues/98)): the existing isolation tests opened a fresh connection per request, so they could not show what happens when one physical connection serves two teachers. The PR adds that test and a negative control: with the old pooling the new assertion fails.
+- [#8](https://github.com/eliancanul/AulaLista-SaaS/pull/8) (for issue [#7](https://github.com/eliancanul/AulaLista-SaaS/issues/7)): the offline scorer gave credit depending on list order when a prediction contained contradictory claims. It was reproduced with a failing test before the fix, so the instrument was corrected before being used to compare anything.
 
-El workflow del backend ejecuta API/config y PostgreSQL real en pasos obligatorios
-separados; no usa SQLite ni omite integración cuando falta DB. Las versiones exactas
-están en `pyproject.toml` y `uv.lock`. Los tests importan el paquete instalado no
-editable. La evidencia local no sustituye checks remotos del SHA final.
+## Continuous integration
 
-## Alcance de los contratos
+Three GitHub Actions workflows run on pull requests and on pushes to `main`. All three pin actions by commit SHA and declare `permissions: contents: read`.
 
-T0 por sí solo no prueba persistencia. T1 no almacena materiales. T2 completa el primer corte técnico, sin habilitar un piloto con documentos reales. Las pruebas de persistencia requieren PostgreSQL desechable, sin sustitución por SQLite.
+- [`backend`](.github/workflows/backend.yml): Ruff lint and format, migrations applied twice to a PostgreSQL service, then unit, PostgreSQL integration, chat and isolation tests as separate steps. Afterwards it inspects the PostgreSQL log and fails if private rows or statement parameters were written to it.
+- [`web`](.github/workflows/web.yml): Vitest, typecheck and production build, Playwright journeys, the connected browser suites, and a check that the production wheel contains no test entry points. It only triggers for changes under the paths it depends on.
+- [`evaluation-offline`](.github/workflows/evaluation.yml): manifest verification and the offline suites, with and without Python assertions enabled.
 
-El contrato del recorrido prioriza mínima fricción: resolver automáticamente primero, preferentemente con LLM dentro de límites y permisos; cero preguntas por defecto y máximo una solicitud breve necesaria por planeación, persistente entre archivos, versiones, sesiones y reintentos. No exige aceptación de etapas, bloques o conjunto. [ADR 0002](docs/adr/0002-ux-interpretacion-automatica.md) confirma esta dirección y el peso del 20 % al ahorro total de tokens; estrategia, demás pesos, fórmula y umbrales siguen abiertos. Preparar el prototipo y la evaluación no implica contratar servicios, enviar documentos ni habilitar un piloto.
+Tests import the installed, non-editable package, so a packaging mistake fails in CI.
 
-## Documentación
+## Running the tests
 
-- [Interfaz Acenta: ejecutar, probar y conocer límites](web/README.md)
-- [Instrucciones de contribución](AGENTS.md)
-- [Decisión de fundación](docs/adr/0001-fundacion-personal.md)
-- [Contrato de fundación](docs/specs/0001-fundacion.md)
-- [Dirección UX y decisión de interpretación](docs/adr/0002-ux-interpretacion-automatica.md)
-- [Flujo automático y plan de evaluación](docs/specs/0002-flujo-automatico-material.md)
-- [Herramientas y contexto curricular](docs/specs/0010-herramientas-contexto-curricular.md): diseño aprobado de #18; #52 implementa únicamente el corte manual/fixture de Planeación.
-- [Tareas y dependencias actuales](https://github.com/eliancanul/AulaLista-SaaS/issues)
-- [Referencias e historial de cortes](docs/tickets/README.md)
-- [Workflow y evidencia](docs/workflow.md)
-- [Consultas por hitos](docs/reviews/README.md)
-- [Registro de coordinación](docs/reviews/0000-coordinacion.md)
+From a fresh clone. Requirements are stated per suite.
 
-## Fuentes y límites
+**Offline evaluation.** Needs Python 3.12 only.
 
-Los contratos de producto proceden de [AulaLista #165](https://github.com/eliancanul/AulaLista/issues/165) y [#166](https://github.com/eliancanul/AulaLista/issues/166). El integrador verificó los enlaces y su correspondencia con conservación de originales, versiones y autoridad el 15 de octubre de 2026 UTC. Las decisiones actuales de público, stack e inicio limpio prevalecen sobre hipótesis históricas institucionales o de migración.
+```sh
+python3 -B evaluation/scripts/freeze.py verify --root evaluation --input evaluation/manifests/input.manifest.json
+python3 -B -m unittest discover -s evaluation/tests
+PYTHONPATH=src:. python3 -B -m unittest discover -s document_checks/tests
+```
 
-Este repositorio nuevo conserva esos contratos sin copiar código, fixtures, dumps ni documentos privados del anterior, que permanece intacto. Si se decide reutilizar un artefacto después, se revisan expresamente propósito, procedencia, licencia y datos.
+**Backend tests that need no database.** Needs [uv](https://docs.astral.sh/uv/) 0.12.23; `pyproject.toml` rejects other versions.
 
+```sh
+uv sync --locked --no-editable
+uv run --locked --no-editable pytest tests/test_config.py tests/test_auth_unit.py tests/test_guided_planning.py tests/test_planning_result.py tests/test_openai_planning.py
+```
 
-## Autenticación y configuración (B1 / #13)
+**Backend tests on PostgreSQL.** Needs Docker. The database in `compose.test.yml` listens on loopback only and keeps its data in memory. The fixtures drop and rebuild the schema, and refuse to unless the target is this database and `AULALISTA_TEST_ALLOW_RESET=1` is set.
 
-El [contrato B1](docs/specs/0005-autenticacion-local.md) define Google Identity
-Services directo, OTP de correo, sesión propia revocable y ámbito personal.
-Sin configuración explícita el servidor falla cerrado; el repositorio no contiene
-credenciales ni proveedor de correo runtime. La aceptación manual de Google y la
-postergación del correo se distinguen arriba de la evidencia sintética. La
-vinculación de métodos sigue pendiente y nunca ocurre por coincidencia de email.
+```sh
+docker compose -f compose.test.yml up -d --wait
+export AULALISTA_DATABASE_URL='postgresql+psycopg://aulalista_test@127.0.0.1:55432/aulalista_test'
+export AULALISTA_TEST_DATABASE_URL="$AULALISTA_DATABASE_URL"
+export AULALISTA_TEST_ALLOW_RESET=1
+uv run --locked --no-editable alembic upgrade head
+uv run --locked --no-editable pytest tests/test_postgres.py tests/test_materials.py tests/test_planning_edits.py tests/test_auth_integration.py
+```
+
+The complete file lists per step are in [`backend.yml`](.github/workflows/backend.yml).
+
+**Frontend unit tests.** Needs Node.js 24.
+
+```sh
+cd web
+npm ci --ignore-scripts
+npm test
+```
+
+**Browser journeys against the fixture server.** Needs the step above and a Chromium download of about 100 MB. Takes around six minutes.
+
+```sh
+npx --no-install playwright install chromium
+npm run test:browser
+```
+
+**Connected end to end.** Needs the PostgreSQL setup, the web dependencies and Chromium from the steps above. Run from the repository root; pytest starts the API, the web server and Playwright, and stops them afterwards.
+
+```sh
+uv run --locked --no-editable pytest tests/browser_integration.py
+uv run --locked --no-editable pytest tests/auth_browser_integration.py
+```
+
+When finished: `docker compose -f compose.test.yml down`. [docs/development.md](docs/development.md) (Spanish) covers the runtime database role and the remaining suites.
+
+## Repository map
+
+| Path | Contents |
+| --- | --- |
+| `src/aulalista_api/` | FastAPI application: auth, materials, lesson plans, annexes, documents, chat, billing, printing |
+| `migrations/` | Alembic migrations |
+| `tests/` | pytest suites and the runners that drive the connected browser tests |
+| `web/` | React frontend; `web/tests/` holds Vitest and Playwright tests and their fixtures |
+| `evaluation/`, `document_checks/` | Offline evaluation instrument and source-integrity checks |
+| `.github/workflows/` | The three CI workflows |
+| `docs/` | Specs, architecture decision records, review notes and the development guide |
+| `deploy/`, `Dockerfile`, `scripts/` | Deployment template and local helper scripts |
+
+## How the work is done
+
+AI coding agents write the code in this repository, each change starting from a written spec and a small issue. [docs/workflow.md](docs/workflow.md) sets the gates before a change can be merged: tests that fail if the guarantee breaks, an adversarial review by an agent or person other than the author, and CI on the exact commit, with any later commit invalidating the earlier evidence.
+
+Changes arrive through pull requests tied to issues: see the [merged pull requests](https://github.com/eliancanul/AulaLista-SaaS/pulls?q=is%3Apr+is%3Amerged) (60+) and the [issue tracker](https://github.com/eliancanul/AulaLista-SaaS/issues).
+
+Most project documentation is in Spanish. The previous README, an internal evidence log for the first delivery cuts, is kept at [docs/registro-evidencia.md](docs/registro-evidencia.md).
