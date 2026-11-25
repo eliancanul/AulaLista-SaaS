@@ -54,7 +54,7 @@ None of the three workflows defines a secret, so no test can reach a paid servic
 
 ### Known gaps
 
-- The backend workflow names the test files for each step instead of running bare `pytest`. That keeps the database steps separate and mandatory, but a new test file only gates merges once it is added to the list, and some recent files have not been yet.
+- The backend workflow names the test files for each step instead of running bare `pytest`. That keeps the database steps separate and mandatory, but a new test file only gates merges once it is added to the list. `tests/test_ci_coverage.py` fails the build when a `tests/test_*.py` file is missing from every workflow; it does not cover the web suites, which Vitest and the Playwright configs select on their own.
 - A few tests wait on real time: three `waitForTimeout` calls in `web/tests/auth.integration.ts` sit out the real resend cooldown, and some concurrency tests poll with short `time.sleep` loops.
 
 Size, for scale only, as collected at commit `85a21e1`: 870+ pytest tests, 670+ Vitest cases, 160+ Playwright tests (25+ of them against the real API and database), 120+ offline `unittest` tests.
