@@ -144,3 +144,5 @@ AI coding agents write the code in this repository, each change starting from a 
 Changes arrive through pull requests tied to issues: see the [merged pull requests](https://github.com/eliancanul/AulaLista-SaaS/pulls?q=is%3Apr+is%3Amerged) (60+) and the [issue tracker](https://github.com/eliancanul/AulaLista-SaaS/issues).
 
 Most project documentation is in Spanish. The first README, an internal evidence log for the first delivery cuts, is kept at [docs/registro-evidencia.md](registro-evidencia.md).
+
+<!-- throwaway line for a documentation-only test pull request -->
