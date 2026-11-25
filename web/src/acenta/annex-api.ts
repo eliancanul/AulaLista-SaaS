@@ -403,6 +403,8 @@ export function annexErrorMessage(error: unknown): string {
     annex_has_pending_print_jobs:
       "Este anexo tiene impresiones pendientes. Cancélalas primero en Impresora.",
     print_job_sending: PRINT_ERROR_MESSAGES.print_job_sending,
+    print_limit_reached:
+      "Ya usaste las impresiones remotas de este mes en el plan Gratis. No se envió nada a la impresora. Se renuevan el próximo mes; con Pro Docente la impresión es ilimitada.",
   };
   return map[error.code] ?? `Ocurrió un error (${error.code}). Intenta de nuevo.`;
 }
