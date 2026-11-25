@@ -10,6 +10,12 @@ The project is under development. Test data is synthetic and nothing here claims
 
 The badges show the live state of each workflow on `main`; this README does not restate it.
 
+<!-- STORY — Elian writes this section himself, in his own words (80–150 words).
+Heading to use: ## Why this exists
+Prompts: Who is it for and how do you know them? What were they doing by hand before?
+What did you decide NOT to build, and why? What surprised you once real people used it?
+Delete this comment when the section is written. -->
+
 ## What is tested, at which layer, and what is left out
 
 The suite is organised around four ways this product can hurt a teacher: someone else reads their material, a retried or interrupted save loses or duplicates their work, a model call is paid for twice, or the UI works against a stub and breaks against the real API.
