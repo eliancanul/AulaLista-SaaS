@@ -164,6 +164,9 @@ class PrintJobsService:
         annex_id: UUID,
         payload: PrintAnnexRequest,
     ) -> dict:
+        # billing imports PrintJob for its meter, so this import cannot be at the top.
+        from aulalista_api.billing import lock_print_quota, require_print_quota
+
         instant = _now()
         if payload.mode == "scheduled":
             if payload.scheduled_for is None:
@@ -182,6 +185,7 @@ class PrintJobsService:
         created = False
         with Session(self.engine) as session:
             actor_id = authorize(session, actor, scope_id)
+            lock_print_quota(session, scope_id)
 
             existing = session.scalar(
                 select(PrintJob).where(
@@ -212,6 +216,7 @@ class PrintJobsService:
                 if payload.copies is not None
                 else (settings.default_copies if settings else DEFAULT_COPIES)
             )
+            require_print_quota(session, scope_id, instant)
 
             job = PrintJob(
                 id=uuid4(),
@@ -259,6 +264,9 @@ class PrintJobsService:
             return print_job_document(row)
 
     def send_test_page(self, actor, scope_id: UUID, payload: TestPageRequest) -> dict:
+        # billing imports PrintJob for its meter, so this import cannot be at the top.
+        from aulalista_api.billing import lock_print_quota, require_print_quota
+
         instant = _now()
         with Session(self.engine) as session:
             actor_id = authorize(session, actor, scope_id)
@@ -268,6 +276,8 @@ class PrintJobsService:
             )
             if not printer_email:
                 raise MaterialError(422, "printer_email_required")
+            lock_print_quota(session, scope_id)
+            require_print_quota(session, scope_id, instant)
             job = PrintJob(
                 id=uuid4(),
                 scope_id=scope_id,

@@ -25,6 +25,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
     select,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import Engine
@@ -356,6 +357,46 @@ def _ensure_subscription(session: Session, scope_id: UUID) -> ScopeSubscription:
     return sub
 
 
+def _print_jobs_used(
+    session: Session, scope_id: UUID, month_start: datetime, month_end: datetime
+) -> int:
+    return int(
+        session.scalar(
+            select(func.count(PrintJob.id)).where(
+                PrintJob.scope_id == scope_id,
+                PrintJob.created_at >= month_start,
+                PrintJob.created_at < month_end,
+            )
+        )
+        or 0
+    )
+
+
+def lock_print_quota(session: Session, scope_id: UUID) -> None:
+    """Serialize job creation per scope until commit, so the count below stays true."""
+    lock = int.from_bytes(
+        hashlib.sha256(b"aulalista-print-quota-v1\0" + scope_id.bytes).digest()[:8],
+        "big",
+        signed=True,
+    )
+    session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": lock})
+
+
+def require_print_quota(session: Session, scope_id: UUID, now: datetime) -> None:
+    """Refuse a new print job once the plan's monthly cap is spent.
+
+    Counts what the usage meter counts. Call under `lock_print_quota`, in the
+    transaction that inserts the job.
+    """
+    sub = _ensure_subscription(session, scope_id)
+    plan = PLANS_BY_ID.get(sub.plan_id, PLANS_BY_ID["free"])
+    limit = plan["limits"]["print_jobs"]
+    if limit is None:
+        return
+    if _print_jobs_used(session, scope_id, *_month_bounds_utc(now)) >= limit:
+        raise MaterialError(402, "print_limit_reached")
+
+
 def _meter_entry(used: int | float, limit: int | float | None) -> dict[str, Any]:
     if limit is None:
         return {
@@ -450,16 +491,7 @@ class BillingService:
             )
             or 0
         )
-        print_jobs = int(
-            session.scalar(
-                select(func.count(PrintJob.id)).where(
-                    PrintJob.scope_id == scope_id,
-                    PrintJob.created_at >= month_start,
-                    PrintJob.created_at < month_end,
-                )
-            )
-            or 0
-        )
+        print_jobs = _print_jobs_used(session, scope_id, month_start, month_end)
         documents = int(
             session.scalar(
                 select(func.count(TeacherDocument.id)).where(

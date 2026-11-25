@@ -1,7 +1,8 @@
 import { expect, it } from "vitest";
-import { AcentaApi } from "../src/acenta/api";
+import { AcentaApi, ApiError } from "../src/acenta/api";
 import {
   AnnexPrintClient,
+  annexErrorMessage,
   cleanHeaderFieldLabel,
   humanizePrintError,
   needsDrawingBox,
@@ -136,6 +137,14 @@ it("humanizePrintError maps all backend print error codes and unknown fallbacks 
   expect(humanizePrintError("print_job_sending")).toContain("enviando");
   expect(humanizePrintError(null)).toContain("No se pudo completar el envío");
   expect(humanizePrintError("unexpected_code")).toContain("No se pudo completar el envío");
+});
+
+it("a print refused by the plan cap tells the teacher why, without an internal code or a retry prompt", () => {
+  const text = annexErrorMessage(new ApiError(402, "print_limit_reached"));
+  expect(text).toContain("plan Gratis");
+  expect(text).toContain("No se envió nada");
+  expect(text).not.toContain("print_limit_reached");
+  expect(text).not.toContain("Intenta de nuevo");
 });
 
 it("worksheet preview helpers clean student header labels, strip duplicate numbers, and detect drawing boxes", () => {

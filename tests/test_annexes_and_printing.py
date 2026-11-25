@@ -9,9 +9,11 @@ from io import BytesIO
 import pytest
 from fastapi.testclient import TestClient
 from pypdf import PdfReader
+from sqlalchemy.orm import Session
 
 from aulalista_api.app import create_app
 from aulalista_api.auth_config import load_auth_settings
+from aulalista_api.billing import grant_courtesy_plan
 from aulalista_api.mail_sender import (
     FakeMailSender,
     build_epson_pdf_message,
@@ -341,6 +343,10 @@ def test_end_to_end_annex_generate_edit_approve_and_epson_print_queue(
     runtime_database, actors, monkeypatch
 ):
     (actor_a, scope_a), (actor_b, scope_b) = actors
+    # This queue walkthrough creates more jobs than the free monthly print cap.
+    with Session(runtime_database) as db:
+        grant_courtesy_plan(db, scope_a, plan_id="docente", reason="print queue test")
+        db.commit()
     fake_gen = DeterministicFakeAnnexGenerator()
     fake_mail = FakeMailSender()
     monkeypatch.setenv("AULALISTA_PRINT_CRON_SECRET", "super-secret-cron")
@@ -599,7 +605,6 @@ def test_end_to_end_annex_generate_edit_approve_and_epson_print_queue(
 
         # Mark one job as 'sending' directly in DB to verify active-sending protection
         from sqlalchemy import update as sa_update
-        from sqlalchemy.orm import Session
 
         from aulalista_api.print_jobs import PrintJob
 

@@ -5,17 +5,28 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import event, func, select
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from aulalista_api.app import create_app
 from aulalista_api.auth_models import Identity
-from aulalista_api.billing import grant_courtesy_plan
+from aulalista_api.billing import _month_bounds_utc, grant_courtesy_plan
 from aulalista_api.database import PersonalScope, Principal
+from aulalista_api.mail_sender import FakeMailSender
 from aulalista_api.material_routes import require_actor
+from aulalista_api.print_jobs import PrintJob
+
+FREE_PRINT_CAP = 5
+PRINTER = "aula.l3250@print.epsonconnect.com"
 
 
 def _seed_user(engine, *, email: str | None = None, email_verified: bool = True):
@@ -314,3 +325,307 @@ def test_stripe_webhook_hmac_verification_and_idempotency(
         assert cancel_resp.status_code == 200
         assert cancel_resp.json()["plan_id"] == "free"
         assert cancel_resp.json()["status"] == "canceled"
+
+
+def _print_app(actor, mail):
+    app = create_app(mail_sender=mail, print_poller_seconds=0)
+    app.dependency_overrides[require_actor] = lambda: actor
+    return app
+
+
+def _approved_annex(client, scope_id) -> str:
+    created = client.post(
+        f"/scopes/{scope_id}/annexes/tools/generate",
+        json={
+            "tool_id": "sopa-de-letras",
+            "subject": "Español",
+            "grade": "4° Primaria",
+            "topic": "Verbos regulares",
+        },
+    )
+    assert created.status_code == 201
+    annex_id = created.json()["id"]
+    assert (
+        client.post(f"/scopes/{scope_id}/annexes/{annex_id}/approve").status_code == 200
+    )
+    return annex_id
+
+
+def _print(client, scope_id, annex_id, **extra):
+    return client.post(
+        f"/scopes/{scope_id}/annexes/{annex_id}/print",
+        json={"mode": "now", "copies": 1, "printer_email": PRINTER, **extra},
+    )
+
+
+def _print_meter(client, scope_id) -> dict:
+    return client.get(f"/scopes/{scope_id}/billing/summary").json()["usage"][
+        "print_jobs"
+    ]
+
+
+def _print_job_rows(engine, scope_id) -> int:
+    with Session(engine) as db:
+        return db.scalar(
+            select(func.count(PrintJob.id)).where(PrintJob.scope_id == scope_id)
+        )
+
+
+def _seed_print_job(engine, principal_id, scope_id, created_at) -> None:
+    with Session(engine) as db:
+        db.add(
+            PrintJob(
+                scope_id=scope_id,
+                actor_id=principal_id,
+                job_kind="test_page",
+                annex_title="Hoja de prueba Epson",
+                printer_email=PRINTER,
+                copies=1,
+                scheduled_for=created_at,
+                status="sent",
+                idempotency_key=f"seed-{uuid4()}",
+                created_at=created_at,
+                sent_at=created_at,
+            )
+        )
+        db.commit()
+
+
+def _no_courtesy_grants(monkeypatch) -> None:
+    monkeypatch.delenv("AULALISTA_PRO_GRANT_EMAILS", raising=False)
+    monkeypatch.delenv("AULALISTA_PRO_GRANT_SCOPE_IDS", raising=False)
+
+
+def test_free_plan_rejects_the_print_after_the_cap_without_consuming_quota(
+    runtime_database, monkeypatch
+):
+    _no_courtesy_grants(monkeypatch)
+    principal_id, scope_id = _seed_user(runtime_database)
+    mail = FakeMailSender()
+
+    with TestClient(_print_app(principal_id, mail)) as client:
+        annex_id = _approved_annex(client, scope_id)
+
+        # The last unit of the plan is still granted and delivered.
+        allowed = [
+            _print(client, scope_id, annex_id, idempotency_key=f"ok-{n}")
+            for n in range(FREE_PRINT_CAP)
+        ]
+        assert [r.status_code for r in allowed] == [201] * FREE_PRINT_CAP
+        assert [r.json()["status"] for r in allowed] == ["sent"] * FREE_PRINT_CAP
+        at_cap = _print_meter(client, scope_id)
+        assert (at_cap["used"], at_cap["limit"], at_cap["remaining"]) == (5, 5, 0)
+
+        # Every way of creating one more job is refused with the same stable code.
+        future = (datetime.now(UTC) + timedelta(days=1)).isoformat()
+        refused = [
+            _print(client, scope_id, annex_id),
+            _print(client, scope_id, annex_id, mode="scheduled", scheduled_for=future),
+            client.post(
+                f"/scopes/{scope_id}/print-settings/test-page",
+                json={"printer_email": PRINTER},
+            ),
+        ]
+        assert [(r.status_code, r.json().get("detail")) for r in refused] == [
+            (402, "print_limit_reached")
+        ] * 3
+
+        # A refusal sends nothing, stores nothing and leaves the meter where it was.
+        assert len(mail.sent) == FREE_PRINT_CAP
+        assert _print_job_rows(runtime_database, scope_id) == FREE_PRINT_CAP
+        assert _print_meter(client, scope_id) == at_cap
+
+        # Replaying a job that was already accepted is not a new print.
+        replay = _print(client, scope_id, annex_id, idempotency_key="ok-0")
+        assert replay.status_code == 201
+        assert replay.json()["id"] == allowed[0].json()["id"]
+        assert len(mail.sent) == FREE_PRINT_CAP
+
+    # One teacher at the cap does not spend another teacher's quota.
+    other_principal, other_scope = _seed_user(runtime_database)
+    with TestClient(_print_app(other_principal, mail)) as client:
+        other_annex = _approved_annex(client, other_scope)
+        assert _print(client, other_scope, other_annex).status_code == 201
+
+
+def test_two_concurrent_prints_cannot_both_take_the_last_free_unit(
+    runtime_database, monkeypatch
+):
+    _no_courtesy_grants(monkeypatch)
+    principal_id, scope_id = _seed_user(runtime_database)
+    mail = FakeMailSender()
+    with TestClient(_print_app(principal_id, mail)) as client:
+        annex_id = _approved_annex(client, scope_id)
+        for _ in range(FREE_PRINT_CAP - 1):
+            assert _print(client, scope_id, annex_id).status_code == 201
+
+    apps = [_print_app(principal_id, mail), _print_app(principal_id, mail)]
+    barrier, pids = threading.Barrier(2), set()
+
+    def synchronize(conn, cursor, statement, parameters, context, executemany):
+        # Hold both requests at the quota lock so neither has counted yet.
+        pid = conn.connection.driver_connection.info.backend_pid
+        if statement.startswith("SELECT pg_advisory_xact_lock") and pid not in pids:
+            pids.add(pid)
+            barrier.wait(timeout=5)
+
+    event.listen(Engine, "before_cursor_execute", synchronize)
+    try:
+
+        def contender(index):
+            with TestClient(apps[index]) as client:
+                return _print(
+                    client, scope_id, annex_id, idempotency_key=f"race-{index}"
+                )
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            responses = list(pool.map(contender, [0, 1]))
+    finally:
+        event.remove(Engine, "before_cursor_execute", synchronize)
+
+    assert len(pids) == 2
+    assert sorted(r.status_code for r in responses) == [201, 402]
+    assert len(mail.sent) == FREE_PRINT_CAP
+    assert _print_job_rows(runtime_database, scope_id) == FREE_PRINT_CAP
+
+
+def test_free_print_cap_counts_only_the_current_utc_month(
+    runtime_database, monkeypatch
+):
+    _no_courtesy_grants(monkeypatch)
+    principal_id, scope_id = _seed_user(runtime_database)
+    month_start = datetime.now(UTC).replace(
+        day=1, hour=0, minute=0, second=0, microsecond=0
+    )
+    # A full cap spent up to the last instant of last month, one job on the boundary.
+    for _ in range(FREE_PRINT_CAP):
+        _seed_print_job(
+            runtime_database,
+            principal_id,
+            scope_id,
+            month_start - timedelta(microseconds=1),
+        )
+    _seed_print_job(runtime_database, principal_id, scope_id, month_start)
+    mail = FakeMailSender()
+
+    with TestClient(_print_app(principal_id, mail)) as client:
+        annex_id = _approved_annex(client, scope_id)
+        assert _print_meter(client, scope_id)["used"] == 1
+        codes = [
+            _print(client, scope_id, annex_id).status_code
+            for _ in range(FREE_PRINT_CAP)
+        ]
+        assert codes == [201] * (FREE_PRINT_CAP - 1) + [402]
+        assert len(mail.sent) == FREE_PRINT_CAP - 1
+
+
+@pytest.mark.parametrize(
+    ("now", "start", "end"),
+    [
+        ("2026-12-31T23:59:59+00:00", "2026-12-01", "2027-01-01"),
+        ("2027-01-01T00:00:00+00:00", "2027-01-01", "2027-02-01"),
+        # 19:30 on 30 Nov in Chetumal is already December in UTC.
+        ("2026-11-30T19:30:00-05:00", "2026-12-01", "2027-01-01"),
+    ],
+)
+def test_usage_month_is_a_half_open_utc_calendar_month(now, start, end):
+    assert _month_bounds_utc(datetime.fromisoformat(now)) == (
+        datetime.fromisoformat(start).replace(tzinfo=UTC),
+        datetime.fromisoformat(end).replace(tzinfo=UTC),
+    )
+
+
+@pytest.mark.parametrize("granted_by", ["allowlisted_email", "grant_pro_script"])
+def test_courtesy_pro_account_prints_past_the_free_cap(
+    runtime_database, monkeypatch, granted_by
+):
+    _no_courtesy_grants(monkeypatch)
+    if granted_by == "allowlisted_email":
+        monkeypatch.setenv("AULALISTA_PRO_GRANT_EMAILS", "mama@escuela.mx")
+        principal_id, scope_id = _seed_user(runtime_database, email="Mama@escuela.mx")
+    else:
+        principal_id, scope_id = _seed_user(runtime_database)
+        with Session(runtime_database) as db:
+            grant_courtesy_plan(db, scope_id, plan_id="docente", reason="familia")
+            db.commit()
+    mail = FakeMailSender()
+
+    # The account has never opened Billing: printing alone must apply the grant.
+    with TestClient(_print_app(principal_id, mail)) as client:
+        annex_id = _approved_annex(client, scope_id)
+        codes = [
+            _print(client, scope_id, annex_id).status_code
+            for _ in range(FREE_PRINT_CAP + 2)
+        ]
+        assert codes == [201] * (FREE_PRINT_CAP + 2)
+        assert len(mail.sent) == FREE_PRINT_CAP + 2
+        meter = _print_meter(client, scope_id)
+        assert (meter["used"], meter["unlimited"]) == (FREE_PRINT_CAP + 2, True)
+
+
+def test_allowlisted_but_unverified_email_stays_on_the_free_cap(
+    runtime_database, monkeypatch
+):
+    _no_courtesy_grants(monkeypatch)
+    monkeypatch.setenv("AULALISTA_PRO_GRANT_EMAILS", "papa@escuela.mx")
+    principal_id, scope_id = _seed_user(
+        runtime_database, email="papa@escuela.mx", email_verified=False
+    )
+    mail = FakeMailSender()
+
+    with TestClient(_print_app(principal_id, mail)) as client:
+        annex_id = _approved_annex(client, scope_id)
+        codes = [
+            _print(client, scope_id, annex_id).status_code
+            for _ in range(FREE_PRINT_CAP + 1)
+        ]
+        assert codes == [201] * FREE_PRINT_CAP + [402]
+
+
+def test_paid_plan_lifts_the_print_cap_and_cancellation_restores_it(
+    runtime_database, monkeypatch
+):
+    _no_courtesy_grants(monkeypatch)
+    secret = "whsec_print_cap_123"
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", secret)
+    principal_id, scope_id = _seed_user(runtime_database)
+    mail = FakeMailSender()
+
+    def stripe_event(event_id, event_type):
+        body = json.dumps(
+            {
+                "id": event_id,
+                "type": event_type,
+                "data": {
+                    "object": {
+                        "id": "sub_print_cap",
+                        "metadata": {"scope_id": str(scope_id), "plan_id": "docente"},
+                    }
+                },
+            }
+        ).encode("utf-8")
+        return client.post(
+            "/billing/stripe/webhook",
+            content=body,
+            headers={"Stripe-Signature": _stripe_sig(body, secret)},
+        )
+
+    with TestClient(_print_app(principal_id, mail)) as client:
+        annex_id = _approved_annex(client, scope_id)
+        for _ in range(FREE_PRINT_CAP):
+            assert _print(client, scope_id, annex_id).status_code == 201
+        assert _print(client, scope_id, annex_id).status_code == 402
+
+        assert (
+            stripe_event("evt_paid", "checkout.session.completed").json()["plan_id"]
+            == "docente"
+        )
+        assert _print(client, scope_id, annex_id).status_code == 201
+        assert _print(client, scope_id, annex_id).status_code == 201
+
+        assert (
+            stripe_event("evt_gone", "customer.subscription.deleted").json()["plan_id"]
+            == "free"
+        )
+        assert _print(client, scope_id, annex_id).status_code == 402
+        assert len(mail.sent) == FREE_PRINT_CAP + 2
