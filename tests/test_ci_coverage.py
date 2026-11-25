@@ -18,3 +18,7 @@ def test_every_test_module_is_run_by_a_workflow():
     modules = {path.name for path in (ROOT / "tests").glob("test_*.py")}
     assert sorted(modules - executed) == []
     assert sorted(executed - modules) == []
+
+
+def test_throwaway_failure_to_prove_the_merge_is_blocked():
+    assert False
