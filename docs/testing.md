@@ -55,10 +55,22 @@ Size, for scale only, as collected at commit `85a21e1`: 870+ pytest tests, 670+ 
 Three GitHub Actions workflows run on pull requests and on pushes to `main`. All three pin actions by commit SHA and declare `permissions: contents: read`.
 
 - [`backend`](../.github/workflows/backend.yml): Ruff lint and format, migrations applied twice to a PostgreSQL service, then unit, PostgreSQL integration, chat and isolation tests as separate steps. Afterwards it inspects the PostgreSQL log and fails if private rows or statement parameters were written to it.
-- [`web`](../.github/workflows/web.yml): Vitest, typecheck and production build, Playwright journeys, the connected browser suites, and a check that the production wheel contains no test entry points. It only triggers for changes under the paths it depends on.
+- [`web`](../.github/workflows/web.yml): Vitest, typecheck and production build, Playwright journeys, the connected browser suites, and a check that the production wheel contains no test entry points. Runs on every pull request and every push to `main`.
 - [`evaluation-offline`](../.github/workflows/evaluation.yml): manifest verification and the offline suites, with and without Python assertions enabled.
 
-Tests import the installed, non-editable package, so a packaging mistake fails in CI.
+Tests import the installed, non-editable package, so a packaging mistake fails in CI. On pull requests, a newer commit replaces an unfinished run for the same pull request; on pushes to `main`, each commit SHA runs in its own concurrency group with `cancel-in-progress: false` so no push run is cancelled or dropped.
+
+### Required checks
+
+Branch protection on `main` enforces three rules with no bypass for administrators (`enforce_admins: true`):
+
+- **Pull request required** (`required_approving_review_count: 0`): direct pushes to `main` are rejected, even for a commit that already has passing checks.
+- **Three required status checks** from GitHub Actions (`app_id: 15368`): `backend-tests`, `web-tests` and `synthetic-instrument`. All three run on every pull request and every push to `main`.
+- **Up-to-date base** (`strict: true`): if `main` advances after checks pass, the pull request branch must be updated with `main` and pass the three checks again before merging.
+
+Approving reviews are not required by GitHub, because the repository has a single maintainer who cannot approve their own pull requests. The adversarial review described in [docs/workflow.md](workflow.md) is recorded as a pull request comment and linked from the pull request description.
+
+**Known limit (workflow binding):** On a personal public repository on GitHub Free, neither classic branch protection nor repository rulesets can bind a required status check to a specific workflow file (the `workflows` ruleset rule requires an organization or enterprise plan on GitHub Enterprise). GitHub checks only that a check run with each required name was emitted by the GitHub Actions app on the pull request's head commit, using the workflow files from the pull request itself. Changes under `.github/workflows/` are therefore guarded by the adversarial review process rather than by branch protection.
 
 ## Running the tests
 
@@ -131,7 +143,7 @@ When finished: `docker compose -f compose.test.yml down`. [docs/development.md](
 
 ## How the work is done
 
-AI coding agents write the code in this repository, each change starting from a written spec and a small issue. [docs/workflow.md](workflow.md) sets the gates before a change can be merged: tests that fail if the guarantee breaks, an adversarial review by an agent or person other than the author, and CI on the exact commit, with any later commit invalidating the earlier evidence.
+AI coding agents write the code in this repository, each change starting from a written spec and a small issue. [docs/workflow.md](workflow.md) sets the gates before a change can be merged: tests that fail if the guarantee breaks, an adversarial review by an agent other than the one that wrote the change, recorded in the pull request, and CI on the exact commit, with any later commit invalidating the earlier evidence. Of these, pull requests, an up-to-date base and the three required CI checks are enforced by GitHub (see [Required checks](#required-checks), including the limit on workflow edits); the reviewers are AI agents commenting from the maintainer's account, not a second person.
 
 Changes arrive through pull requests tied to issues: see the [merged pull requests](https://github.com/eliancanul/AulaLista-SaaS/pulls?q=is%3Apr+is%3Amerged) (60+) and the [issue tracker](https://github.com/eliancanul/AulaLista-SaaS/issues).
 
