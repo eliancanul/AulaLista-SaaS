@@ -84,14 +84,20 @@ test("private multi-turn chat survives reload and account changes without new ge
 
   await input.fill("Borrador privado nunca enviado");
   await input.evaluate(node => node.setAttribute("data-composer-retained", "yes"));
-  for (const name of ["Mis recursos", "Herramientas", "Soporte"]) {
+  for (const name of ["Mis recursos", "Herramientas"]) {
     await page.getByRole("button", {name, exact: true}).click();
     await expect(page.getByRole("region", {name, exact: true})).toBeVisible();
     await expect(input).toHaveValue("Borrador privado nunca enviado");
     await expect(input).toHaveAttribute("data-composer-retained", "yes");
   }
+  // Support is a modal dialog over the open panel, not a panel of its own.
+  await page.getByRole("button", {name: "Soporte", exact: true}).click();
+  await expect(page.getByRole("dialog", {name: "Soporte", exact: true})).toBeVisible();
   await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", {name: "Soporte", exact: true})).toHaveCount(0);
   await expect(page.getByRole("button", {name: "Soporte", exact: true})).toBeFocused();
+  await expect(input).toHaveValue("Borrador privado nunca enviado");
+  await expect(input).toHaveAttribute("data-composer-retained", "yes");
   expect(privateCalls.filter(call => call.method === "POST")).toHaveLength(postsBeforeRead);
   await page.getByRole("button", {name: "Cerrar sesión", exact: true}).click();
   const exit = page.getByRole("dialog", {name: "¿Salir con mensajes pendientes?", exact: true});
@@ -136,7 +142,9 @@ test("uncertain: explicit logout revokes the session without replaying the turn"
   await expect(consult).toBeEnabled();
   expect(privateCalls.filter(call => call.method === "POST" && call.path.endsWith("/turns"))).toHaveLength(1);
   await page.getByRole("button", {name: "Soporte", exact: true}).click();
-  await expect(page.getByRole("region", {name: "Soporte", exact: true})).toBeVisible();
+  await expect(page.getByRole("dialog", {name: "Soporte", exact: true})).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", {name: "Soporte", exact: true})).toHaveCount(0);
   const callsBeforeLogout = privateCalls.length;
 
   await page.getByRole("button", {name: "Cerrar sesión", exact: true}).click();

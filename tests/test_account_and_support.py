@@ -24,6 +24,7 @@ from aulalista_api.material_routes import require_actor
 
 def _make_valid_png(width: int = 8, height: int = 8) -> bytes:
     """Create a valid minimal RGBA PNG in pure Python."""
+
     def chunk(chunk_type: bytes, data: bytes) -> bytes:
         crc = zlib.crc32(chunk_type + data) & 0xFFFFFFFF
         return struct.pack(">I", len(data)) + chunk_type + data + struct.pack(">I", crc)
@@ -226,7 +227,12 @@ def test_support_debug_backlog_with_screenshot_and_redaction(runtime_database):
                 "debug_bundle": {
                     "consoleErrors": [{"message": "TypeError: cannot read x"}],
                     "networkLog": [
-                        {"method": "POST", "path": "/print", "status": 502, "durationMs": 420}
+                        {
+                            "method": "POST",
+                            "path": "/print",
+                            "status": 502,
+                            "durationMs": 420,
+                        }
                     ],
                     "headers": {
                         "authorization": "Bearer SUPER_SECRET",
@@ -266,7 +272,10 @@ def test_support_debug_backlog_with_screenshot_and_redaction(runtime_database):
         # Triage ticket status + notes
         patched = client.patch(
             f"/scopes/{s1}/support/tickets/{ticket_id}",
-            json={"status": "investigating", "triage_notes": "Reproducido en iPhone 14"},
+            json={
+                "status": "investigating",
+                "triage_notes": "Reproducido en iPhone 14",
+            },
         )
         assert patched.status_code == 200
         assert patched.json()["status"] == "investigating"

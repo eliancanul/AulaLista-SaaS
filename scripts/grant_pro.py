@@ -92,9 +92,7 @@ def main() -> int:
         granted = 0
         for raw_email in args.email:
             norm = raw_email.strip().lower()
-            ident = session.scalar(
-                select(Identity).where(Identity.email == norm)
-            )
+            ident = session.scalar(select(Identity).where(Identity.email == norm))
             if ident is None:
                 print(
                     f"[AVISO] No se encontró cuenta con correo '{norm}'. "
@@ -120,9 +118,7 @@ def main() -> int:
             if session.get(PersonalScope, scope_id) is None:
                 print(f"[AVISO] scope_id '{scope_id}' no existe.")
                 continue
-            grant_courtesy_plan(
-                session, scope_id, plan_id=plan_id, reason="cli_scope"
-            )
+            grant_courtesy_plan(session, scope_id, plan_id=plan_id, reason="cli_scope")
             print(f"[OK] scope={scope_id} -> {plan_id} (courtesy_pro)")
             granted += 1
 

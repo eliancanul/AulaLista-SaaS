@@ -436,4 +436,3 @@ def test_unified_chat_auto_routes_subjects_and_keeps_contexts_isolated(
     general_instructions = build_agent_instructions(ctx3).lower()
     assert "la coordinadora general (orquestadora)" not in general_instructions
     assert "nunca menciones 'orquestador'" in general_instructions
-

@@ -73,9 +73,7 @@ def _validate_docx_archive(raw: bytes) -> None:
         raise DocumentValidationError("corrupted_docx", status=422) from None
 
 
-def sniff_and_validate_document(
-    *, filename: str, raw: bytes
-) -> ValidatedDocumentBytes:
+def sniff_and_validate_document(*, filename: str, raw: bytes) -> ValidatedDocumentBytes:
     if not raw:
         raise DocumentValidationError("empty_file", status=422)
     if len(raw) > MAX_DOCUMENT_BYTES:

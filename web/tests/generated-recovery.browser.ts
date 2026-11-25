@@ -97,7 +97,8 @@ test("panels preserve the exact pending generation and only consult it after an 
   await page.getByRole("button", {name: "Planear", exact: true}).click();
   const panel = page.getByRole("region", {name: "Herramientas", exact: true});
   await expect(panel.getByRole("heading", {name: "Planeación pendiente", exact: true})).toBeVisible();
-  await page.getByRole("button", {name: "Soporte", exact: true}).click();
+  await page.getByRole("button", {name: "Mis recursos", exact: true}).click();
+  await expect(page.getByRole("region", {name: "Mis recursos", exact: true})).toBeVisible();
   await page.goBack(); await expect(panel).toBeVisible();
   expect(h.server.calls.filter(call => call.path === `planning-operations/${h.generationKey}`)).toHaveLength(before);
   h.state = "not_found";

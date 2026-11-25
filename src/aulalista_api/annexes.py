@@ -392,7 +392,8 @@ class Annexes:
             _snapshot_revision(
                 session,
                 row,
-                change_summary=payload.change_summary or f"Edición revisión {row.revision}",
+                change_summary=payload.change_summary
+                or f"Edición revisión {row.revision}",
                 created_at=instant,
             )
             session.commit()
@@ -625,4 +626,3 @@ class Annexes:
             session.commit()
             session.refresh(row)
             return annex_document(row)
-

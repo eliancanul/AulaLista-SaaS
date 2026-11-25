@@ -79,7 +79,9 @@ class AgentChatChannel(Base):
 class AgentChatTurn(Base):
     __tablename__ = "agent_chat_turn"
     __table_args__ = (
-        UniqueConstraint("scope_id", "operation_id", name="uq_agent_chat_turn_operation"),
+        UniqueConstraint(
+            "scope_id", "operation_id", name="uq_agent_chat_turn_operation"
+        ),
         UniqueConstraint("channel_id", "number", name="uq_agent_chat_turn_number"),
         Index("ix_agent_chat_turn_channel_number", "channel_id", "number"),
     )
@@ -156,7 +158,9 @@ class AgentContextRequest(BaseModel):
         return _validate_text(value, allow_empty=True)
 
 
-def parse_channel_key(channel_key: str) -> tuple[Literal["orchestrator", "subject"], str, str | None]:
+def parse_channel_key(
+    channel_key: str,
+) -> tuple[Literal["orchestrator", "subject"], str, str | None]:
     if not CHANNEL_KEY_RE.fullmatch(channel_key):
         raise MaterialError(422, "invalid_channel_key")
     if channel_key.startswith("orchestrator:"):
@@ -282,7 +286,9 @@ def _school_subject_digests(
                     turn_count=active_turns,
                     summary_topic=ch.summary_topic if ch else "",
                     digest=ch.digest if ch else "",
-                    recent_annexes=_recent_annex_titles(session, scope_id, sub_name, limit=3),
+                    recent_annexes=_recent_annex_titles(
+                        session, scope_id, sub_name, limit=3
+                    ),
                 )
             )
 

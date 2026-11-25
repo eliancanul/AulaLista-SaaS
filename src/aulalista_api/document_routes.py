@@ -51,14 +51,10 @@ def install_document_routes(
         except ValidationError:
             raise MaterialError(422, "invalid_request") from None
         doc = await run_in_threadpool(service.upload, actor, scope_id, payload)
-        return JSONResponse(
-            doc, status_code=201, headers={"Cache-Control": "no-store"}
-        )
+        return JSONResponse(doc, status_code=201, headers={"Cache-Control": "no-store"})
 
     @app.get("/scopes/{scope_id}/documents/{doc_id}", tags=["documents"])
-    async def read_document(
-        scope_id: UUID, doc_id: UUID, actor=Depends(require_actor)
-    ):
+    async def read_document(scope_id: UUID, doc_id: UUID, actor=Depends(require_actor)):
         doc = await run_in_threadpool(service.read, actor, scope_id, doc_id)
         return JSONResponse(doc, headers={"Cache-Control": "no-store"})
 
@@ -66,9 +62,7 @@ def install_document_routes(
     async def revoke_document(
         scope_id: UUID, doc_id: UUID, actor=Depends(require_actor)
     ):
-        doc = await run_in_threadpool(
-            service.revoke_and_purge, actor, scope_id, doc_id
-        )
+        doc = await run_in_threadpool(service.revoke_and_purge, actor, scope_id, doc_id)
         return JSONResponse(doc, headers={"Cache-Control": "no-store"})
 
     @app.post(

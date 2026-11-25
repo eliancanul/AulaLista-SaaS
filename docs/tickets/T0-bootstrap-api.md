@@ -17,7 +17,7 @@ Un checkout limpio instala dependencias fijadas, inicia FastAPI y verifica la vi
 - Workflow de CI con permisos mínimos y disparadores que cubran código, tests, dependencias/lock y el propio workflow.
 - README con comandos exactos de instalación, arranque y tests, ejecutados por el implementador.
 
-Python 3.12.14 y uv 0.12.23; dependencias exactas en `pyproject.toml` y `uv.lock`. El PR conserva los comandos y la evidencia de los 21 tests del bootstrap T0. El [README actual](../../README.md) incorpora T1 y enlaza sus comandos, que ahora requieren configuración explícita de PostgreSQL; esto no cambia el alcance histórico del bootstrap.
+Python 3.12.14 y uv 0.12.23; dependencias exactas en `pyproject.toml` y `uv.lock`. El PR conserva los comandos y la evidencia de los 21 tests del bootstrap T0. El [registro de evidencia](../registro-evidencia.md), entonces README de la raíz, incorpora T1 y enlaza sus comandos, que ahora requieren configuración explícita de PostgreSQL; esto no cambia el alcance histórico del bootstrap.
 
 ## Aceptación
 

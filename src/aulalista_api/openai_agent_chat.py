@@ -416,7 +416,9 @@ def classify_message_subject(
     # 1. Explicit match against configured subjects for this school.
     for subject_id, subject_name in subjects:
         folded_name = _fold(subject_name).strip()
-        if len(folded_name) >= 3 and re.search(rf"\b{re.escape(folded_name)}\b", folded):
+        if len(folded_name) >= 3 and re.search(
+            rf"\b{re.escape(folded_name)}\b", folded
+        ):
             matches[subject_id] = (subject_id, subject_name)
 
     # 2. Match against canonical SEP/NEM subject vocabulary and map to configured subject if present.
@@ -714,7 +716,9 @@ class FakeAgentChatProvider:
         self.calls.append((context, [dict(m) for m in messages]))
         last_user = messages[-1]["content"] if messages else ""
         if context.agent_kind == "orchestrator":
-            active = [d.subject_name for d in context.subject_digests if d.turn_count > 0]
+            active = [
+                d.subject_name for d in context.subject_digests if d.turn_count > 0
+            ]
             digest_note = (
                 f" Tengo el resumen compacto de: {', '.join(active)}."
                 if active
